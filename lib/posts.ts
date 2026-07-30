@@ -1,0 +1,248 @@
+import "server-only";
+import { unstable_cache } from "next/cache";
+import { connectToDatabase } from "@/lib/mongodb";
+import { PostModel } from "@/models/Post";
+import { SeriesModel } from "@/models/Series";
+
+export type PostSummary = {
+  id: string;
+  slug: string;
+  title: string;
+  summary: string;
+  tags: string[];
+  publishedAt: string;
+  readTime: number;
+  seriesTitle?: string;
+};
+
+export type SeriesNav = {
+  slug: string;
+  title: string;
+  part: string; // "2/5"
+  prevSlug: string | null;
+  nextSlug: string | null;
+};
+
+export type PostDetail = PostSummary & {
+  content: string;
+};
+
+type LeanPostDoc = {
+  _id: unknown;
+  slug: string;
+  title: string;
+  summary: string;
+  content: string;
+  tags?: string[];
+  publishedAt: Date | string;
+};
+
+type LeanPostDocWithSeries = LeanPostDoc & { seriesId?: { title?: string } | null };
+
+function toSummary(doc: LeanPostDoc, readTime: number, seriesTitle?: string): PostSummary {
+  return {
+    id: String(doc._id),
+    slug: doc.slug,
+    title: doc.title,
+    summary: doc.summary,
+    tags: doc.tags ?? [],
+    publishedAt: new Date(doc.publishedAt).toISOString(),
+    readTime,
+    seriesTitle,
+  };
+}
+
+export async function getPostBySlug(slug: string): Promise<PostDetail | null> {
+  await connectToDatabase();
+  const doc = await PostModel.findOne({ slug, status: "published" }).lean<LeanPostDoc>();
+  if (!doc) return null;
+
+  const { estimateReadTime } = await import("@/lib/markdown");
+  const readTime = estimateReadTime(doc.content);
+
+  return {
+    ...toSummary(doc, readTime),
+    content: doc.content,
+  };
+}
+
+export async function getPostByLegacyId(legacyId: string): Promise<{ slug: string } | null> {
+  await connectToDatabase();
+  return PostModel.findOne({ legacyId }, { slug: 1 }).lean<{ slug: string } | null>();
+}
+
+export type PostForEditing = PostDetail & {
+  seriesId: string | null;
+  status: "draft" | "published";
+};
+
+/**
+ * Like getPostBySlug, but with no status filter (finds drafts too) and includes
+ * seriesId/status — used only by the write form to resume an in-progress draft
+ * (app/posts/write/page.tsx?slug=...), never rendered on any public page.
+ */
+export async function getPostForEditing(slug: string): Promise<PostForEditing | null> {
+  await connectToDatabase();
+  const doc = await PostModel.findOne({ slug }).lean<
+    LeanPostDoc & { seriesId?: unknown; status: "draft" | "published" }
+  >();
+  if (!doc) return null;
+
+  const { estimateReadTime } = await import("@/lib/markdown");
+  const readTime = estimateReadTime(doc.content);
+
+  return {
+    ...toSummary(doc, readTime),
+    content: doc.content,
+    seriesId: doc.seriesId ? String(doc.seriesId) : null,
+    status: doc.status,
+  };
+}
+
+export async function getSeriesNav(post: PostDetail): Promise<SeriesNav | null> {
+  await connectToDatabase();
+  const doc = await PostModel.findOne(
+    { slug: post.slug },
+    { seriesId: 1 }
+  ).lean<{ seriesId: unknown } | null>();
+  if (!doc?.seriesId) return null;
+
+  const series = await SeriesModel.findById(doc.seriesId).lean<{ slug: string; title: string } | null>();
+  if (!series) return null;
+
+  const siblings = await PostModel.find(
+    { seriesId: doc.seriesId, status: "published" },
+    { slug: 1 }
+  )
+    .sort({ publishedAt: 1 })
+    .lean<{ slug: string }[]>();
+
+  const idx = siblings.findIndex((s) => s.slug === post.slug);
+  if (idx === -1) return null;
+
+  return {
+    slug: series.slug,
+    title: series.title,
+    part: `${idx + 1}/${siblings.length}`,
+    prevSlug: idx > 0 ? siblings[idx - 1].slug : null,
+    nextSlug: idx < siblings.length - 1 ? siblings[idx + 1].slug : null,
+  };
+}
+
+export async function getRelatedPosts(post: PostDetail, limit = 3): Promise<PostSummary[]> {
+  await connectToDatabase();
+  const docs = await PostModel.find({
+    slug: { $ne: post.slug },
+    status: "published",
+    tags: { $in: post.tags },
+  })
+    .sort({ publishedAt: -1 })
+    .limit(limit)
+    .populate("seriesId", "title")
+    .lean<LeanPostDocWithSeries[]>();
+
+  const { estimateReadTime } = await import("@/lib/markdown");
+  return docs.map((doc) => toSummary(doc, estimateReadTime(doc.content), doc.seriesId?.title));
+}
+
+export async function countPublishedPosts(): Promise<number> {
+  await connectToDatabase();
+  return PostModel.countDocuments({ status: "published" });
+}
+
+export async function getAllTags(): Promise<{ name: string; count: number }[]> {
+  await connectToDatabase();
+  const rows = await PostModel.aggregate<{ _id: string; count: number }>([
+    { $match: { status: "published" } },
+    { $unwind: "$tags" },
+    { $group: { _id: "$tags", count: { $sum: 1 } } },
+    { $sort: { _id: 1 } },
+  ]);
+  return rows.map((r) => ({ name: r._id, count: r.count }));
+}
+
+/**
+ * Distinct tag strings across every post regardless of status — feeds the write form's tag
+ * autocomplete, where a tag used only on an existing draft should still be suggested. (Separate
+ * from getAllTags(), which is published-only and kept for a future public tag-browsing UI.)
+ */
+export async function listDistinctTags(): Promise<string[]> {
+  await connectToDatabase();
+  const tags = await PostModel.distinct("tags");
+  return (tags as string[]).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+}
+
+export async function listPosts({
+  tag,
+  page = 1,
+  pageSize = 5,
+}: {
+  tag?: string;
+  page?: number;
+  pageSize?: number;
+}): Promise<{ posts: PostSummary[]; total: number }> {
+  await connectToDatabase();
+  const filter: Record<string, unknown> = { status: "published" };
+  if (tag) filter.tags = tag;
+
+  const [total, docs] = await Promise.all([
+    PostModel.countDocuments(filter),
+    PostModel.find(filter)
+      .sort({ publishedAt: -1 })
+      .skip((page - 1) * pageSize)
+      .limit(pageSize)
+      .populate("seriesId", "title")
+      .lean<LeanPostDocWithSeries[]>(),
+  ]);
+
+  const { estimateReadTime } = await import("@/lib/markdown");
+  return {
+    posts: docs.map((doc) => toSummary(doc, estimateReadTime(doc.content), doc.seriesId?.title)),
+    total,
+  };
+}
+
+/**
+ * All published posts, unpaginated — used by /posts, which does tag-filtering and
+ * pagination client-side (components/PostsListClient.tsx) rather than round-tripping
+ * to Mongo on every click. Fine at current post volumes; revisit if this ever needs
+ * to hold more than a few hundred posts.
+ */
+export async function listAllPosts(): Promise<PostSummary[]> {
+  await connectToDatabase();
+  const docs = await PostModel.find({ status: "published" })
+    .sort({ publishedAt: -1 })
+    .populate("seriesId", "title")
+    .lean<LeanPostDocWithSeries[]>();
+
+  const { estimateReadTime } = await import("@/lib/markdown");
+  return docs.map((doc) => toSummary(doc, estimateReadTime(doc.content), doc.seriesId?.title));
+}
+
+/**
+ * Cached wrapper around listAllPosts — reused by both the /posts server prefetch and
+ * app/api/posts's route handler so client fetches and the server's own hydration prefetch
+ * share the same Next.js Data Cache entry instead of each hitting Mongo separately.
+ */
+export const getCachedPosts = unstable_cache(listAllPosts, ["posts-all"], {
+  revalidate: 300,
+  tags: ["posts"],
+});
+
+export async function searchPosts(query: string, limit = 8): Promise<PostSummary[]> {
+  const q = query.trim();
+  if (!q) return [];
+
+  await connectToDatabase();
+  const regex = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+  const docs = await PostModel.find({
+    status: "published",
+    $or: [{ title: regex }, { summary: regex }, { tags: regex }],
+  })
+    .sort({ publishedAt: -1 })
+    .limit(limit)
+    .lean<LeanPostDoc[]>();
+
+  const { estimateReadTime } = await import("@/lib/markdown");
+  return docs.map((doc) => toSummary(doc, estimateReadTime(doc.content)));
+}

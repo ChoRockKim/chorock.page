@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install)",
+      "Bash(npm ci)",
+      "Bash(npm run dev)",
+      "Bash(npm run build)",
+      "Bash(npm run lint)",
+      "Bash(npm run seed)",
+      "Bash(npm run start)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.file_path // empty' | { read -r f; case \"$f\" in *.ts|*.tsx) cd \"${CLAUDE_PROJECT_DIR:-.}\" && npx eslint \"$f\" 2>&1;; esac; }",
+            "timeout": 30,
+            "statusMessage": "Running ESLint on changed file..."
+          }
+        ]
+      }
+    ]
+  }
+}
