@@ -3,6 +3,68 @@
 이 프로젝트의 주요 변경 사항을 버전(작업 단위) 별로 기록합니다. 형식은
 [Keep a Changelog](https://keepachangelog.com/)를 참고합니다.
 
+## [0.7.34] - 2026-08-01
+
+### Added
+
+- 코드 블록에 VSCode 스타일 rainbow bracket(중첩된 `()`/`[]`/`{}`를 깊이별로 다른 색으로
+  표시) 적용 — `lib/markdown.ts`의 `rehypePrettyCode` 옵션에 `@shikijs/colorized-brackets`의
+  `transformerColorizedBrackets()`를 `transformers`로 추가. 기존 `"github-dark"` 테마 그대로
+  동작(이 트랜스포머가 모든 Shiki 내장 테마를 별도 설정 없이 지원). 이 패키지가 shiki 4.x를
+  내부적으로 요구해서 `shiki`를 `^1`→`^4`로 올렸는데, `rehype-pretty-code@0.14.5`의 peer
+  range(`^1 || ^2 || ^3 || ^4`)가 이미 4.x를 지원해서 다른 변경은 필요 없었음
+- `.env.local.example`의 giscus 설정 안내를 auth 섹션 수준으로 보강 — 저장소 Public/Discussions
+  활성화 전제조건, giscus.app에서 값 뽑는 순서, 댓글 전용 카테고리 만들기 권장 등 단계별로 정리
+
+### 검증
+
+- `npx tsc --noEmit`, `npx eslint`, `npm run build` 통과
+- 글쓰기 폼 실시간 미리보기(발행 없이 바로 확인 가능 — 실제 발행 글과 동일한
+  `compileMarkdown()` 경로를 타므로)로 중첩 함수 호출/구조분해/배열 타입이 섞인 tsx 코드
+  블록을 렌더링해, 중첩 깊이별로 브라켓 색이 실제로 다르게 나오는 것을 스크린샷으로 확인
+
+## [0.7.33] - 2026-08-01
+
+### 이전 상태
+
+두 가지 버그 보고: ① "about 페이지에서 최근글 란이 db데이터랑 안 맞네?" ② "맥북모양 코드
+블럭이 width가 고정되어있는 것 같음 — 모바일 화면에서 글 상세로 들어가도 데스크탑 UI가 유지되고,
+글쓰기 페이지 마크다운 미리보기가 50% 넓이를 넘어서 침범함".
+
+### Fixed
+
+- **`/about`의 "최근 글"/"최근 프로젝트"가 DB와 안 맞던 문제**: `app/about/page.tsx`가
+  `listAllPosts()`를 직접 호출하는데 이 페이지엔 `export const revalidate`가 전혀 없어서
+  Next.js가 완전 정적 페이지로 취급 — **빌드 시점에 딱 한 번 렌더링되고 그 뒤로는 절대
+  갱신되지 않고 있었음**(`/posts`, `/posts/[slug]`, `/projects/[slug]`는 이미 ISR인데 `/about`만
+  빠져있었음). `export const revalidate = 300` 추가, `listAllPosts()` 대신 `/posts`와 캐시를
+  공유하는 `getCachedPosts()`로 교체. `app/posts/write/actions.ts#revalidatePosts()`와
+  `app/posts/[slug]/actions.ts#deletePost`에도 `revalidatePath("/about")` 추가해 발행/수정/삭제
+  직후 5분 기다리지 않고 바로 반영되도록 함
+- **코드 블록이 부모 컨테이너보다 넓어지는 문제(모바일 글 상세, 글쓰기 미리보기)**: 원인은
+  `.code-block pre { overflow-x: auto }`가 코드 블록 *내부* 콘텐츠만 스크롤 처리할 뿐, 그리드
+  아이템(`.pd-body`, 글쓰기 폼의 편집/미리보기 두 컬럼)들이 `min-width: auto`(그리드 아이템
+  기본값)라서 코드 블록의 원래 콘텐츠 너비만큼 트랙 자체가 늘어나버리는 전형적인 CSS
+  그리드/플렉스 함정이었음. `app/globals.css`의 `.pd-body`, `components/WritePostForm.tsx`의
+  편집/미리보기 두 `<div>`에 `min-width: 0` 추가 — 이러면 그리드 트랙이 원래 폭대로 유지되고
+  `.code-block pre`의 `overflow-x: auto`가 코드 블록 내부에서만 정상적으로 스크롤됨. 프로젝트
+  상세 페이지(`app/projects/[slug]/page.tsx`)는 이미 `minWidth: 0`이 있어서 원래부터 문제
+  없었음
+
+### 검증
+
+- `npx tsc --noEmit`, `npx eslint`, `npm run build` 통과
+- 프로덕션 빌드로 `/about` "최근 글"이 DB의 실제 최신 발행일 순서와 일치하는 것 확인
+- 코드 블록에 일부러 긴 줄을 넣은 테스트 글로 확인: 글쓰기 폼에서 미리보기가 50% 폭을 넘지
+  않는 것(`document.body.scrollWidth === clientWidth`), 390px 모바일 뷰포트에서 글 상세
+  페이지 전체가 가로로 안 밀리고 코드 블록 내부에서만 스크롤되는 것 확인. 테스트 글은
+  정리(삭제)함
+- (참고) 검증 중 이번 세션 내내 테스트에 썼던 글 여러 개(`rendering-vs-commit`,
+  `fiber-architecture` 등 `scripts/seed.ts`의 더미 시드 글들)가 DB에서 사라진 걸 발견함 — 이
+  세션에서 실행한 정리 스크립트들은 전부 별도 슬러그를 지정해서 지운 거라 이것들과는 안
+  겹침. 실제 배포 사이트를 사용자가 직접 만지면서 정리했을 가능성이 높아 보이나 확실친 않음,
+  사용자에게 확인 필요
+
 ## [0.7.32] - 2026-08-01
 
 ### 이전 상태

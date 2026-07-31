@@ -1,7 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import type { Metadata } from "next";
-import { listAllPosts } from "@/lib/posts";
+import { getCachedPosts } from "@/lib/posts";
 import { listProjects } from "@/lib/projects";
 import PostCard from "@/components/PostCard";
 import ProjectCard from "@/components/ProjectCard";
@@ -11,6 +11,13 @@ import ScrollReveal from "@/components/ScrollReveal";
 export const metadata: Metadata = {
   title: "소개 · chorock.page",
 };
+
+// Without this, this page has no dynamic data source (no cookies/searchParams), so Next.js
+// treats it as fully static — rendered once at build time and never refreshed again. "최근
+// 글"/"최근 프로젝트" would silently go stale forever after the first build/deploy (this is the
+// bug reported: DB has newer posts, /about doesn't show them). Matches the revalidate period
+// already used on /posts, /posts/[slug], /projects/[slug].
+export const revalidate = 300;
 
 // TODO: 실제 정보로 교체하세요.
 const PROFILE = {
@@ -84,7 +91,7 @@ const CONTACT_GITHUB_URL = "https://github.com/ChoRockKim";
 const CONTACT_EMAIL = "daejincnc2@gmail.com";
 
 export default async function AboutPage() {
-  const recentPosts = (await listAllPosts()).slice(0, 3);
+  const recentPosts = (await getCachedPosts()).slice(0, 3);
   const recentProjects = (await listProjects()).slice(0, 2);
 
   return (

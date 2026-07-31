@@ -125,9 +125,10 @@ async function upsertPost(input: SavePostInput, status: "draft" | "published"): 
 /**
  * Busts the unstable_cache entry behind lib/posts.ts#getCachedPosts (tags: ["posts"] — shared
  * by /posts's SSR prefetch and the /api/posts route TanStack Query hits), the /posts page's own
- * ISR cache, and the saved post's own detail page (also ISR since 0.7.29 — see
- * app/posts/[slug]/page.tsx). Without this, a newly published/edited post only shows up once the
- * 300s revalidate window happens to lapse — publishing looked like it silently did nothing.
+ * ISR cache, the saved post's own detail page (also ISR since 0.7.29 — see
+ * app/posts/[slug]/page.tsx), and /about's "최근 글" section (also reads getCachedPosts, also
+ * ISR since 0.7.32). Without this, a newly published/edited post only shows up once each page's
+ * own 300s revalidate window happens to lapse — publishing looked like it silently did nothing.
  */
 function revalidatePosts(slug: string) {
   revalidateTag("posts");
@@ -135,6 +136,7 @@ function revalidatePosts(slug: string) {
   // Must be percent-encoded for non-ASCII (Korean) slugs — revalidatePath keys its cache entry
   // by the literal request pathname, not the decoded segment value generateStaticParams uses.
   revalidatePath(`/posts/${encodeURIComponent(slug)}`);
+  revalidatePath("/about");
 }
 
 export async function saveDraft(input: SavePostInput): Promise<{ slug: string }> {

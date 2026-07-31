@@ -8,6 +8,7 @@ import remarkGfm from "remark-gfm";
 import remarkRehype from "remark-rehype";
 import rehypeSlug from "rehype-slug";
 import rehypePrettyCode from "rehype-pretty-code";
+import { transformerColorizedBrackets } from "@shikijs/colorized-brackets";
 import rehypeReact from "rehype-react";
 import { visit } from "unist-util-visit";
 import GithubSlugger from "github-slugger";
@@ -70,7 +71,13 @@ export async function compileMarkdown(markdown: string): Promise<{ content: Reac
     .use(remarkGfm)
     .use(remarkRehype)
     .use(rehypeSlug)
-    .use(rehypePrettyCode, { theme: "github-dark", keepBackground: true })
+    .use(rehypePrettyCode, {
+      theme: "github-dark",
+      keepBackground: true,
+      // VSCode-style rainbow bracket matching (nested (), [], {}, <> each get a distinct,
+      // rotating color) — supported for every built-in Shiki theme with no extra config.
+      transformers: [transformerColorizedBrackets()],
+    })
     .use(rehypeReact, {
       Fragment,
       jsx,

@@ -46,7 +46,13 @@ type-checking and ESLint as part of `build`, so a green build implies both pass)
     identically in either pipeline since they operate on the hast tree; only the
     hast→React step changed (`rehypeReact` instead of MDX's own JSX compiler), and the
     `pre`/`img`/`blockquote` → `components/CodeBlock.tsx`/`components/Mdx.tsx` component
-    mapping still works the same way.
+    mapping still works the same way. `rehypePrettyCode`'s `transformers` option includes
+    `@shikijs/colorized-brackets`' `transformerColorizedBrackets()` for VSCode-style rainbow
+    bracket matching (nested `()`/`[]`/`{}` each get a distinct, rotating color) — works with
+    the `"github-dark"` theme with no extra config since the transformer supports every Shiki
+    built-in theme out of the box. Required bumping `shiki` from `^1` to `^4` (the transformer
+    package pins shiki 4.x internally); `rehype-pretty-code@0.14.5`'s peer range
+    (`^1 || ^2 || ^3 || ^4`) already covered this, so no other pipeline changes were needed.
 - Series "prev/next" and "related posts" are computed by query (sibling posts sorted by
   `publishedAt`, tag overlap) rather than stored as arrays on the document — there is no
   denormalized ordering to keep in sync when posts are added.
@@ -114,11 +120,26 @@ top of `globals.css` used to render-block every single page load (confirmed by L
 stylesheet trick in `app/layout.tsx`: `<link id="pretendard-css" media="print" ...>` doesn't
 block paint, then a script flips `media` to `"all"` once it loads. **The classic version of
 this trick — a raw `onload="this.media='all'"` HTML attribute right on the `<link>` — does NOT
-work in this stack**: React strips a lowercase `onload` attribute during SSR (verified by
-`curl`-ing the rendered HTML — it's simply absent from the output, no warning, no error), so
-the swap silently never happened and the font never actually applied. Use a real
-`<script>` with `link.addEventListener("load", ...)` instead (see `PRETENDARD_ASYNC_LOAD_SCRIPT`
+work in this stack**: React's rendering model (SSR included) never serializes an `on*` prop as
+a literal inline-handler HTML attribute — there's no code path for it, so it's not "stripped" so
+much as never emitted in the first place (verified by `curl`-ing the rendered HTML — the
+attribute is simply absent, no warning, no error). Use a real `<script>` with
+`link.addEventListener("load", ...)` instead (see `PRETENDARD_ASYNC_LOAD_SCRIPT`
 in `layout.tsx`) — this is the one thing in the file that can't just be a JSX prop.
+
+**Any grid/flex container whose item can render a `.code-block` needs `min-width: 0` on that
+item.** Grid/flex items default to `min-width: auto`, which refuses to shrink below their
+content's intrinsic width — a wide code block (`.code-block pre` has `overflow-x: auto`, but
+that only scrolls the block's *own* content, it doesn't stop the block itself from stretching
+its grid/flex track) was silently forcing `.pd-body` (post detail's `.pd-grid` column) and
+`WritePostForm`'s 50/50 editor/preview split wide enough to fit the longest code line — on
+mobile this kept the post detail page desktop-width no matter what `@media` rules said, and in
+the write form the preview column ate into the editor column. Fixed by adding `min-width: 0` to
+`.pd-body` (`globals.css`) and to both grid-item `<div>`s wrapping the editor/preview in
+`WritePostForm.tsx` (see CHANGELOG 0.7.33). `app/projects/[slug]/page.tsx`'s content column
+already had `minWidth: 0` from when it was first written, so it never had this bug — if you add
+a new place that can render compiled markdown inside a grid/flex layout, give it `min-width: 0`
+from the start rather than waiting to hit this.
 
 **Comments are giscus, not a custom backend.** `components/GiscusComments.tsx` embeds the
 giscus script client-side against `NEXT_PUBLIC_GISCUS_*` env vars; if they're unset it

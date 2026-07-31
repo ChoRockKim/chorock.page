@@ -353,13 +353,6 @@ html.theme-transition::view-transition-new(root) { animation: theme-reveal 0.6s 
   padding: var(--space-6);
   animation: pageFadeIn 0.5s ease both;
 }
-/* Grid items default to min-width: auto, which refuses to shrink below the widest child's
-   content size — a wide code block (.code-block pre has overflow-x: auto, but that only
-   scrolls the block's OWN content, it doesn't stop the block itself from stretching its grid
-   track) was forcing this whole column, and the mobile single-column layout with it, to stay
-   desktop-width. min-width: 0 lets the column actually shrink to the grid track's width, and
-   .code-block pre's own overflow-x: auto then correctly scrolls just the code horizontally. */
-.pd-body { min-width: 0; }
 @media (max-width: 900px) {
   .pd-grid { grid-template-columns: 1fr; }
   .toc-desktop { display: none !important; }
@@ -380,20 +373,6 @@ html.theme-transition::view-transition-new(root) { animation: theme-reveal 0.6s 
 @media (max-width: 800px) {
   .proj-grid { grid-template-columns: 1fr; }
   .proj-sidebar { position: static; top: auto; }
-}
-
-/* — loading.tsx skeletons — */
-.skeleton {
-  background: var(--color-surface);
-  border-radius: var(--radius-md);
-  animation: skeletonPulse 1.4s ease-in-out infinite;
-}
-@keyframes skeletonPulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .skeleton { animation: none; opacity: 0.7; }
 }
 
 .img-placeholder {

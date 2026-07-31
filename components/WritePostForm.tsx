@@ -441,7 +441,7 @@ export default function WritePostForm({
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-6)", alignItems: "start" }}>
-          <div>
+          <div style={{ minWidth: 0 }}>
             <p className="text-muted" style={{ fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", margin: "0 0 var(--space-2)" }}>
               마크다운 편집
             </p>
@@ -544,7 +544,7 @@ export default function WritePostForm({
               onChange={(e) => setBody(e.target.value)}
             />
           </div>
-          <div>
+          <div style={{ minWidth: 0 }}>
             <p className="text-muted" style={{ fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", margin: "0 0 var(--space-2)" }}>
               미리보기
             </p>
