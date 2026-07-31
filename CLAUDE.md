@@ -141,6 +141,20 @@ already had `minWidth: 0` from when it was first written, so it never had this b
 a new place that can render compiled markdown inside a grid/flex layout, give it `min-width: 0`
 from the start rather than waiting to hit this.
 
+**`.pd-body img` (`globals.css`) styles *every* `<img>` inside the post detail `<article>`, not
+just images from the post's own markdown.** It sets `margin: var(--space-4) auto`, `width: auto`,
+`max-height: 640px`, meant for images that come out of `compileMarkdown()`. But it's a plain
+descendant-class selector, so any OTHER component rendered inside `<article className="pd-body">`
+— e.g. `components/PostAuthorCard.tsx`'s profile photo — inherits it too. Confirmed as a real bug:
+the author card's photo isn't a markdown image but still picked up the 20px top margin, shoving it
+down inside its circular mask and cropping it into a lopsided shape (verified via
+`getBoundingClientRect()`/`getComputedStyle()` in the browser, not just visually — see CHANGELOG
+0.7.38, and 0.7.37 for the wrong "WebKit clipping bug" theory tried first before finding this).
+Any non-markdown `<Image>` placed inside `.pd-body` needs to explicitly override
+`margin`/`maxHeight` (and `borderRadius`/`width` if it needs to differ) in its own inline `style`
+— inline style beats a class selector, so this is enough, but it has to be done explicitly rather
+than assumed.
+
 **Comments are giscus, not a custom backend.** `components/GiscusComments.tsx` embeds the
 giscus script client-side against `NEXT_PUBLIC_GISCUS_*` env vars; if they're unset it
 renders a setup hint instead of erroring. There is no comment data in MongoDB.

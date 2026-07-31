@@ -3,6 +3,57 @@
 이 프로젝트의 주요 변경 사항을 버전(작업 단위) 별로 기록합니다. 형식은
 [Keep a Changelog](https://keepachangelog.com/)를 참고합니다.
 
+## [0.7.38] - 2026-08-01
+
+### 이전 상태
+
+0.7.37 수정 후에도 로컬에서 재현해보니 여전히 원형이 아니었음(사용자가 스크린샷으로 재확인).
+0.7.37의 "WebKit/Safari flex 클리핑 버그" 진단은 **틀렸음** — 실제 원인을 브라우저에서
+`getBoundingClientRect()`/`getComputedStyle()`로 직접 찍어보니, 아바타 `<img>`에
+`margin-top: 20px`가 걸려 있었음. 이 이미지는 글 본문을 감싸는
+`<article className="pd-body">` 안에 있는데, `app/globals.css`의 `.pd-body img { margin:
+var(--space-4) auto; ... }`(마크다운 본문 이미지용 스타일)이 클래스 셀렉터라 이 안에 있는
+모든 `img` 후손 요소에 다 적용됨 — 내 아바타 이미지도 여기 걸려서 원형 마스크 안에서 사진이
+20px 아래로 밀려, 위쪽은 잘리고 아래쪽은 마스크 밖으로 넘쳐서 잘리는 비대칭 모양이 된 것.
+
+### Fixed
+
+- `components/PostAuthorCard.tsx`의 `<Image>` 스타일에 `margin: 0`, `maxHeight: "none"`을
+  명시적으로 추가해 `.pd-body img`의 마진/최대높이 규칙을 덮어씀 — 이게 진짜 수정.
+- 0.7.37에서 틀린 진단으로 추가했던 "WebKit 클리핑 버그" 관련 중복 스타일/주석은
+  `app/about/page.tsx`(애초에 `.pd-body` 밖이라 이 버그 자체가 없었음)에서 원복.
+  `components/PostAuthorCard.tsx` 쪽 주석은 실제 원인(margin 충돌)으로 정정.
+
+### 검증
+
+- `npx tsc --noEmit`, `npx eslint`, `npm run build` 통과
+- 브라우저에서 `getBoundingClientRect()`로 이미지와 부모 링크 박스의 y좌표가 정확히
+  일치하는 것(`margin-top: 0px`), 확대 스크린샷으로 완전한 원형 크롭인 것 확인
+
+## [0.7.37] - 2026-08-01
+
+### 이전 상태
+
+"프로필 사진이 둥글지 않고 잘린다"고 스크린샷과 함께 보고. 사진 모서리에 실제 배경(밝은 벽)이
+그대로 보여서, 원형으로 잘라내는 클리핑이 전혀 안 먹은 상태였음. 로컬 크롬으로는 재현이 안 됐고
+(computed style로 `border-radius: 50%`, `overflow: hidden` 다 정상 적용 확인함) — 원인은
+**`border-radius` + `overflow: hidden`을 flex 컨테이너에만 걸고 실제 `<img>`에는 안 걸어서
+생기는, WebKit/Safari 계열에서 알려진 클리핑 버그**로 보임(크롬은 이 버그가 없어서 로컬에서는
+멀쩡해 보였음).
+
+### Fixed
+
+- `components/PostAuthorCard.tsx`, `app/about/page.tsx`의 프로필 아바타 두 군데 모두
+  `border-radius: 50%`/`overflow: hidden`을 감싸는 `<span>`/`<Link>`뿐 아니라 실제 `<Image>`
+  엘리먼트 자체에도 동일하게 걸어 이중으로 적용 — 부모의 클리핑이 안 먹는 환경에서도 이미지
+  자체가 원형으로 잘리도록 보강
+
+### 검증
+
+- `npx tsc --noEmit`, `npx eslint`, `npm run build` 통과
+- 크롬으로 기존과 동일하게 원형으로 보이는 것 확인(회귀 없음). Safari 특유의 버그라 이 환경에서
+  직접 재현은 못 했지만, 표준적으로 알려진 해결 패턴(이미지 자체에 클리핑을 중복 적용)을 적용함
+
 ## [0.7.36] - 2026-08-01
 
 ### Fixed

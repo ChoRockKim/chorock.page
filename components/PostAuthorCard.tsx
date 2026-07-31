@@ -26,7 +26,24 @@ export default function PostAuthorCard() {
           alt={PROFILE.handle}
           width={56}
           height={56}
-          style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "top center" }}
+          // This card lives inside <article className="pd-body"> (app/posts/[slug]/page.tsx),
+          // and globals.css's `.pd-body img { margin: var(--space-4) auto; ... }` — meant for
+          // images inside the post's markdown body — matches ANY descendant img, including this
+          // one. Without an explicit margin/max-height override here, that rule's 20px top
+          // margin shoved the photo down inside its circular mask, cropping the actual portrait
+          // into a lopsided blob instead of a centered circle. object-fit/border-radius are
+          // repeated here too since inline styles beat the class, but margin/maxHeight need
+          // to be explicit since `.pd-body img` sets them and this component doesn't otherwise
+          // touch them.
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            objectPosition: "top center",
+            borderRadius: "50%",
+            margin: 0,
+            maxHeight: "none",
+          }}
         />
       </Link>
       <div style={{ minWidth: 0 }}>
