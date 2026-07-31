@@ -11,6 +11,7 @@ import TableOfContents from "@/components/TableOfContents";
 import PostCard from "@/components/PostCard";
 import GiscusComments from "@/components/GiscusComments";
 import PostOwnerActions from "@/components/PostOwnerActions";
+import PostAuthorCard from "@/components/PostAuthorCard";
 
 function formatDate(iso: string) {
   return iso.slice(0, 10).split("-").join(".");
@@ -106,13 +107,21 @@ export default async function PostDetailPage({
 
           <div>{content}</div>
 
+          <div style={{ marginTop: "var(--space-6)" }}>
+            <PostAuthorCard />
+          </div>
+
+          <div style={{ marginTop: "var(--space-6)" }}>
+            <h3 style={{ fontSize: 16, margin: "0 0 var(--space-3)" }}>댓글</h3>
+            <GiscusComments />
+          </div>
+
           {related.length > 0 && (
             <div
               style={{
                 borderTop: "1px solid var(--color-divider)",
                 paddingTop: "var(--space-4)",
-                marginTop: "var(--space-4)",
-                marginBottom: "var(--space-8)",
+                marginTop: "var(--space-6)",
               }}
             >
               <h3 style={{ fontSize: 16, margin: "0 0 var(--space-2)" }}>관련 글</h3>
@@ -123,11 +132,6 @@ export default async function PostDetailPage({
               </div>
             </div>
           )}
-
-          <div>
-            <h3 style={{ fontSize: 16, margin: "0 0 var(--space-3)" }}>댓글</h3>
-            <GiscusComments />
-          </div>
         </article>
 
         <TableOfContents headings={headings} />

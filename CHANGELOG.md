@@ -3,6 +3,37 @@
 이 프로젝트의 주요 변경 사항을 버전(작업 단위) 별로 기록합니다. 형식은
 [Keep a Changelog](https://keepachangelog.com/)를 참고합니다.
 
+## [0.7.36] - 2026-08-01
+
+### Fixed
+
+- **`/series` 목록이 DB와 안 맞던 문제**: `/about`(0.7.33)과 완전히 같은 원인 —
+  `app/series/page.tsx`에 `export const revalidate`가 없어서 빌드 시점에 한 번 렌더링된 후
+  다시는 갱신 안 되고 있었음. `export const revalidate = 300` 추가.
+  `app/posts/write/actions.ts#revalidatePosts()`/`app/posts/[slug]/actions.ts#deletePost`에도
+  `revalidatePath("/series")` 추가 — 글의 시리즈 배정이 바뀌거나(새 시리즈 생성 포함) 시리즈의
+  마지막 글이 삭제되는 경우(연재 편수 0 → 목록에서 자동 제외) 5분 기다리지 않고 바로 반영.
+  (`/series/[slug]` 상세는 애초에 `generateStaticParams` 없이 매 요청 새로 렌더링되는
+  구조라 이 버그가 없었음 — 손 안 댐)
+
+### Added
+
+- 글 상세 페이지 하단 순서를 "본문 → 관련 글 → 댓글"에서 **"본문 → 프로필 카드 → 댓글 → 관련
+  글"**로 변경. `lib/profile.ts`(신규) — 기존 `app/about/page.tsx`에 로컬로 있던 `PROFILE`
+  객체를 그대로 옮기고 상세 페이지 카드용 짧은 한 줄 소개(`shortIntro`)를 추가 — `/about`과
+  글 상세 양쪽에서 같은 곳을 참조해서 프로필 정보가 항상 일치함.
+  `components/PostAuthorCard.tsx`(신규) — 프로필 사진 + 이름 + `shortIntro` 한 줄, 사진/이름
+  클릭 시 `/about`으로 이동.
+
+### 검증
+
+- `npx tsc --noEmit`, `npx eslint`, `npm run build` 통과 — `/series`도 `revalidate: 5m`으로
+  표시되는 것 확인
+- 프로덕션 빌드로 `/series` 목록이 실제 DB 상태(연재 편수 0인 시리즈는 자동 제외)와 일치하는
+  것 확인
+- 글 상세 페이지에서 본문 → 프로필 카드 → 댓글 → 관련 글 순서 확인, 프로필 사진 클릭 시
+  `/about`으로 정상 이동하는 것 확인
+
 ## [0.7.35] - 2026-08-01
 
 ### 이전 상태

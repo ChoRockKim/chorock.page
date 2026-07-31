@@ -19,12 +19,14 @@ export async function deletePost(slug: string): Promise<void> {
 
   // Same cache-busting as app/posts/write/actions.ts#revalidatePosts — otherwise the deleted
   // post keeps showing on /posts (0.7.26), its own now-404 detail page keeps serving the
-  // stale ISR'd content (0.7.29), and /about's "최근 글" keeps listing it (0.7.32) until each
-  // page's 300s window lapses.
+  // stale ISR'd content (0.7.29), /about's "최근 글" keeps listing it (0.7.32), and /series's
+  // post counts (or the series itself, if this was its last post) stay stale (0.7.36) until
+  // each page's 300s window lapses.
   revalidateTag("posts");
   revalidatePath("/posts");
   // Must be percent-encoded for non-ASCII (Korean) slugs — see the identical note in
   // app/posts/write/actions.ts#revalidatePosts.
   revalidatePath(`/posts/${encodeURIComponent(slug)}`);
   revalidatePath("/about");
+  revalidatePath("/series");
 }

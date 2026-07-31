@@ -6,6 +6,11 @@ export const metadata: Metadata = {
   title: "시리즈 · chorock.page",
 };
 
+// Same bug/fix as /about (CHANGELOG 0.7.33): no dynamic data source here, so without this
+// Next.js treats the page as fully static — rendered once at build time and never refreshed,
+// so newly-created series or updated post counts silently never showed up.
+export const revalidate = 300;
+
 export default async function SeriesListPage() {
   const series = await listSeriesWithCounts();
 

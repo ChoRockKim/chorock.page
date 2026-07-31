@@ -215,10 +215,17 @@ giscus comments, `scripts/migrate-from-forum.ts` (real forum post data migration
 once).
 
 `/about` is real code, mostly real content now (`CAREER`, `CONTACT_GITHUB_URL` edited by the
-user; "최근 프로젝트"/"최근 글" pull live from MongoDB via `listProjects()`/`listAllPosts()`) —
-but `PROFILE`/`SKILLS` at the top of `app/about/page.tsx` are still `// TODO` placeholder
-stand-ins, not the user's real bio/skills. Don't treat their content as factual about the site
-owner.
+user; "최근 프로젝트"/"최근 글" pull live from MongoDB via `listProjects()`/`getCachedPosts()`) —
+but `PROFILE` (now `lib/profile.ts`, shared with `components/PostAuthorCard.tsx` — see below) and
+`SKILLS` (still local to `app/about/page.tsx`) are still `// TODO` placeholder stand-ins, not the
+user's real bio/skills. Don't treat their content as factual about the site owner.
+
+**Post detail's bottom section order is body → author card → comments → related posts**
+(`app/posts/[slug]/page.tsx`) — `components/PostAuthorCard.tsx` renders `lib/profile.ts`'s
+`PROFILE.avatar`/`handle`/`shortIntro` (a one-line variant distinct from `intro`, which is
+`/about`'s longer hero paragraph and too long for this compact card), photo and name both
+linking to `/about`. `lib/profile.ts` exists so editing the profile once updates both `/about`
+and every post detail page — don't duplicate `PROFILE` back into `about/page.tsx`.
 
 `models/Project.ts`/`lib/projects.ts` follow the same shape as Post/Series (`status`
 draft/published, `publishedAt` for sort order, `overviewMd` rendered through the same
