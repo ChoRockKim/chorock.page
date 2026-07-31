@@ -375,6 +375,20 @@ html.theme-transition::view-transition-new(root) { animation: theme-reveal 0.6s 
   .proj-sidebar { position: static; top: auto; }
 }
 
+/* — loading.tsx skeletons — */
+.skeleton {
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  animation: skeletonPulse 1.4s ease-in-out infinite;
+}
+@keyframes skeletonPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton { animation: none; opacity: 0.7; }
+}
+
 .img-placeholder {
   display: flex;
   align-items: center;
