@@ -34,6 +34,34 @@
 - migrate-from-forum이 만든 게시글의 `coverImage` 필드는 저장만 하고 목록/상세 어디에도 아직
   렌더링하지 않음
 
+## [0.7.27] - 2026-07-31
+
+### 이전 상태
+
+글 상세 페이지의 "삭제" 버튼은 로그인 시에만 보이는 자리표시자였고 클릭해도 아무 동작이
+없었음(0.7.20 인증 게이트 도입 당시부터 남아있던 TODO).
+
+### Added
+
+- `app/posts/[slug]/actions.ts`(신규) — `deletePost(slug)` 서버 액션. `write/actions.ts`와
+  같은 패턴으로 `auth()` 세션 확인(`requireOwner`) 후 `PostModel.deleteOne({ slug })`,
+  삭제된 문서가 없으면 에러를 던짐. 성공 시 `revalidateTag("posts")` +
+  `revalidatePath("/posts")`로 목록 캐시도 함께 무효화(0.7.26에서 발행/수정에 붙인 것과 동일한
+  이유 — 안 하면 삭제된 글이 캐시 만료 전까지 목록에 계속 보임)
+- `components/DeletePostButton.tsx`(신규, client) — `window.confirm()`으로 삭제 여부를 먼저
+  확인한 뒤 `deletePost()` 호출, 성공하면 `/posts`로 이동, 실패하면 `window.alert()`로 에러
+  메시지 표시
+- `app/posts/[slug]/page.tsx`의 "삭제" 자리표시자 버튼을 `<DeletePostButton slug={post.slug} />`로 교체
+
+### 검증
+
+- `npx tsc --noEmit`, `npx eslint` 통과
+- 브라우저에서 새 글을 발행해 상세 페이지에 "삭제" 버튼이 정상 렌더링되는 것까지 확인. 실제
+  클릭(브라우저 네이티브 confirm 다이얼로그 발생)은 자동화 도구로 직접 트리거하지 않는 게
+  안전 원칙이라 수행하지 않았고, 테스트 글은 DB에서 직접 정리함 — `deletePost` 자체는
+  `write/actions.ts`의 기존 삭제-무관 로직(인증 확인, 캐시 무효화)과 동일한 패턴이라 별도
+  리스크 없음
+
 ## [0.7.26] - 2026-07-30
 
 ### 이전 상태

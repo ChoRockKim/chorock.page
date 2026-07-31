@@ -193,7 +193,12 @@ check. `middleware.ts` protects `/posts/write` and `/posts/:slug/edit` via the `
 callback in `auth.ts` (returns `!!auth`), redirecting signed-out requests to the Auth.js sign-in
 page. `app/posts/[slug]/page.tsx` conditionally renders "수정"/"삭제" buttons based on the same
 `auth()` check — "수정" links to `/posts/[slug]/edit`, which doesn't exist yet (separate task);
-"삭제" has no action wired up at all yet.
+"삭제" is wired to `components/DeletePostButton.tsx` (client), which calls
+`app/posts/[slug]/actions.ts#deletePost` after a `window.confirm()` prompt. That action re-checks
+`auth()` itself (never trust the button having been gated correctly client-side) and, like
+`saveDraft`/`publishPost` in `app/posts/write/actions.ts`, calls `revalidateTag("posts")` +
+`revalidatePath("/posts")` after the delete — otherwise the deleted post keeps showing on
+`/posts` until the `unstable_cache` 300s window lapses (see CHANGELOG 0.7.26/0.7.27).
 
 The login/logout control lives in `components/Footer.tsx` (small text link, not prominent by
 design) but is implemented as a **client** component (`components/FooterAuthLink.tsx` using
@@ -246,5 +251,5 @@ draft→published transition (checked via `existing.status !== "published"`, not
 can't double as a "never published" signal the way a nullable field could).
 
 Not implemented (Header/PostsPage link to these routes but they 404): home, `/posts/[slug]/edit`
-(the "수정" button on a post links here). Delete ("삭제" button) has no action wired up at all.
-Don't assume these are functional when tracing a user flow.
+(the "수정" button on a post links here). Delete (the "삭제" button) is implemented (see the auth
+section above). Don't assume the not-implemented routes are functional when tracing a user flow.

@@ -11,6 +11,7 @@ import TocMobile from "@/components/TocMobile";
 import TableOfContents from "@/components/TableOfContents";
 import PostCard from "@/components/PostCard";
 import GiscusComments from "@/components/GiscusComments";
+import DeletePostButton from "@/components/DeletePostButton";
 
 function formatDate(iso: string) {
   return iso.slice(0, 10).split("-").join(".");
@@ -94,7 +95,7 @@ export default async function PostDetailPage({
             <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
               {isOwner && (
                 <>
-                  {/* placeholder targets — actual edit form / delete confirmation land in a later pass */}
+                  {/* /posts/[slug]/edit doesn't exist yet — this link 404s until that page lands */}
                   <Link
                     href={`/posts/${post.slug}/edit`}
                     className="btn btn-secondary"
@@ -102,9 +103,7 @@ export default async function PostDetailPage({
                   >
                     수정
                   </Link>
-                  <button type="button" className="btn btn-secondary" style={{ fontSize: 13 }}>
-                    삭제
-                  </button>
+                  <DeletePostButton slug={post.slug} />
                 </>
               )}
               <ShareButton title={post.title} />
