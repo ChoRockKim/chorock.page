@@ -1,8 +1,8 @@
-import Link from "next/link";
 import type { Metadata } from "next";
 import { QueryClient, dehydrate, HydrationBoundary } from "@tanstack/react-query";
 import { getCachedPosts } from "@/lib/posts";
 import PostsListClient from "@/components/PostsListClient";
+import WritePostLink from "@/components/WritePostLink";
 
 export const metadata: Metadata = {
   title: "글 · chorock.page",
@@ -25,9 +25,7 @@ export default async function PostsPage() {
         }}
       >
         <h1 style={{ fontSize: 30, margin: 0 }}>글</h1>
-        <Link href="/posts/write" className="btn btn-primary" style={{ fontSize: 13, textDecoration: "none" }}>
-          새 글 작성
-        </Link>
+        <WritePostLink />
       </div>
 
       <HydrationBoundary state={dehydrate(queryClient)}>

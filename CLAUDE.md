@@ -73,7 +73,17 @@ seed data happened to use ASCII slugs so this was invisible until 0.3.0. Convers
 `Location` header (e.g. in `permanentRedirect(...)`) must be ASCII — encode with
 `encodeURIComponent` when building one from a Korean slug, or Node throws
 "Cannot convert argument to a ByteString". `<Link href>`/`<a href>` don't need this — the
-browser encodes non-ASCII in hrefs itself.
+browser encodes non-ASCII in hrefs itself. **`revalidatePath()` has the same encoding
+requirement** — it keys its cache entry off the literal request pathname (percent-encoded),
+not the decoded segment value `generateStaticParams()` returns. Confirmed by reproducing the
+bug directly: `revalidatePath(\`/posts/${slug}\`)` with a raw Korean slug silently failed to
+invalidate the post's ISR cache (edits kept showing stale content indefinitely), while
+`revalidatePath(\`/posts/${encodeURIComponent(slug)}\`)` worked immediately — see
+`app/posts/write/actions.ts#revalidatePosts` / `app/posts/[slug]/actions.ts#deletePost` and
+CHANGELOG 0.7.29. `generateStaticParams()` itself takes the plain decoded slug (confirmed
+working — Korean filenames show up correctly under `.next/server/app/posts/*.html`), so these
+two Next.js APIs disagree on encoding for the exact same route and each needs handling
+differently.
 
 **Never sort with `localeCompare()` in code that runs during SSR** (e.g. anything computed
 in a Server Component or in a Client Component's render, like the tag list in
@@ -97,6 +107,18 @@ it via `components/useTheme.ts`, which watches the `data-theme` attribute with a
 in `app/globals.css`, ported from a Claude Design system ("Broadsheet") but trimmed to only
 what chorock.page actually uses — the design system's CMYK print-separation effect and
 Source Serif headline treatment were demo-only and are intentionally not ported.
+
+**Pretendard is loaded asynchronously, not via a plain CSS `@import`.** A CDN `@import` at the
+top of `globals.css` used to render-block every single page load (confirmed by Lighthouse —
+"Render-blocking requests", see CHANGELOG 0.7.31). The fix is the standard `media="print"`
+stylesheet trick in `app/layout.tsx`: `<link id="pretendard-css" media="print" ...>` doesn't
+block paint, then a script flips `media` to `"all"` once it loads. **The classic version of
+this trick — a raw `onload="this.media='all'"` HTML attribute right on the `<link>` — does NOT
+work in this stack**: React strips a lowercase `onload` attribute during SSR (verified by
+`curl`-ing the rendered HTML — it's simply absent from the output, no warning, no error), so
+the swap silently never happened and the font never actually applied. Use a real
+`<script>` with `link.addEventListener("load", ...)` instead (see `PRETENDARD_ASYNC_LOAD_SCRIPT`
+in `layout.tsx`) — this is the one thing in the file that can't just be a JSX prop.
 
 **Comments are giscus, not a custom backend.** `components/GiscusComments.tsx` embeds the
 giscus script client-side against `NEXT_PUBLIC_GISCUS_*` env vars; if they're unset it
@@ -147,6 +169,21 @@ from), `activeTag`/`page` always start at `null`/`1` and rely entirely on that m
 a direct deep link like `/posts?tag=React` shows "전체" for one render before the effect
 corrects it, not perceptible in practice.
 
+**`/posts/[slug]` and `/projects/[slug]` are both ISR** (`export const revalidate = 300` +
+`generateStaticParams()`, via `lib/posts.ts#listPostSlugs()` / `lib/projects.ts#listProjectSlugs()`)
+— they used to be fully dynamic (fresh Mongo query + markdown/Shiki recompile on every single
+visit), which was the dominant cause of slow list→detail navigation (diagnosed and fixed in
+CHANGELOG 0.7.29). `/posts/[slug]` couldn't be ISR before because it called `auth()` (cookies)
+just to decide whether to show the owner-only "수정"/"삭제" buttons — moved into
+`components/PostOwnerActions.tsx` (client, `useSession()`), the same `FooterAuthLink.tsx`/
+`WritePostLink.tsx` workaround used elsewhere for this exact static-vs-dynamic tradeoff.
+`lib/posts.ts#getPostBySlug` and `lib/projects.ts#getProjectBySlug` are also wrapped in React's
+`cache()` so `generateMetadata()` and the page body (which both call these with the same slug
+during the same request) share one Mongo round-trip instead of two — plain async functions
+are NOT deduped by Next.js automatically, only `cache()`-wrapped ones are, within a single
+request/render pass. Any new detail-page-shaped route that needs both `generateMetadata` and a
+page body should follow this same `cache()` pattern from the start.
+
 ## What exists vs. doesn't
 
 Implemented: `/posts/[slug]`, `/posts` (list), `/series`, `/series/[slug]`, `/about`,
@@ -164,9 +201,14 @@ owner.
 
 `models/Project.ts`/`lib/projects.ts` follow the same shape as Post/Series (`status`
 draft/published, `publishedAt` for sort order, `overviewMd` rendered through the same
-`compileMarkdown()` used for post bodies — no separate markdown parser). `coverImageFit`
-(`"cover"` default or `"contain"`) lets a project's thumbnail/hero opt out of cropping — needed
-for e.g. an app icon-style image with baked-in padding. `demoUrl`/`repoUrl`/`playStoreUrl`/
+`compileMarkdown()` used for post bodies — no separate markdown parser). `coverImage` values are
+root-relative paths into `/public/projects/...` (not external URLs — an earlier session assumed
+otherwise and deferred `next/image` adoption over it; corrected in CHANGELOG 0.7.31 once actually
+checked against `scripts/seed-projects.ts`), so `components/ProjectCard.tsx` and
+`app/projects/[slug]/page.tsx` render them with `next/image` — no `next.config.ts` `remotePatterns`
+needed since nothing here is actually remote. Only the first list card and the detail page's
+cover image get `priority` (both are that page's actual LCP element); everything else defaults
+to lazy. `coverImageFit`
 `appStoreUrl` are all optional and independently rendered as sidebar buttons on
 `app/projects/[slug]/page.tsx` only when present. Seeded via `scripts/seed-projects.ts`
 (`npm run seed:projects`) — the `projects` array in that file is the **single source of
@@ -192,7 +234,9 @@ owner"** — code that gates a feature just needs `if (!(await auth())) ...`, ne
 check. `middleware.ts` protects `/posts/write` and `/posts/:slug/edit` via the `authorized`
 callback in `auth.ts` (returns `!!auth`), redirecting signed-out requests to the Auth.js sign-in
 page. `app/posts/[slug]/page.tsx` conditionally renders "수정"/"삭제" buttons based on the same
-`auth()` check — "수정" links to `/posts/[slug]/edit`, which doesn't exist yet (separate task);
+`auth()` check — "수정" links to `/posts/[slug]/edit` (`app/posts/[slug]/edit/page.tsx`, a Server
+Component that 404s via `notFound()` if `getPostForEditing(slug)` finds nothing, otherwise
+renders `<WritePostForm mode="edit" .../>` — the same form component `/posts/write` uses);
 "삭제" is wired to `components/DeletePostButton.tsx` (client), which calls
 `app/posts/[slug]/actions.ts#deletePost` after a `window.confirm()` prompt. That action re-checks
 `auth()` itself (never trust the button having been gated correctly client-side) and, like
@@ -250,6 +294,30 @@ draft→published transition (checked via `existing.status !== "published"`, not
 `publishedAt` presence — the schema requires `publishedAt` to always have *some* value, so it
 can't double as a "never published" signal the way a nullable field could).
 
-Not implemented (Header/PostsPage link to these routes but they 404): home, `/posts/[slug]/edit`
-(the "수정" button on a post links here). Delete (the "삭제" button) is implemented (see the auth
-section above). Don't assume the not-implemented routes are functional when tracing a user flow.
+**`app/posts/[slug]/edit/page.tsx` reuses `WritePostForm` via a `mode: "write" | "edit"` prop**
+rather than being a separate form. The two modes differ only where reusing `/posts/write`'s
+draft-vs-publish framing would be actively wrong for editing an already-published post: edit mode
+is only ever reached from a published post's "수정" button (drafts have no public detail page to
+put that button on — they're resumed through `/posts/write?slug=` instead), so there's no
+"draft" state to offer. Edit mode hides the "임시 저장" button entirely and relabels "발행하기" to
+"저장", which still calls the same `publishPost` action — safe to reuse as-is because
+`upsertPost()` in `actions.ts` only stamps `publishedAt` on an actual draft→published transition,
+so re-saving an already-published post through `publishPost` just updates the fields and leaves
+its status/`publishedAt` alone. (`saveDraft` is deliberately *not* reachable from edit mode: since
+`upsertPost` always sets `existing.status` to whatever the caller passes, calling it with
+`status: "draft"` on a live post would silently unpublish it — the missing "임시 저장" button
+in edit mode isn't an oversight, it's what prevents that footgun.) Unlike `/posts/write`, edit
+mode never rewrites the URL after saving — the slug is fixed (editing never regenerates it) and
+the URL already matches, so there's nothing for a `syncSlugToUrl`-style call to fix up.
+
+**The "새 글 작성" button on `/posts` is gated by `components/WritePostLink.tsx`, a client
+component using `useSession()`** — not a server-side `auth()` check in `app/posts/page.tsx`,
+for the identical reason `FooterAuthLink` is a client component (see above): `/posts/page.tsx`
+is ISR (`export const revalidate = 300`), and a server-side `auth()` call there would read
+cookies and force the whole page dynamic, undoing that. The route itself doesn't need the
+gating to be secure — `middleware.ts` already blocks unauthenticated `/posts/write` — this is
+purely so a non-owner visitor doesn't see a write button that would just redirect them to sign-in.
+
+Not implemented (Header/PostsPage link to these routes but they 404): home. `/posts/[slug]/edit`
+and delete (the "삭제" button) are both implemented (see above). Don't assume `home` is functional
+when tracing a user flow.

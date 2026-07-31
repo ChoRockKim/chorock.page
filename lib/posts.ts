@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import { connectToDatabase } from "@/lib/mongodb";
 import { PostModel } from "@/models/Post";
@@ -25,6 +26,7 @@ export type SeriesNav = {
 
 export type PostDetail = PostSummary & {
   content: string;
+  seriesId: string | null;
 };
 
 type LeanPostDoc = {
@@ -52,9 +54,15 @@ function toSummary(doc: LeanPostDoc, readTime: number, seriesTitle?: string): Po
   };
 }
 
-export async function getPostBySlug(slug: string): Promise<PostDetail | null> {
+/**
+ * Wrapped in React's cache() so generateMetadata() and the page body (both call this with the
+ * same slug during the same request) share one Mongo round-trip instead of two.
+ */
+export const getPostBySlug = cache(async (slug: string): Promise<PostDetail | null> => {
   await connectToDatabase();
-  const doc = await PostModel.findOne({ slug, status: "published" }).lean<LeanPostDoc>();
+  const doc = await PostModel.findOne({ slug, status: "published" }).lean<
+    LeanPostDoc & { seriesId?: unknown }
+  >();
   if (!doc) return null;
 
   const { estimateReadTime } = await import("@/lib/markdown");
@@ -63,7 +71,15 @@ export async function getPostBySlug(slug: string): Promise<PostDetail | null> {
   return {
     ...toSummary(doc, readTime),
     content: doc.content,
+    seriesId: doc.seriesId ? String(doc.seriesId) : null,
   };
+});
+
+/** Published post slugs, for generateStaticParams — pre-renders every post at build time. */
+export async function listPostSlugs(): Promise<string[]> {
+  await connectToDatabase();
+  const docs = await PostModel.find({ status: "published" }, { slug: 1 }).lean<{ slug: string }[]>();
+  return docs.map((d) => d.slug);
 }
 
 export async function getPostByLegacyId(legacyId: string): Promise<{ slug: string } | null> {
@@ -99,25 +115,29 @@ export async function getPostForEditing(slug: string): Promise<PostForEditing | 
   };
 }
 
-export async function getSeriesNav(post: PostDetail): Promise<SeriesNav | null> {
+/**
+ * Takes the current post's slug + seriesId directly (both already available on the PostDetail
+ * getPostBySlug returns) instead of re-querying Post by slug just to look up seriesId — that
+ * used to be a third redundant round-trip to the very document the caller already has.
+ */
+export async function getSeriesNav(
+  currentSlug: string,
+  seriesId: string | null
+): Promise<SeriesNav | null> {
+  if (!seriesId) return null;
   await connectToDatabase();
-  const doc = await PostModel.findOne(
-    { slug: post.slug },
-    { seriesId: 1 }
-  ).lean<{ seriesId: unknown } | null>();
-  if (!doc?.seriesId) return null;
 
-  const series = await SeriesModel.findById(doc.seriesId).lean<{ slug: string; title: string } | null>();
+  const series = await SeriesModel.findById(seriesId).lean<{ slug: string; title: string } | null>();
   if (!series) return null;
 
   const siblings = await PostModel.find(
-    { seriesId: doc.seriesId, status: "published" },
+    { seriesId, status: "published" },
     { slug: 1 }
   )
     .sort({ publishedAt: 1 })
     .lean<{ slug: string }[]>();
 
-  const idx = siblings.findIndex((s) => s.slug === post.slug);
+  const idx = siblings.findIndex((s) => s.slug === currentSlug);
   if (idx === -1) return null;
 
   return {

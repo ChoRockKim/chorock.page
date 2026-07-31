@@ -22,6 +22,8 @@ const postSchema = new Schema(
 
 postSchema.index({ tags: 1, publishedAt: -1 });
 postSchema.index({ seriesId: 1, publishedAt: 1 });
+// Covers getRelatedPosts()'s { status, tags: $in, publishedAt sort } query shape.
+postSchema.index({ status: 1, tags: 1, publishedAt: -1 });
 
 export type Post = InferSchemaType<typeof postSchema> & { _id: Types.ObjectId };
 

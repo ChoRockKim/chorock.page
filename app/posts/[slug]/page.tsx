@@ -1,8 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { auth } from "@/auth";
-import { getPostBySlug, getRelatedPosts, getSeriesNav } from "@/lib/posts";
+import { getPostBySlug, getRelatedPosts, getSeriesNav, listPostSlugs } from "@/lib/posts";
 import { compileMarkdown, extractHeadings } from "@/lib/markdown";
 import ReadingProgressBar from "@/components/ReadingProgressBar";
 import ShareButton from "@/components/ShareButton";
@@ -11,10 +10,17 @@ import TocMobile from "@/components/TocMobile";
 import TableOfContents from "@/components/TableOfContents";
 import PostCard from "@/components/PostCard";
 import GiscusComments from "@/components/GiscusComments";
-import DeletePostButton from "@/components/DeletePostButton";
+import PostOwnerActions from "@/components/PostOwnerActions";
 
 function formatDate(iso: string) {
   return iso.slice(0, 10).split("-").join(".");
+}
+
+export const revalidate = 300;
+
+export async function generateStaticParams() {
+  const slugs = await listPostSlugs();
+  return slugs.map((slug) => ({ slug }));
 }
 
 export async function generateMetadata({
@@ -40,14 +46,12 @@ export default async function PostDetailPage({
   const post = await getPostBySlug(decodeURIComponent(slug));
   if (!post) notFound();
 
-  const [seriesNav, related, { content }, session] = await Promise.all([
-    getSeriesNav(post),
+  const [seriesNav, related, { content }] = await Promise.all([
+    getSeriesNav(post.slug, post.seriesId),
     getRelatedPosts(post),
     compileMarkdown(post.content),
-    auth(),
   ]);
   const headings = extractHeadings(post.content);
-  const isOwner = !!session; // signIn callback already rejects every non-owner GitHub account
 
   return (
     <>
@@ -93,19 +97,7 @@ export default async function PostDetailPage({
               {formatDate(post.publishedAt)} · {post.readTime}분 읽기
             </p>
             <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-              {isOwner && (
-                <>
-                  {/* /posts/[slug]/edit doesn't exist yet — this link 404s until that page lands */}
-                  <Link
-                    href={`/posts/${post.slug}/edit`}
-                    className="btn btn-secondary"
-                    style={{ fontSize: 13, textDecoration: "none" }}
-                  >
-                    수정
-                  </Link>
-                  <DeletePostButton slug={post.slug} />
-                </>
-              )}
+              <PostOwnerActions slug={post.slug} />
               <ShareButton title={post.title} />
             </div>
           </div>

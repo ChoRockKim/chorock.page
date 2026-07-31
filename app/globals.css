@@ -5,8 +5,11 @@
  * The system's CMYK print-separation effect, Source Serif headline
  * treatment and process-yellow ink are a demo-only feature of that design
  * system and are intentionally left out — chorock.page never uses them.
+ *
+ * The Pretendard stylesheet itself is NOT @import'd here — a CSS @import is render-blocking on
+ * every single page (confirmed via Lighthouse: "Render-blocking requests" against globals.css).
+ * It's loaded asynchronously instead via the media="print"-swap <link> in app/layout.tsx.
  */
-@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css");
 
 :root {
   --font-heading: "Pretendard", system-ui, sans-serif;
@@ -437,7 +440,11 @@ html.theme-transition::view-transition-new(root) { animation: theme-reveal 0.6s 
   transition: background 0.25s ease, color 0.25s ease;
 }
 .code-block-copy.copied { background: var(--color-accent-600); color: #fff; }
-.code-block pre { margin: 0; padding: var(--space-4) var(--space-3); overflow-x: auto; font-family: var(--font-mono); font-size: 13px; line-height: 1.6; }
+/* Language-less fenced code blocks get no Shiki token spans (no inline style at all), so
+   they'd otherwise inherit the ambient --color-text — near-black in light mode, unreadable
+   against this always-dark background. Highlighted blocks are unaffected: their per-token
+   inline `style="color:..."` spans always win over this. */
+.code-block pre { margin: 0; padding: var(--space-4) var(--space-3); overflow-x: auto; font-family: var(--font-mono); font-size: 13px; line-height: 1.6; color: #d4d4d8; }
 
 /* — WritePostForm (/posts/write) — */
 .wp-title {

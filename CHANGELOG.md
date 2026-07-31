@@ -3,6 +3,132 @@
 이 프로젝트의 주요 변경 사항을 버전(작업 단위) 별로 기록합니다. 형식은
 [Keep a Changelog](https://keepachangelog.com/)를 참고합니다.
 
+## [0.7.31] - 2026-07-31
+
+### 이전 상태
+
+0.7.29의 서버사이드 지연 수정 이후에도 사용자가 여전히 느리다고 보고하며 `/projects`에 대한
+실제 Lighthouse 리포트(Performance 69, LCP 3.8초)를 첨부. Explore 에이전트로 조사한 결과,
+리포트가 `next dev`(개발 서버) 대상이라 "unused JS 635 KiB", "legacy JavaScript", "총 페이로드
+3.7MB", "back/forward cache 차단 4건" 등은 dev 서버 특유의 노이즈(압축/트리셰이킹 미적용,
+Fast Refresh용 WebSocket 연결)로 확인됨. 반면 아래 3가지는 dev/prod 무관하게 실제로 느린
+원인으로 확정:
+1. `components/ProjectCard.tsx`가 모든 카드 이미지(첫 번째 카드 포함)에 무조건
+   `loading="lazy"`를 걸어놔서, 화면 첫 진입 시 곧바로 보이는 LCP 후보 이미지의 요청 자체가
+   지연됨(Lighthouse의 "LCP request discovery").
+2. 프로젝트 커버 이미지가 `next/image` 없이 순수 `<img>` — 이전 세션(0.7.x)에서 "arbitrary
+   external URL이라 next/image 전환은 보류"라고 판단했었는데, 이번에 `scripts/seed-projects.ts`로
+   직접 재확인해보니 실제로는 전부 로컬 `/public/projects/...` 경로였음(판단 착오였음을 확인).
+3. `app/globals.css` 최상단의 `@import url("https://cdn.jsdelivr.net/.../pretendard.css")`가
+   **모든 페이지**의 첫 렌더링을 막고 있었음("Render-blocking requests — 310ms").
+
+### Fixed
+
+- `components/ProjectCard.tsx`, `app/projects/[slug]/page.tsx`의 커버 이미지를 `next/image`로
+  전환(로컬 자산이라 `next.config.ts` 수정 불필요) — 자동 포맷 협상, 반응형 `sizes`, 첫 번째
+  카드/상세 페이지 대표 이미지는 `priority`로 즉시 로드, 나머지는 기본 lazy 유지
+- `app/projects/page.tsx`가 목록의 첫 번째 프로젝트에만 `priority`를 넘기도록 수정
+- `package.json`에 `sharp` 의존성 추가 — Vercel 아닌 환경에서 self-host할 경우 Next.js
+  이미지 최적화가 이 패키지를 필요로 함(Vercel 배포 시엔 자체 최적화 인프라를 쓰므로 불필요,
+  배포처 확정 시 재확인 필요)
+- `app/globals.css`의 렌더링 차단 `@import` 제거, `app/layout.tsx`에 `media="print"` +
+  로드 완료 시 `media="all"`로 전환하는 스크립트로 폰트 스타일시트를 비동기 로딩으로 전환.
+  **처음엔 raw HTML `onload="..."` 속성(소문자, React의 `onLoad`가 아님)으로 시도했는데 React가
+  SSR 시 이 속성을 조용히 제거해버려서(`curl`로 실제 응답 HTML을 떠서 확인) 전혀 동작하지
+  않는 걸 뒤늦게 발견** — `<script>` 태그로 `link.addEventListener("load", ...)`를 직접 붙이는
+  방식으로 교체해 해결
+
+### 검증
+
+- `npx tsc --noEmit`, `npx eslint`, `npm run build` 통과
+- 프로덕션 빌드(`next start`)로 브라우저에서 확인: 첫 번째 프로젝트 카드 이미지가
+  `loading="auto"`(우선 로드)로, 나머지는 `loading="lazy"`로 서빙되는 것을 `next/image`가
+  생성한 `/_next/image?...` URL과 함께 확인
+- 폰트 비동기 로딩 수정 후 `document.fonts`에 Pretendard 관련 `@font-face` 9개가 정상
+  등록되고 `link.media`가 `"print"`→`"all"`로 실제 전환되는 것 확인(수정 전에는 계속
+  `"print"`로 남아있어 폰트가 전혀 적용 안 되고 있었음)
+- `contain`/`cover` 두 가지 `coverImageFit` 케이스(ForA, 외대종강시계) 모두 정상 렌더링,
+  프로젝트 상세 페이지 우측 콘텐츠 스크롤 페이드인 정상 동작 확인
+
+## [0.7.30] - 2026-07-31
+
+### Added
+
+- 존재하지 않는 URL 접속 시 뜨던 Next.js 기본 404 화면을 사이트 디자인에 맞춘
+  `app/not-found.tsx`로 교체 — "404" 라벨, 안내 문구, 가운데 정렬된 "홈으로 이동"
+  버튼(`/`로 이동, 곧바로 `/about`으로 리다이렉트됨). 헤더/푸터는 루트 레이아웃이 그대로
+  감싸므로 다른 페이지들과 동일한 크롬을 유지함
+- `app/projects/[slug]/page.tsx`의 우측 콘텐츠(대표 이미지, 사용 기술, 프로젝트 개요)를
+  `components/ScrollReveal.tsx`(소개 페이지에서 쓰던 것과 동일한 컴포넌트)로 감싸 스크롤 시
+  순서대로 페이드인되도록 함
+- `components/ProjectCard.tsx`의 태그 목록을 최대 3개까지만 보여주고 나머지는 `+N` 형태의
+  개수로 표시 — 태그가 많은 프로젝트 카드가 번잡해 보이는 문제 해결
+
+## [0.7.29] - 2026-07-31
+
+### 이전 상태
+
+사용자가 "글 리스트에서 글 눌러서 상세 페이지 이동할 때랑, 프로젝트 리스트에서 플젝 눌러서
+상세로 이동할 때, 반응 시간이 너무 오래걸리는데 원인 파악"이라고 요청. 두 개의 Explore
+에이전트로 조사한 결과 원인은 셋:
+1. `generateMetadata()`와 페이지 본문이 같은 slug로 각각 독립적으로 DB를 조회(요청당 2배).
+2. `/posts/[slug]`가 소유자 전용 "수정"/"삭제" 버튼 노출을 위해 `auth()`를 호출하고 있어서
+   `/posts`/`/projects`/`/about`/`/series`와 달리 캐싱(ISR) 없이 매번 새로 렌더링됨 — 가장
+   큰 영향.
+3. `getSeriesNav()`가 이미 가진 글을 slug로 또 조회(같은 문서를 세 번째로 조회하는 셈).
+
+같은 대화에서 이어서 "모바일로 접속했을 때, 글 상세페이지는 모바일 레이아웃 적용안됨"과
+"글의 코드 블록 배경이 어두운데, 내부 글자도 검은색이라서 읽을 수 없는 문제"도 함께 제기됨 —
+브라우저로 재현해 원인 확정 후 같이 수정.
+
+### Fixed
+
+- `lib/posts.ts#getPostBySlug`, `lib/projects.ts#getProjectBySlug`를 React `cache()`로 감싸
+  `generateMetadata()`/페이지 본문의 중복 DB 조회 제거.
+- `lib/posts.ts#getSeriesNav`를 `(currentSlug, seriesId)`를 직접 받도록 시그니처 변경 —
+  `getPostBySlug`가 이제 `seriesId`도 함께 반환하므로 같은 글을 slug로 재조회할 필요 없음.
+- `app/posts/[slug]/page.tsx`에서 `auth()` 호출 제거, 소유자 전용 "수정"/"삭제" 버튼을
+  `components/PostOwnerActions.tsx`(신규, client, `useSession()` 사용 —
+  `FooterAuthLink`/`WritePostLink`와 동일 패턴)로 분리. `export const revalidate = 300` +
+  `generateStaticParams()`(`lib/posts.ts#listPostSlugs()`) 추가해 `/posts`처럼 ISR로 전환.
+- `app/projects/[slug]/page.tsx`도 동일하게 `export const revalidate = 300` +
+  `generateStaticParams()`(`lib/projects.ts#listProjectSlugs()`) 추가 — 원래 소유자 전용 UI가
+  없어 auth() 의존 자체가 없었으므로 더 간단하게 적용.
+- `models/Post.ts`에 `{ status: 1, tags: 1, publishedAt: -1 }` 복합 인덱스 추가 —
+  `getRelatedPosts()` 쿼리를 온전히 커버.
+- `app/posts/write/actions.ts#revalidatePosts()`와 `app/posts/[slug]/actions.ts#deletePost`가
+  이제 `/posts` 목록뿐 아니라 저장/삭제된 글 자신의 상세 경로도 `revalidatePath`로 무효화 —
+  안 하면 글 상세가 ISR로 캐싱되기 시작한 이번 변경 때문에 발행/수정/삭제 직후에도 5분 창이
+  지날 때까지 옛 내용을 보여주게 됨. **비ASCII(한글) slug는 `encodeURIComponent`로 인코딩해서
+  넘겨야 함** — `revalidatePath`는 실제 요청 경로(퍼센트 인코딩된 형태)로 캐시 키를 잡는 반면
+  `generateStaticParams`는 디코딩된 문자열을 그대로 받는다는 걸 실제로 재현해서 확인함(인코딩
+  없이 넘기면 조용히 무효화가 안 되고, 다음 빌드 전까지 옛 내용이 계속 보임).
+- `app/layout.tsx`에 `export const viewport`(`width: "device-width", initialScale: 1`) 추가 —
+  이게 통째로 없어서 모바일 브라우저가 기본 가상 뷰포트(~980px)로 축소 렌더링하고 있었고,
+  그 결과 `.pd-grid`의 `@media (max-width: 900px)` 같은 반응형 규칙이 실기기에서 전혀
+  발동하지 않고 있었음(사이트 전체에 영향, 2단 그리드인 글 상세에서 가장 눈에 띔).
+- `app/globals.css`의 `.code-block pre`에 기본 텍스트 색(`#d4d4d8`) 추가 — 언어 태그 없는
+  코드 펜스(예: ` ``` ` 뒤에 바로 텍스트)는 `rehype-pretty-code`가 토큰 하이라이팅을 아예
+  적용하지 않아 `<pre><code>`에 색상 스타일이 전혀 없는 채로 렌더링되고, 라이트 모드의 어두운
+  본문 텍스트색을 그대로 상속해 항상 어두운 코드 블록 배경 위에서 안 보이는 문제였음. 언어가
+  지정된 블록은 토큰별 inline `style="color:..."`가 이 규칙보다 우선하므로 영향 없음(실제
+  `rendering-vs-commit` 글의 tsx 블록으로 하이라이팅 정상 확인).
+
+### 검증
+
+- `npm run build` 통과, `/posts/[slug]`·`/projects/[slug]` 모두 `●`(SSG,
+  `generateStaticParams` 사용)로 전환 확인. 한글 슬러그도 `.next/server/app/posts/*.html`에
+  정상적으로 디코딩된 파일명으로 프리렌더된 것 확인.
+- 브라우저에서 로그인 상태로 상세 페이지의 "수정"/"삭제" 버튼 정상 노출·동작, 시리즈
+  이전글/다음글 내비게이션 정상 확인.
+- 한글 슬러그 테스트 글로 발행→수정(2회)까지 진행하며 `curl`로 직접 확인 — 인코딩 수정 전에는
+  수정해도 상세 페이지가 계속 옛 내용을 보여줬고, `encodeURIComponent` 추가 후에는 즉시
+  반영됨. 테스트 글은 정리(삭제)함.
+- 브라우저 창을 390px로 좁혀 글 상세가 실제로 1단 레이아웃(TOC 아코디언, 헤더 햄버거 메뉴)으로
+  전환되는 것 확인.
+- 라이트 모드에서 언어 미지정 코드 블록의 텍스트가 읽히는 것, 언어 지정 코드 블록(tsx)의
+  하이라이팅이 그대로인 것 확인.
+
 ## [Unreleased] — 다음에 할 일
 
 - Home 페이지 구현 (글 목록 0.4.0, 시리즈 0.6.0, 소개 0.7.0, 프로젝트 0.7.7, 인증 게이트
@@ -10,9 +136,8 @@
 - GitHub OAuth 로그인은 로컬 개발 환경에서 실제 발급받은 OAuth App으로 동작 확인 완료(0.7.21).
   프로덕션(Vercel) 배포 시에는 콜백 URL이 다른 별도 OAuth App을 새로 발급하고 그 값을 Vercel
   환경변수에 등록해야 함(CLAUDE.md의 auth 섹션 참고) — 아직 안 함
-- 기존에 발행된 글을 고치는 `/posts/[slug]/edit`은 없음(글 상세의 "수정" 버튼을 누르면 404).
-  삭제("삭제" 버튼)도 로그인 시에만 보이는 자리표시자일 뿐 클릭해도 동작 없음. 여러 초안을
-  목록으로 보여주는 페이지도 없음(초안은 `?slug=` URL을 기억해야만 이어쓰기 가능)
+- 글 수정(`/posts/[slug]/edit`, 0.7.28)과 삭제(0.7.27)는 완료됨. 여러 초안을 목록으로
+  보여주는 페이지는 아직 없음(초안은 `?slug=` URL을 기억해야만 이어쓰기 가능)
 - 이미지 업로드는 `/posts/write`에서도 여전히 마크다운 이미지 URL을 수동으로 채워 넣는
   방식(S3 등 실제 업로드 미구현, 아래 항목 참고)
 - `app/about/page.tsx`의 `CAREER`/`CONTACT_GITHUB_URL`/`SKILLS`는 실제 내용으로 교체 완료.
@@ -33,6 +158,45 @@
   버킷 `nodeblogforum0530`, 리전 `ap-southeast-2`)을 가져올지 새 버킷을 팔지 결정 필요
 - migrate-from-forum이 만든 게시글의 `coverImage` 필드는 저장만 하고 목록/상세 어디에도 아직
   렌더링하지 않음
+
+## [0.7.28] - 2026-07-31
+
+### 이전 상태
+
+사용자가 "글쓰기 버튼도 로그인해서 나인게 확인되었을 때만 뜨게 하고, 글 수정 기능도
+추가하자"고 요청. `/posts`의 "새 글 작성" 버튼은 로그인 여부와 무관하게 항상 보였고(클릭하면
+미들웨어가 로그인 페이지로 리다이렉트하긴 하지만, 소유자가 아닌 방문자에게도 버튼 자체는
+노출됨), 글 상세의 "수정" 버튼은 존재하지 않는 `/posts/[slug]/edit`로 링크만 걸려 있어 404였음.
+
+### Added
+
+- `components/WritePostLink.tsx`(신규, client) — `useSession()`으로 로그인(소유자) 여부를
+  확인해 로그인 상태에서만 "새 글 작성" 버튼을 렌더링. `app/posts/page.tsx`는 `export const
+  revalidate = 300`로 ISR 유지 중이라 여기에 서버사이드 `auth()`를 직접 넣으면 쿠키를 읽어
+  페이지 전체가 dynamic으로 강제 전환됨(`FooterAuthLink`를 client component로 뺐던 것과 동일한
+  이유, 0.7.20 참고) — 그래서 `app/posts/page.tsx`의 고정 `<Link>`를 이 컴포넌트로 교체
+- `app/posts/[slug]/edit/page.tsx`(신규) — `getPostForEditing(slug)`로 글을 찾고 없으면
+  `notFound()`, 있으면 `<WritePostForm mode="edit" .../>` 렌더링. `/posts/write`와 완전히
+  같은 폼을 재사용(마크다운 툴바, 실시간 미리보기, 태그/시리즈 자동완성 전부 그대로 적용됨)
+- `components/WritePostForm.tsx`에 `mode: "write" | "edit"` prop 추가 — edit 모드는
+  이미 발행된 글만 다루므로(초안은 공개 상세 페이지 자체가 없어 "수정" 버튼을 달 곳이 없고
+  `/posts/write?slug=`로만 이어쓰기 가능) "임시 저장" 버튼을 아예 숨기고 "발행하기"를
+  "저장"으로 라벨만 바꿔 기존 `publishPost` 액션을 그대로 재사용. `upsertPost()`가
+  이미-발행된 글에 `publishPost`를 다시 호출해도 `publishedAt`을 건드리지 않고 필드만
+  갱신하도록 되어 있어(0.7.22에서 만든 draft→published 전환 감지 로직) 별도 액션 없이 안전하게
+  재사용 가능 — 반대로 "임시 저장"(`saveDraft`, status:"draft")을 이미 발행된 글에 썼다면
+  의도치 않게 unpublish되므로 edit 모드에서 그 버튼 자체를 없앤 것이 핵심
+
+### 검증
+
+- `npx tsc --noEmit`, `npx eslint` 통과
+- 브라우저에서 로그인 상태로 `/posts` 접속 시 "새 글 작성" 버튼이 나타나는 것 확인(세션 확인
+  전 잠깐 안 보였다가 나타남 — `useSession()`이 마운트 후 `/api/auth/session`을 호출하는
+  구조라 예상된 동작)
+- 테스트 글을 발행 → 상세 페이지 "수정" 클릭 → `/posts/[slug]/edit`로 정상 이동, 기존
+  제목/요약/본문이 폼에 그대로 채워지는 것, "임시 저장" 버튼이 없고 "저장" 버튼만 있는 것
+  확인 → 본문을 고쳐서 "저장" → 같은 슬러그의 상세 페이지로 돌아가 수정 내용이 반영된 것,
+  발행 상태가 유지된 것 확인. 테스트 글은 정리(삭제)함
 
 ## [0.7.27] - 2026-07-31
 

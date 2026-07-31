@@ -18,7 +18,11 @@ export async function deletePost(slug: string): Promise<void> {
   if (result.deletedCount === 0) throw new Error("삭제할 글을 찾지 못했습니다.");
 
   // Same cache-busting as app/posts/write/actions.ts#revalidatePosts — otherwise the deleted
-  // post keeps showing on /posts until the unstable_cache's 300s window lapses (see 0.7.26).
+  // post keeps showing on /posts (0.7.26) and its own now-404 detail page keeps serving the
+  // stale ISR'd content (0.7.29) until the 300s window lapses.
   revalidateTag("posts");
   revalidatePath("/posts");
+  // Must be percent-encoded for non-ASCII (Korean) slugs — see the identical note in
+  // app/posts/write/actions.ts#revalidatePosts.
+  revalidatePath(`/posts/${encodeURIComponent(slug)}`);
 }

@@ -31,10 +31,17 @@ export default function WritePostForm({
   seriesOptions,
   allTags,
   initial,
+  mode = "write",
 }: {
   seriesOptions: SeriesOption[];
   allTags: string[];
   initial?: InitialPost;
+  // "edit" is only ever reached from an already-published post's "수정" button (drafts have no
+  // public detail page to link a "수정" button from — they're resumed via /posts/write?slug=
+  // instead). So edit mode has no "draft vs published" ambiguity to offer: there's a single
+  // "저장" action that re-publishes with the edited fields, and no "임시 저장" button that could
+  // accidentally flip a live post's status back to "draft".
+  mode?: "write" | "edit";
 }) {
   const router = useRouter();
 
@@ -49,7 +56,7 @@ export default function WritePostForm({
   );
   const [seriesSuggestOpen, setSeriesSuggestOpen] = useState(false);
   const [body, setBody] = useState(initial?.content ?? "");
-  const [statusLabel, setStatusLabel] = useState("작성 중");
+  const [statusLabel, setStatusLabel] = useState(mode === "edit" ? "수정 중" : "작성 중");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -223,11 +230,13 @@ export default function WritePostForm({
             </span>
           )}
           <span style={{ marginLeft: saveError ? 0 : "auto", fontSize: 12, opacity: 0.5 }}>{statusLabel}</span>
-          <button type="button" className="btn btn-secondary" disabled={saving} onClick={handleSaveDraft}>
-            임시 저장
-          </button>
+          {mode === "write" && (
+            <button type="button" className="btn btn-secondary" disabled={saving} onClick={handleSaveDraft}>
+              임시 저장
+            </button>
+          )}
           <button type="button" className="btn btn-primary" disabled={saving} onClick={handlePublish}>
-            발행하기
+            {mode === "edit" ? "저장" : "발행하기"}
           </button>
         </div>
       </div>

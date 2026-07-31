@@ -1,9 +1,18 @@
 import Link from "next/link";
+import Image from "next/image";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { getProjectBySlug } from "@/lib/projects";
+import { getProjectBySlug, listProjectSlugs } from "@/lib/projects";
 import { compileMarkdown } from "@/lib/markdown";
 import SkillTag from "@/components/SkillTag";
+import ScrollReveal from "@/components/ScrollReveal";
+
+export const revalidate = 300;
+
+export async function generateStaticParams() {
+  const slugs = await listProjectSlugs();
+  return slugs.map((slug) => ({ slug }));
+}
 
 export async function generateMetadata({
   params,
@@ -143,51 +152,65 @@ export default async function ProjectDetailPage({
       </aside>
 
       <div style={{ minWidth: 0 }}>
-        {project.coverImage ? (
-          // eslint-disable-next-line @next/next/no-img-element -- arbitrary external URL, not a page asset next/image should optimize
-          <img
-            src={project.coverImage}
-            alt=""
-            style={{
-              width: "100%",
-              aspectRatio: "16/9",
-              borderRadius: 10,
-              marginBottom: "var(--space-6)",
-              objectFit: project.coverImageFit,
-              background: project.coverImageFit === "contain" ? "var(--color-surface)" : undefined,
-              display: "block",
-            }}
-          />
-        ) : (
-          <div className="img-placeholder" style={{ width: "100%", aspectRatio: "16/9", marginBottom: "var(--space-6)" }}>
-            대표 이미지
-          </div>
-        )}
+        <ScrollReveal>
+          {project.coverImage ? (
+            <div
+              style={{
+                position: "relative",
+                width: "100%",
+                aspectRatio: "16/9",
+                borderRadius: 10,
+                marginBottom: "var(--space-6)",
+                overflow: "hidden",
+              }}
+            >
+              <Image
+                src={project.coverImage}
+                alt=""
+                fill
+                priority
+                sizes="(min-width: 900px) 700px, 100vw"
+                style={{
+                  objectFit: project.coverImageFit,
+                  background: project.coverImageFit === "contain" ? "var(--color-surface)" : undefined,
+                }}
+              />
+            </div>
+          ) : (
+            <div className="img-placeholder" style={{ width: "100%", aspectRatio: "16/9", marginBottom: "var(--space-6)" }}>
+              대표 이미지
+            </div>
+          )}
+        </ScrollReveal>
 
         {project.stack.length > 0 && (
-          <section style={{ marginBottom: "var(--space-6)" }}>
-            <h2 style={{ fontSize: 18, margin: "0 0 var(--space-4)" }}>사용 기술</h2>
-            <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
-              {project.stack.map((group) => (
-                <div key={group.label}>
-                  <p className="text-muted" style={{ fontSize: 11, letterSpacing: "0.06em", textTransform: "uppercase", margin: "0 0 var(--space-1)" }}>
-                    {group.label}
-                  </p>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-2)" }}>
-                    {group.items.map((tech) => (
-                      <SkillTag key={tech} name={tech} />
-                    ))}
+          <ScrollReveal style={{ marginBottom: "var(--space-6)" }}>
+            <section>
+              <h2 style={{ fontSize: 18, margin: "0 0 var(--space-4)" }}>사용 기술</h2>
+              <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
+                {project.stack.map((group) => (
+                  <div key={group.label}>
+                    <p className="text-muted" style={{ fontSize: 11, letterSpacing: "0.06em", textTransform: "uppercase", margin: "0 0 var(--space-1)" }}>
+                      {group.label}
+                    </p>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-2)" }}>
+                      {group.items.map((tech) => (
+                        <SkillTag key={tech} name={tech} />
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          </section>
+                ))}
+              </div>
+            </section>
+          </ScrollReveal>
         )}
 
-        <section>
-          <h2 style={{ fontSize: 18, margin: "0 0 var(--space-4)" }}>프로젝트 개요</h2>
-          <div className="pd-body">{content}</div>
-        </section>
+        <ScrollReveal>
+          <section>
+            <h2 style={{ fontSize: 18, margin: "0 0 var(--space-4)" }}>프로젝트 개요</h2>
+            <div className="pd-body">{content}</div>
+          </section>
+        </ScrollReveal>
       </div>
     </div>
   );

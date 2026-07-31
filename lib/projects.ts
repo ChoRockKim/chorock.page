@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { connectToDatabase } from "@/lib/mongodb";
 import { ProjectModel } from "@/models/Project";
 
@@ -69,7 +70,11 @@ export async function listProjects(): Promise<ProjectSummary[]> {
   }));
 }
 
-export async function getProjectBySlug(slug: string): Promise<ProjectDetail | null> {
+/**
+ * Wrapped in React's cache() so generateMetadata() and the page body (both call this with the
+ * same slug during the same request) share one Mongo round-trip instead of two.
+ */
+export const getProjectBySlug = cache(async (slug: string): Promise<ProjectDetail | null> => {
   await connectToDatabase();
 
   const doc = await ProjectModel.findOne({ slug, status: "published" }).lean<ProjectLean | null>();
@@ -92,4 +97,11 @@ export async function getProjectBySlug(slug: string): Promise<ProjectDetail | nu
     appStoreUrl: doc.appStoreUrl,
     overviewMd: doc.overviewMd,
   };
+});
+
+/** Published project slugs, for generateStaticParams — pre-renders every project at build time. */
+export async function listProjectSlugs(): Promise<string[]> {
+  await connectToDatabase();
+  const docs = await ProjectModel.find({ status: "published" }, { slug: 1 }).lean<{ slug: string }[]>();
+  return docs.map((d) => d.slug);
 }
