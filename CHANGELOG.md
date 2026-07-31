@@ -3,6 +3,36 @@
 이 프로젝트의 주요 변경 사항을 버전(작업 단위) 별로 기록합니다. 형식은
 [Keep a Changelog](https://keepachangelog.com/)를 참고합니다.
 
+## [0.7.35] - 2026-08-01
+
+### 이전 상태
+
+"다크모드로 접속했을 시 giscus 댓글창이 다크모드 적용이 안 됨, 근데 라이트->다크로 바꾸면
+똑같이 잘 바뀜"이라고 보고. 원인: `components/useTheme.ts`가 실제 테마와 무관하게
+`useState<"light" | "dark">("light")`로 **무조건 라이트로 초기화**하고, 마운트 후
+`useEffect`에서야 `<html data-theme>`를 읽어 진짜 값으로 고쳐주는 구조였음. 그런데
+`GiscusComments.tsx`의 giscus 스크립트 삽입 이펙트는 `[configured]`에만 의존해서 **첫 렌더
+시점의 (틀린) "light" 값을 그대로 캡처**해 스크립트를 생성해버리고, 뒤이어 진짜 값("dark")으로
+바뀌었을 때 보내는 교정용 `postMessage`는 giscus iframe이 아직 만들어지기 전이라 씹혔음(누구도
+안 듣고 있는 채널에 대고 메시지만 보낸 셈). 수동 토글이 잘 되던 건 그 시점엔 이미 iframe이
+로드돼 있어서 postMessage가 정상 전달됐기 때문.
+
+### Fixed
+
+- `components/useTheme.ts`의 `useState` 초기값을 하드코딩된 `"light"` 대신, lazy
+  initializer로 `<html data-theme>`를 즉시 읽어오도록 변경 — `app/layout.tsx`의
+  `THEME_INIT_SCRIPT`가 하이드레이션 전에 이미 `data-theme`를 정확히 설정해두므로, 클라이언트
+  첫 렌더부터 곧바로 올바른 값을 가짐. `GiscusComments`의 JSX는 `theme` 값에 따라 분기하는
+  게 전혀 없고(스크립트/postMessage 같은 명령형 DOM 조작에만 씀) 서버는 애초에 이 값을 렌더링에
+  안 쓰므로 하이드레이션 불일치 위험 없이 안전하게 적용 가능
+
+### 검증
+
+- `npx tsc --noEmit`, `npx eslint` 통과
+- 브라우저에서 `localStorage.setItem("chorock-theme", "dark")`로 다크모드 저장 후 글 상세
+  페이지를 **처음부터 새로** 로드 → giscus iframe의 실제 `src` 쿼리스트링 `theme` 파라미터가
+  처음부터 `"dark"`인 것을 확인(수정 전이었다면 `"light"`로 박혀서 로드됐을 상황)
+
 ## [0.7.34] - 2026-08-01
 
 ### Added
