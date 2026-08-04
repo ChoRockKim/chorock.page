@@ -155,6 +155,15 @@ Any non-markdown `<Image>` placed inside `.pd-body` needs to explicitly override
 — inline style beats a class selector, so this is enough, but it has to be done explicitly rather
 than assumed.
 
+**`.code-block pre` has `-webkit-text-size-adjust: 100%` / `text-size-adjust: 100%`** to opt out
+of mobile WebKit/Blink's automatic font-boosting (Text Autosizer) — a narrow, horizontally
+scrollable (`overflow-x: auto`), monospace-heavy element like this is exactly what triggers that
+heuristic, so the code block's text rendered larger than its explicit `font-size: 13px` on mobile
+even though desktop was unaffected (desktop Chrome doesn't have this behavior at all, so it can't
+be reproduced/verified there — see CHANGELOG 0.7.39). If another element develops the same
+"looks fine on desktop, mysteriously bigger on a real phone" symptom, check for this class of
+narrow+scrollable+monospace container before assuming it's a font-size or media-query bug.
+
 **Comments are giscus, not a custom backend.** `components/GiscusComments.tsx` embeds the
 giscus script client-side against `NEXT_PUBLIC_GISCUS_*` env vars; if they're unset it
 renders a setup hint instead of erroring. There is no comment data in MongoDB.

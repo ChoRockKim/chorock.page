@@ -13,15 +13,21 @@ export default function Footer() {
         flexWrap: "wrap",
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
-        <span style={{ fontSize: 12, color: "var(--color-text)", opacity: 0.55 }}>
+      <div
+        style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}
+      >
+        <span
+          style={{ fontSize: 12, color: "var(--color-text)", opacity: 0.55 }}
+        >
           © {new Date().getFullYear()} chorock.page
         </span>
         <FooterAuthLink />
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
+      <div
+        style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}
+      >
         <a
-          href="https://github.com"
+          href="https://github.com/ChoRockKim"
           style={{ color: "var(--color-text)", opacity: 0.6, display: "flex" }}
           aria-label="GitHub"
           title="GitHub"
@@ -34,16 +40,37 @@ export default function Footer() {
           </svg>
         </a>
         <a
-          href="https://linkedin.com"
+          href="https://www.linkedin.com/in/태헌-김-3235b6399"
           style={{ color: "var(--color-text)", opacity: 0.6, display: "flex" }}
           aria-label="LinkedIn"
           title="LinkedIn"
         >
           <svg width="24" height="24" viewBox="0 0 256 256" fill="none">
-            <rect x="28" y="28" width="200" height="200" rx="24" fill="currentColor" opacity="0.15" />
-            <rect x="28" y="28" width="200" height="200" rx="24" stroke="currentColor" strokeWidth="14" />
+            <rect
+              x="28"
+              y="28"
+              width="200"
+              height="200"
+              rx="24"
+              fill="currentColor"
+              opacity="0.15"
+            />
+            <rect
+              x="28"
+              y="28"
+              width="200"
+              height="200"
+              rx="24"
+              stroke="currentColor"
+              strokeWidth="14"
+            />
             <circle cx="80" cy="84" r="14" fill="currentColor" />
-            <path d="M80 116v76M80 116" stroke="currentColor" strokeWidth="18" strokeLinecap="round" />
+            <path
+              d="M80 116v76M80 116"
+              stroke="currentColor"
+              strokeWidth="18"
+              strokeLinecap="round"
+            />
             <path
               d="M124 192v-44c0-18 14-32 32-32s28 12 28 32v44"
               stroke="currentColor"
@@ -51,19 +78,46 @@ export default function Footer() {
               strokeLinecap="round"
               strokeLinejoin="round"
             />
-            <path d="M124 116v76" stroke="currentColor" strokeWidth="18" strokeLinecap="round" />
+            <path
+              d="M124 116v76"
+              stroke="currentColor"
+              strokeWidth="18"
+              strokeLinecap="round"
+            />
           </svg>
         </a>
         <a
-          href="https://instagram.com"
+          href="https://www.instagram.com/kthexitfled/"
           style={{ color: "var(--color-text)", opacity: 0.6, display: "flex" }}
           aria-label="Instagram"
           title="Instagram"
         >
           <svg width="24" height="24" viewBox="0 0 256 256" fill="none">
-            <rect x="28" y="28" width="200" height="200" rx="56" fill="currentColor" opacity="0.15" />
-            <rect x="28" y="28" width="200" height="200" rx="56" stroke="currentColor" strokeWidth="14" />
-            <circle cx="128" cy="128" r="48" stroke="currentColor" strokeWidth="16" />
+            <rect
+              x="28"
+              y="28"
+              width="200"
+              height="200"
+              rx="56"
+              fill="currentColor"
+              opacity="0.15"
+            />
+            <rect
+              x="28"
+              y="28"
+              width="200"
+              height="200"
+              rx="56"
+              stroke="currentColor"
+              strokeWidth="14"
+            />
+            <circle
+              cx="128"
+              cy="128"
+              r="48"
+              stroke="currentColor"
+              strokeWidth="16"
+            />
             <circle cx="180" cy="76" r="10" fill="currentColor" />
           </svg>
         </a>

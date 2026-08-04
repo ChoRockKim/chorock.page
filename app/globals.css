@@ -465,7 +465,21 @@ html.theme-transition::view-transition-new(root) { animation: theme-reveal 0.6s 
    they'd otherwise inherit the ambient --color-text — near-black in light mode, unreadable
    against this always-dark background. Highlighted blocks are unaffected: their per-token
    inline `style="color:..."` spans always win over this. */
-.code-block pre { margin: 0; padding: var(--space-4) var(--space-3); overflow-x: auto; font-family: var(--font-mono); font-size: 13px; line-height: 1.6; color: #d4d4d8; }
+/* Mobile WebKit/Blink auto-boost ("font boosting"/Text Autosizer) inflates font-size on narrow,
+   horizontally-scrollable, monospace-heavy elements like this one to "help" legibility — the
+   boosted size ignores the 13px set here and doesn't match the rest of the page's scale. Opting
+   out with text-size-adjust is the standard fix. */
+.code-block pre {
+  margin: 0;
+  padding: var(--space-4) var(--space-3);
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  color: #d4d4d8;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
 
 /* — WritePostForm (/posts/write) — */
 .wp-title {
