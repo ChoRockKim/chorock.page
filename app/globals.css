@@ -468,7 +468,15 @@ html.theme-transition::view-transition-new(root) { animation: theme-reveal 0.6s 
 /* Mobile WebKit/Blink auto-boost ("font boosting"/Text Autosizer) inflates font-size on narrow,
    horizontally-scrollable, monospace-heavy elements like this one to "help" legibility — the
    boosted size ignores the 13px set here and doesn't match the rest of the page's scale. Opting
-   out with text-size-adjust is the standard fix. */
+   out with text-size-adjust is the standard fix — BUT Autoprefixer (part of Next.js's built-in
+   CSS build pipeline) silently strips `-webkit-text-size-adjust` from the compiled output,
+   assuming the unprefixed `text-size-adjust` alone covers Safari. It doesn't: iOS WebKit never
+   implemented the unprefixed property, so on a real iPhone (Safari AND "Chrome" — iOS Chrome is
+   also WebKit under Apple's policy, not Blink) the rule that actually reached the browser did
+   nothing, even though it looked correct in every desktop devtools/computed-style check.
+   Confirmed via `curl`-ing the deployed /_next/static/css/*.css bundle directly — the
+   unprefixed declaration was present, the -webkit- one was gone. The `autoprefixer: ignore next`
+   comment stops Autoprefixer from touching the following declaration at all. */
 .code-block pre {
   margin: 0;
   padding: var(--space-4) var(--space-3);
@@ -477,6 +485,7 @@ html.theme-transition::view-transition-new(root) { animation: theme-reveal 0.6s 
   font-size: 13px;
   line-height: 1.6;
   color: #d4d4d8;
+  /* autoprefixer: ignore next */
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
 }

@@ -3,6 +3,36 @@
 이 프로젝트의 주요 변경 사항을 버전(작업 단위) 별로 기록합니다. 형식은
 [Keep a Changelog](https://keepachangelog.com/)를 참고합니다.
 
+## [0.7.40] - 2026-08-06
+
+### 이전 상태
+
+0.7.39에서 `.code-block pre`에 `-webkit-text-size-adjust: 100%` / `text-size-adjust: 100%`를
+추가했는데도 사용자가 아이폰(Safari, "Chrome" 둘 다)에서 계속 코드블록 글자가 크게 보인다고
+재보고. 데스크톱 devtools로 프로덕션 페이지의 computed style을 직접 찍어보면
+`text-size-adjust: 100%`가 정상 적용된 것처럼 보였지만, 실제로 배포된 CSS 번들
+(`/_next/static/css/*.css`)을 `curl`로 직접 열어보니 `text-size-adjust:100%`만 남아있고
+`-webkit-text-size-adjust`는 통째로 사라져 있었음. Next.js 빌드 파이프라인에 내장된
+Autoprefixer가 "표준 프로퍼티가 있으니 벤더 프리픽스는 불필요하다"고 판단해 프로덕션
+빌드에서 그 선언 자체를 제거하는, 잘 알려진 Autoprefixer의 한계 — 그런데 실제로는 iOS
+WebKit이 prefix 없는 `text-size-adjust`를 지원한 적이 없어서, Safari와 iOS Chrome
+(iOS에서는 Apple 정책상 Chrome도 내부적으로 WebKit을 그대로 씀, Blink가 아님) 둘 다에서
+CSS 소스에 있던 수정이 실제로는 브라우저에 전혀 전달되지 않고 있었음. 데스크톱 Chrome은
+이 자동확대 동작 자체가 없어서 재현이 안 됐던 것.
+
+### Fixed
+
+- `app/globals.css`의 `-webkit-text-size-adjust: 100%` 선언 바로 위에
+  `/* autoprefixer: ignore next */` 주석 추가 — Autoprefixer가 이 선언을 건드리지(제거하지)
+  않도록 명시적으로 막음.
+
+### 검증
+
+- `npm run build` 통과 후 `.next/static/css/*.css`를 직접 grep해서
+  `-webkit-text-size-adjust:100%`가 컴파일된 최종 번들에 그대로 남아있는 것 확인(수정 전에는
+  이 줄이 빌드 산출물에서 사라졌었음 — `curl`로 프로덕션 배포본에서도 동일하게 재현/확인).
+- 실제 아이폰 기기에서의 최종 시각적 확인은 배포 후 사용자가 직접 진행 필요.
+
 ## [0.7.39] - 2026-08-04
 
 ### 이전 상태
