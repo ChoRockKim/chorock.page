@@ -70,7 +70,7 @@ const projects = [
     repoUrl: "https://github.com/ChoRockKim/HUFS_Clock_REACT_CHROME_EXTENSION",
     playStoreUrl: null,
     appStoreUrl: null,
-    publishedAt: "2026-02-01",
+    publishedAt: "2026-03-01",
   },
   {
     slug: "fora",
@@ -197,7 +197,7 @@ Express 서버를 직접 운영하던 방식에서 벗어나, 지금 이 사이�
     repoUrl: "https://github.com/ChoRockKim/chorock.page",
     playStoreUrl: null,
     appStoreUrl: null,
-    publishedAt: "2026-03-01",
+    publishedAt: "2026-02-01",
   },
 ];
 

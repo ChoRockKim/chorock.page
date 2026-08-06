@@ -6,10 +6,14 @@ export default function ScrollReveal({
   children,
   style,
   className,
+  delay,
 }: {
   children: ReactNode;
   style?: CSSProperties;
   className?: string;
+  /** Seconds — staggers reveal for siblings that enter the viewport at the same scroll
+   *  position (e.g. cards in the same grid row), which would otherwise fade in simultaneously. */
+  delay?: number;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
@@ -34,7 +38,7 @@ export default function ScrollReveal({
     <div
       ref={ref}
       className={`scroll-reveal${visible ? " is-visible" : ""}${className ? ` ${className}` : ""}`}
-      style={style}
+      style={delay ? { ...style, transitionDelay: `${delay}s` } : style}
     >
       {children}
     </div>

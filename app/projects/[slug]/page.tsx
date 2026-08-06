@@ -184,25 +184,25 @@ export default async function ProjectDetailPage({
         </ScrollReveal>
 
         {project.stack.length > 0 && (
-          <ScrollReveal style={{ marginBottom: "var(--space-6)" }}>
-            <section>
+          <section style={{ marginBottom: "var(--space-6)" }}>
+            <ScrollReveal>
               <h2 style={{ fontSize: 18, margin: "0 0 var(--space-4)" }}>사용 기술</h2>
-              <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
-                {project.stack.map((group) => (
-                  <div key={group.label}>
-                    <p className="text-muted" style={{ fontSize: 11, letterSpacing: "0.06em", textTransform: "uppercase", margin: "0 0 var(--space-1)" }}>
-                      {group.label}
-                    </p>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-2)" }}>
-                      {group.items.map((tech) => (
-                        <SkillTag key={tech} name={tech} />
-                      ))}
-                    </div>
+            </ScrollReveal>
+            <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
+              {project.stack.map((group, i) => (
+                <ScrollReveal key={group.label} delay={i * 0.06}>
+                  <p className="text-muted" style={{ fontSize: 11, letterSpacing: "0.06em", textTransform: "uppercase", margin: "0 0 var(--space-1)" }}>
+                    {group.label}
+                  </p>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-2)" }}>
+                    {group.items.map((tech) => (
+                      <SkillTag key={tech} name={tech} />
+                    ))}
                   </div>
-                ))}
-              </div>
-            </section>
-          </ScrollReveal>
+                </ScrollReveal>
+              ))}
+            </div>
+          </section>
         )}
 
         <ScrollReveal>

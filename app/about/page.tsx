@@ -175,10 +175,12 @@ export default async function AboutPage() {
         </p>
       </ScrollReveal>
 
-      <ScrollReveal style={{ marginBottom: "var(--space-8)" }}>
-        <h2 style={{ fontSize: 20, margin: "0 0 var(--space-4)" }}>
-          보유 기술
-        </h2>
+      <div style={{ marginBottom: "var(--space-8)" }}>
+        <ScrollReveal>
+          <h2 style={{ fontSize: 20, margin: "0 0 var(--space-4)" }}>
+            보유 기술
+          </h2>
+        </ScrollReveal>
         <div
           style={{
             display: "flex",
@@ -186,8 +188,8 @@ export default async function AboutPage() {
             gap: "var(--space-3)",
           }}
         >
-          {SKILLS.map((group) => (
-            <div key={group.category}>
+          {SKILLS.map((group, i) => (
+            <ScrollReveal key={group.category} delay={i * 0.06}>
               <p
                 className="text-muted"
                 style={{
@@ -210,17 +212,20 @@ export default async function AboutPage() {
                   <SkillTag key={item} name={item} />
                 ))}
               </div>
-            </div>
+            </ScrollReveal>
           ))}
         </div>
-      </ScrollReveal>
+      </div>
 
-      <ScrollReveal style={{ marginBottom: "var(--space-8)" }}>
-        <h2 style={{ fontSize: 20, margin: "0 0 var(--space-4)" }}>경력</h2>
+      <div style={{ marginBottom: "var(--space-8)" }}>
+        <ScrollReveal>
+          <h2 style={{ fontSize: 20, margin: "0 0 var(--space-4)" }}>경력</h2>
+        </ScrollReveal>
         <div style={{ display: "flex", flexDirection: "column" }}>
           {CAREER.map((job, i) => (
-            <div
+            <ScrollReveal
               key={i}
+              delay={i * 0.06}
               style={{
                 display: "flex",
                 gap: "var(--space-4)",
@@ -314,35 +319,37 @@ export default async function AboutPage() {
                   ))}
                 </div>
               </div>
-            </div>
+            </ScrollReveal>
           ))}
         </div>
-      </ScrollReveal>
+      </div>
 
       {recentProjects.length > 0 && (
-        <ScrollReveal style={{ marginBottom: "var(--space-8)" }}>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "baseline",
-              justifyContent: "space-between",
-              marginBottom: "var(--space-3)",
-            }}
-          >
-            <h2 style={{ fontSize: 20, margin: 0 }}>최근 프로젝트</h2>
-            <Link
-              href="/projects"
-              className="btn btn-ghost"
+        <div style={{ marginBottom: "var(--space-8)" }}>
+          <ScrollReveal>
+            <div
               style={{
-                fontSize: 13,
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 2,
+                display: "flex",
+                alignItems: "baseline",
+                justifyContent: "space-between",
+                marginBottom: "var(--space-3)",
               }}
             >
-              전체 보기 →
-            </Link>
-          </div>
+              <h2 style={{ fontSize: 20, margin: 0 }}>최근 프로젝트</h2>
+              <Link
+                href="/projects"
+                className="btn btn-ghost"
+                style={{
+                  fontSize: 13,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 2,
+                }}
+              >
+                전체 보기 →
+              </Link>
+            </div>
+          </ScrollReveal>
           <div
             style={{
               display: "grid",
@@ -350,43 +357,49 @@ export default async function AboutPage() {
               gap: "var(--space-4)",
             }}
           >
-            {recentProjects.map((project) => (
-              <ProjectCard key={project.slug} project={project} />
+            {recentProjects.map((project, i) => (
+              <ScrollReveal key={project.slug} delay={i * 0.06}>
+                <ProjectCard project={project} />
+              </ScrollReveal>
             ))}
           </div>
-        </ScrollReveal>
+        </div>
       )}
 
       {recentPosts.length > 0 && (
-        <ScrollReveal style={{ marginBottom: "var(--space-8)" }}>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "baseline",
-              justifyContent: "space-between",
-              marginBottom: "var(--space-3)",
-            }}
-          >
-            <h2 style={{ fontSize: 20, margin: 0 }}>최근 글</h2>
-            <Link
-              href="/posts"
-              className="btn btn-ghost"
+        <div style={{ marginBottom: "var(--space-8)" }}>
+          <ScrollReveal>
+            <div
               style={{
-                fontSize: 13,
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 2,
+                display: "flex",
+                alignItems: "baseline",
+                justifyContent: "space-between",
+                marginBottom: "var(--space-3)",
               }}
             >
-              전체 보기 →
-            </Link>
-          </div>
+              <h2 style={{ fontSize: 20, margin: 0 }}>최근 글</h2>
+              <Link
+                href="/posts"
+                className="btn btn-ghost"
+                style={{
+                  fontSize: 13,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 2,
+                }}
+              >
+                전체 보기 →
+              </Link>
+            </div>
+          </ScrollReveal>
           <div style={{ display: "flex", flexDirection: "column" }}>
-            {recentPosts.map((post) => (
-              <PostCard key={post.id} post={post} />
+            {recentPosts.map((post, i) => (
+              <ScrollReveal key={post.id} delay={i * 0.06}>
+                <PostCard post={post} />
+              </ScrollReveal>
             ))}
           </div>
-        </ScrollReveal>
+        </div>
       )}
 
       <ScrollReveal
