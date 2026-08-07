@@ -6,6 +6,7 @@ import { auth } from "@/auth";
 import { connectToDatabase } from "@/lib/mongodb";
 import { compileMarkdown, estimateReadTime } from "@/lib/markdown";
 import { slugify } from "@/lib/slug";
+import { uploadPostImage } from "@/lib/uploadImage";
 import { PostModel } from "@/models/Post";
 import { SeriesModel } from "@/models/Series";
 
@@ -18,6 +19,22 @@ export async function previewMarkdown(markdown: string): Promise<{ content: Reac
   await requireOwner();
   const [{ content }, readTime] = [await compileMarkdown(markdown), estimateReadTime(markdown)];
   return { content, readTime };
+}
+
+const MAX_UPLOAD_BYTES = 4 * 1024 * 1024; // Vercel's serverless function request body cap
+// (~4.5MB) sits above this regardless of Next's own bodySizeLimit config — see next.config.ts.
+
+export async function uploadImage(formData: FormData): Promise<{ url: string }> {
+  await requireOwner();
+
+  const file = formData.get("image");
+  if (!(file instanceof File)) throw new Error("파일이 없습니다.");
+  if (!file.type.startsWith("image/")) throw new Error("이미지 파일만 업로드할 수 있습니다.");
+  if (file.size > MAX_UPLOAD_BYTES) throw new Error("이미지가 너무 큽니다 (4MB 이하로 올려주세요).");
+
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const url = await uploadPostImage(buffer);
+  return { url };
 }
 
 export type SavePostInput = {

@@ -3,6 +3,101 @@
 이 프로젝트의 주요 변경 사항을 버전(작업 단위) 별로 기록합니다. 형식은
 [Keep a Changelog](https://keepachangelog.com/)를 참고합니다.
 
+## [0.7.43] - 2026-08-07
+
+### 이전 상태
+
+글쓰기 에디터(`components/WritePostForm.tsx`)의 본문이 순수 `<textarea>`라, 이미지를 넣으려면
+어딘가에 직접 업로드하고 URL을 손으로 붙여넣어야 했음(툴바 "이미지" 버튼도 `![대체
+텍스트](이미지 URL)`이라는 가짜 placeholder만 삽입). `next-blog`엔 이미지 스토리지 자체가
+없었음 — 레거시 Express 블로그(`/Users/chorock/Desktop/coding/node 장인/forum`)에는
+`multer` + S3(`utils/uploadToS3.js`, sharp로 리사이즈+webp 압축) + Toast UI Editor의
+`addImageBlobHook`으로 이미 구현돼 있던 기능인데, next-blog로 옮겨오면서 빠져 있었음.
+
+### Added
+
+- `lib/uploadImage.ts`(신규, `"server-only"`): 레거시 `utils/uploadToS3.js` 포팅 — `sharp`로
+  1200px 리사이즈 + webp 압축 후 `@aws-sdk/client-s3`로 업로드. **레거시와 같은 S3
+  버킷(`nodeblogforum0530`, `ap-southeast-2`)을 재사용**하되(`MONGODB_URI`를 forum 클러스터로
+  재사용한 것과 동일한 패턴 — `S3_ACCESS_KEY`/`S3_ACCESS_SECRET_KEY` 값도 forum의 `.env`에서
+  그대로 옮겨옴), `next-posts/` prefix로 분리해 forum이 올린 이미지와 안 섞이게 함.
+- `app/posts/write/actions.ts#uploadImage`: 기존 `requireOwner()` 인증 패턴 재사용, 4MB 크기
+  제한(아래 참고) + MIME 타입 검증 후 `uploadPostImage` 호출.
+- `components/WritePostForm.tsx`: 본문 textarea에 `onPaste` 핸들러 추가 — 클립보드에 이미지가
+  있으면 고유 토큰 placeholder(`![업로드 중...](uploading:<token>)`)를 커서에 즉시 삽입하고,
+  업로드가 끝나면 그 placeholder를 실제 `![](url)`로 치환(토큰이 유일해서 동시에 여러 장을
+  붙여넣어도 안전하게 특정 가능). 툴바 "이미지" 버튼도 숨겨진 `<input type="file">`을 통해 같은
+  업로드 경로를 타도록 연결(가짜 placeholder 삽입 제거).
+- `next.config.ts`: `experimental.serverActions.bodySizeLimit`을 기본 1MB에서 4MB로 상향 —
+  스크린샷 등 큰 이미지가 Server Action을 통과하도록 함.
+
+### 검증
+
+- `npx tsc --noEmit`, `npx eslint`, `npm run build` 통과.
+- `lib/uploadImage.ts`의 업로드 파이프라인(sharp 압축 + S3 PutObject)을 실제 자격 증명으로
+  직접 실행해 업로드 성공 확인, 반환된 URL을 `curl -I`로 열어 `200 OK`(공개 접근 가능) 확인 후
+  테스트 오브젝트 삭제.
+- Vercel 서버리스 함수 자체의 요청 본문 한도(~4.5MB)가 `bodySizeLimit` 설정과 별개의 하드
+  캡이라, 업로드 파일 크기도 4MB로 제한하고 초과 시 명확한 에러 메시지를 보여주도록 함(알려진
+  제약으로 `CLAUDE.md`에 기록).
+- 실제 로그인 후 브라우저에서 붙여넣기/파일 선택으로 이미지가 들어가는지는 GitHub OAuth 로그인이
+  필요해 사용자가 직접 최종 확인 필요.
+
+## [0.7.42] - 2026-08-07
+
+### 이전 상태
+
+ForA 프로젝트 소개 내용이 실제와 어긋나 있었음(가입 회원 수, 유지보수 기간)과, Play
+Store/App Store 링크 버튼에 데모 보기/GitHub 버튼과 달리 아이콘이 없었음.
+
+### Fixed
+
+- `scripts/seed-projects.ts`의 ForA `overviewMd`: "가입 회원 750명 돌파" → "가입 회원
+  1,000+명 돌파", "약 4개월 동안 앱의 유지/보수" → "약 6개월 동안"으로 수정 후
+  `npm run seed:projects`로 프로덕션 DB에 반영.
+- `app/projects/[slug]/page.tsx`의 Play Store/App Store 버튼에 브랜드 아이콘 추가 —
+  `components/SkillTag.tsx`가 이미 쓰던 `cdn.simpleicons.org/<slug>` 패턴을 그대로 재사용
+  (`googleplay`, `appstore` 슬러그).
+
+### 검증
+
+- `npx tsc --noEmit`, `npx eslint`, `npm run build` 통과.
+- 두 simpleicons 슬러그를 `curl -I`로 직접 확인해 `200 OK` 응답 확인.
+- `npm run seed:projects` 실행 후 DB에서 수정된 텍스트 반영 확인.
+
+## [0.7.41] - 2026-08-07
+
+### 이전 상태
+
+1. `/about`, `/projects/[slug]`의 스크롤 트리거 페이드인(`components/ScrollReveal.tsx`)이
+   섹션 전체를 한 덩어리로 감싸고 있어서(보유 기술 3개 카테고리, 경력 항목 전체, 최근
+   프로젝트/글 카드 그리드 전체가 각각 한 번에 페이드인) 부드럽게 순서대로 나타나는 느낌이 안
+   났음.
+2. `/projects` 목록에서 "외대종강시계"와 "기술 블로그" 순서를 바꿔달라는 요청.
+
+### Added
+
+- `components/ScrollReveal.tsx`에 `delay`(초) prop 추가 — 인라인 `transitionDelay`로 적용,
+  같은 스크롤 위치에서 동시에 뷰포트에 들어오는 형제 요소(그리드 같은 행의 카드 등)를 살짝
+  시차를 두고 나타나게 함.
+- `app/about/page.tsx`, `app/projects/[slug]/page.tsx`: 섹션 전체를 감싸던 `<ScrollReveal>`
+  하나를 "헤딩"과 "각 항목"으로 나눠 여러 개의 `<ScrollReveal delay={i * 0.06}>`로 교체(보유
+  기술 카테고리별, 경력 항목별, 프로젝트/글 카드별, 사용 기술 스택 그룹별). 딜레이 스텝(0.06s)은
+  기존 `.stagger-list`(`cardIn` 페이지 로드 애니메이션)와 동일한 간격으로 맞춤.
+
+### Fixed
+
+- `scripts/seed-projects.ts`: `hufs-clock`/`node-blog`의 `publishedAt`을 맞바꿔(정렬 기준이
+  `publishedAt` 내림차순이라) `/projects` 노출 순서를 ForA → 외대종강시계 → 기술 블로그로 변경,
+  `npm run seed:projects`로 프로덕션 DB에 반영.
+
+### 검증
+
+- `npx tsc --noEmit`, `npx eslint`, `npm run build` 통과.
+- `npm run seed:projects` 실행 후 DB를 `publishedAt` 내림차순으로 직접 조회해 새 순서 확인.
+- 스크롤 페이드인의 실제 시각적 확인(항목별로 순서대로 나타나는지)은 브라우저에서 사용자가
+  직접 확인 필요.
+
 ## [0.7.40] - 2026-08-06
 
 ### 이전 상태

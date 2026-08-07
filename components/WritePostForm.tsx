@@ -4,13 +4,15 @@ import {
   useEffect,
   useRef,
   useState,
+  type ChangeEvent,
+  type ClipboardEvent,
   type CSSProperties,
   type KeyboardEvent,
   type ReactNode,
 } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { previewMarkdown, saveDraft, publishPost, type SavePostInput } from "@/app/posts/write/actions";
+import { previewMarkdown, saveDraft, publishPost, uploadImage, type SavePostInput } from "@/app/posts/write/actions";
 
 type SeriesOption = { id: string; title: string };
 
@@ -59,12 +61,14 @@ export default function WritePostForm({
   const [statusLabel, setStatusLabel] = useState(mode === "edit" ? "수정 중" : "작성 중");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [imageError, setImageError] = useState<string | null>(null);
 
   const [previewContent, setPreviewContent] = useState<ReactNode>(null);
   const [readTime, setReadTime] = useState(1);
 
   const titleRef = useRef<HTMLTextAreaElement>(null);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Auto-grow the borderless title textarea so long titles wrap without a scrollbar.
   useEffect(() => {
@@ -157,6 +161,53 @@ export default function WritePostForm({
       el.focus();
       el.setSelectionRange(pos, pos);
     });
+  };
+
+  // Textareas can't show an inline image while it uploads, so a unique-token placeholder
+  // stands in for it — insert immediately at `pos` for feedback, then once the upload
+  // action resolves, find-and-replace that exact placeholder string with the real markdown
+  // image. The token makes the replace precise even if several images are uploading at once
+  // or the user keeps typing elsewhere in the body while they wait.
+  const uploadImageAtCursor = (file: File, pos: number): number => {
+    const token = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const placeholder = `![업로드 중...](uploading:${token})`;
+    setBody((prev) => prev.slice(0, pos) + placeholder + "\n" + prev.slice(pos));
+
+    const formData = new FormData();
+    formData.append("image", file);
+    uploadImage(formData)
+      .then(({ url }) => {
+        setBody((prev) => prev.replace(placeholder, `![](${url})`));
+      })
+      .catch((err) => {
+        setBody((prev) => prev.replace(`${placeholder}\n`, ""));
+        setImageError(err instanceof Error ? err.message : "이미지 업로드에 실패했습니다.");
+      });
+
+    return pos + placeholder.length + 1;
+  };
+
+  const handleBodyPaste = (e: ClipboardEvent<HTMLTextAreaElement>) => {
+    const imageFiles = Array.from(e.clipboardData.items)
+      .filter((item) => item.type.startsWith("image/"))
+      .map((item) => item.getAsFile())
+      .filter((f): f is File => f !== null);
+    if (imageFiles.length === 0) return;
+
+    e.preventDefault();
+    setImageError(null);
+    let pos = bodyRef.current?.selectionStart ?? body.length;
+    for (const file of imageFiles) {
+      pos = uploadImageAtCursor(file, pos);
+    }
+  };
+
+  const handleFilePicked = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow picking the same file again later
+    if (!file) return;
+    setImageError(null);
+    uploadImageAtCursor(file, bodyRef.current?.selectionStart ?? body.length);
   };
 
   const buildInput = (): SavePostInput => ({
@@ -442,8 +493,20 @@ export default function WritePostForm({
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-6)", alignItems: "start" }}>
           <div style={{ minWidth: 0 }}>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleFilePicked}
+              style={{ display: "none" }}
+            />
             <p className="text-muted" style={{ fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", margin: "0 0 var(--space-2)" }}>
               마크다운 편집
+              {imageError && (
+                <span style={{ marginLeft: 8, color: "var(--color-danger, #e5484d)", textTransform: "none", letterSpacing: "normal" }}>
+                  {imageError}
+                </span>
+              )}
             </p>
             <div
               style={{
@@ -515,8 +578,8 @@ export default function WritePostForm({
                   <circle cx="92" cy="104" r="14" fill="currentColor" />
                   <path d="M32 168l52-40 40 32 36-44 60 60" stroke="currentColor" strokeWidth="14" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>,
-                "이미지",
-                () => insertBlock("![대체 텍스트](이미지 URL)")
+                "이미지 (붙여넣기도 가능)",
+                () => fileInputRef.current?.click()
               )}
               <span className="wp-toolbar-divider" />
               {toolbarBtn(
@@ -542,6 +605,7 @@ export default function WritePostForm({
               placeholder={"## 소제목\n\n본문을 마크다운으로 작성하세요.\n\n```tsx\n코드 블록\n```\n\n> 인용구"}
               value={body}
               onChange={(e) => setBody(e.target.value)}
+              onPaste={handleBodyPaste}
             />
           </div>
           <div style={{ minWidth: 0 }}>

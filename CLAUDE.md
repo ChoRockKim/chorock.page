@@ -168,6 +168,30 @@ narrow+scrollable+monospace container before assuming it's a font-size or media-
 giscus script client-side against `NEXT_PUBLIC_GISCUS_*` env vars; if they're unset it
 renders a setup hint instead of erroring. There is no comment data in MongoDB.
 
+**Pasting an image into the write-form editor uploads it, ported from the legacy Express
+blog's S3 setup.** `components/WritePostForm.tsx`'s body `<textarea>` isn't a rich editor
+(no built-in paste-blob hook the way Toast UI Editor gave the old blog), so the paste
+detection is hand-rolled: `onPaste` inspects `e.clipboardData.items` for `image/*` entries,
+inserts a unique-token placeholder (`![업로드 중...](uploading:<token>)`) at the cursor for
+immediate feedback, then calls the `uploadImage` Server Action
+(`app/posts/write/actions.ts`) and find-and-replaces that exact placeholder string with the
+real `![](url)` once the upload resolves — the token makes the replace precise even with
+several images uploading at once or the user typing elsewhere in the body meanwhile. The
+toolbar's "이미지" button reuses the exact same upload path via a hidden
+`<input type="file">` instead of duplicating logic. `lib/uploadImage.ts` (`"server-only"`)
+does the actual upload: `sharp` resize-to-1200px+webp-compress (same pipeline as the old
+blog's `utils/uploadToS3.js`) then `@aws-sdk/client-s3` `PutObjectCommand` to the **same S3
+bucket the old forum blog used** (`nodeblogforum0530`, `ap-southeast-2` — same
+`S3_ACCESS_KEY`/`S3_ACCESS_SECRET_KEY` values reused from forum's `.env`, identical pattern
+to `MONGODB_URI` reusing forum's `DB_PASSWORD`), but under a `next-posts/` prefix so these
+uploads don't mix with images the old forum already uploaded under `posts/`. Uploads are
+capped at 4MB (`app/posts/write/actions.ts#uploadImage`) — this isn't arbitrary, it's because
+Vercel's serverless function request body cap (~4.5MB, all plans) sits outside and below
+whatever `next.config.ts`'s `experimental.serverActions.bodySizeLimit` (bumped to `4mb` from
+the 1MB default) allows, so anything larger would fail with an unhelpful platform-level error
+instead of this action's own clear message. A presigned-URL direct-to-S3 upload would dodge
+that ceiling entirely but is more infra than a single-owner blog's editor needs.
+
 **Header search** (`app/api/search/route.ts` + `lib/posts.ts#searchPosts`) does a regex
 match against title/summary/tags server-side — it is not a full-text/Atlas Search index.
 

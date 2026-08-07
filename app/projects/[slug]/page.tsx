@@ -132,8 +132,10 @@ export default async function ProjectDetailPage({
               target="_blank"
               rel="noreferrer"
               className="btn btn-secondary"
-              style={{ textDecoration: "none", fontSize: 13 }}
+              style={{ textDecoration: "none", fontSize: 13, display: "inline-flex", alignItems: "center", gap: 6 }}
             >
+              {/* eslint-disable-next-line @next/next/no-img-element -- small brand icon from an external CDN, not a page asset next/image should optimize */}
+              <img src="https://cdn.simpleicons.org/googleplay" width={13} height={13} alt="" style={{ display: "block" }} />
               Play Store
             </a>
           )}
@@ -143,8 +145,10 @@ export default async function ProjectDetailPage({
               target="_blank"
               rel="noreferrer"
               className="btn btn-secondary"
-              style={{ textDecoration: "none", fontSize: 13 }}
+              style={{ textDecoration: "none", fontSize: 13, display: "inline-flex", alignItems: "center", gap: 6 }}
             >
+              {/* eslint-disable-next-line @next/next/no-img-element -- small brand icon from an external CDN, not a page asset next/image should optimize */}
+              <img src="https://cdn.simpleicons.org/appstore" width={13} height={13} alt="" style={{ display: "block" }} />
               App Store
             </a>
           )}
