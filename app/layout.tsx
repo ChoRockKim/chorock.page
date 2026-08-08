@@ -27,6 +27,9 @@ export const metadata: Metadata = {
     // its own openGraph but not its own twitter — so only `card` needs to live here.
     card: "summary_large_image",
   },
+  verification: {
+    google: "B5tyxUOq9dIjYVK8Sr33euBMxjZ1sPJ-j30BPRob-nw",
+  },
 };
 
 // Without this, mobile browsers render at a ~980px virtual viewport and zoom out — every
