@@ -233,7 +233,34 @@ explicit `images: ["/opengraph-image"]` restated, or it'll silently lose its pre
 (name → Simple Icons `cdn.simpleicons.org` slug) and falls back to a plain text tag if the
 name isn't in the map. To add icon support for a new technology, add an entry to
 `SKILL_ICON_SLUGS` once — every list that renders that name via `<SkillTag>` picks it up
-automatically, no per-page changes needed.
+automatically, no per-page changes needed. **Simple Icons slugs aren't permanent** — Simple
+Icons dropped every Amazon/AWS icon at some point (likely trademark enforcement; confirmed by
+checking their full ~3450-icon dataset for anything AWS/Amazon-related — nothing), which is why
+there's no `aws` entry despite `"AWS S3"`/`"AWS EC2"` tags existing in real data (they render
+text-only, same as any unlisted name — this is intentional, don't re-add a slug without
+`curl`-ing it first) — and separately renamed `css3` → `css` (old slug 404s). If an icon stops
+showing, check the slug still resolves before assuming the code broke: `curl -s -o /dev/null -w
+"%{http_code}" https://cdn.simpleicons.org/<slug>`. `SkillTag` also has an `onError` handler
+that hides a failed `<img>` rather than leaving a broken-image gap, as a safety net for the
+next slug that goes stale.
+
+**Some Simple Icons brand colors are near-black by default, which vanishes on
+`.tag-outline`'s transparent background in dark mode.** `.tag-outline` (what every `SkillTag`
+renders as) has no fill — the page background shows through — so an icon whose brand hex is
+`#000000`-ish (GitHub, Notion, Next.js, Vercel, Expo, Express, Socket.io, OpenJDK — checked
+each one's actual hex against simple-icons' data) reads fine against light mode's `--color-bg`
+but is nearly invisible against dark mode's near-black `--color-bg`. `lib/skillIcons.ts`'s
+`MONOCHROME_ICON_SLUGS` set lists exactly these slugs; `SkillTag` requests them from Simple
+Icons with an explicit color override (`cdn.simpleicons.org/<slug>/<hex>`) matching the current
+theme's `--color-text` instead of their default brand color, while every other (already
+sufficiently-contrasty) slug keeps its real brand color. This is why `SkillTag` is a Client
+Component reading `components/useTheme.ts` — but naively branching the `<img src>` on
+`useTheme()`'s value directly would hydration-mismatch: the server has no `localStorage` to
+read and always renders as if light, while the client's very first render already sees the
+correct (possibly dark) theme via `layout.tsx`'s pre-hydration inline script. `SkillTag` works
+around this the same way `ScrollReveal` avoids a similar mismatch — defers the theme-based
+recolor to a post-mount `useEffect`-set `mounted` flag, so the first client render matches the
+server's plain-default-color output exactly, then swaps a frame later.
 
 **`/posts` (list) filters/paginates client-side, not via `?tag=`/`?page=` server round-trips.**
 `components/PostsListClient.tsx` fetches every published post once via TanStack Query

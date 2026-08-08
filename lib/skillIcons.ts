@@ -28,8 +28,8 @@ export const SKILL_ICON_SLUGS: Record<string, string> = {
   php: "php",
   html: "html5",
   html5: "html5",
-  css: "css3",
-  css3: "css3",
+  css: "css",
+  css3: "css",
   "tailwind css": "tailwindcss",
   tailwindcss: "tailwindcss",
   sass: "sass",
@@ -39,10 +39,10 @@ export const SKILL_ICON_SLUGS: Record<string, string> = {
   kubernetes: "kubernetes",
   "github actions": "githubactions",
   githubactions: "githubactions",
-  aws: "amazonaws",
-  "amazon web services": "amazonaws",
-  "aws s3": "amazonaws",
-  "aws ec2": "amazonaws",
+  // No AWS entry on purpose — Simple Icons dropped every Amazon/AWS icon (amazonaws, aws,
+  // amazon-web-services all 404, confirmed against their full icon dataset, likely a
+  // trademark-enforcement removal). "AWS S3"/"AWS EC2" tags fall back to text-only, same as
+  // any other unlisted name — don't re-add a slug here without checking it actually resolves.
   vercel: "vercel",
   netlify: "netlify",
   nginx: "nginx",
@@ -85,3 +85,25 @@ export const SKILL_ICON_SLUGS: Record<string, string> = {
 export function normalizeSkillName(name: string): string {
   return name.trim().toLowerCase();
 }
+
+/**
+ * Simple Icons slugs whose brand color is near-black by default (checked each icon's actual
+ * hex against the simple-icons dataset: nextdotjs/notion/openjdk/vercel are literal #000000,
+ * github/expo/express/socketdotio are close enough to read as black). SkillTag always renders
+ * on .tag-outline, which has no background fill — just the page background showing through —
+ * so these read fine in light mode but become nearly invisible against dark mode's near-black
+ * background. SkillTag requests these with an explicit theme-matched color override instead of
+ * their default brand color; every other slug keeps its real brand color unchanged, since it
+ * already has enough contrast in both themes. Add a slug here if a newly-added skill's icon
+ * turns out to have the same near-black-default problem.
+ */
+export const MONOCHROME_ICON_SLUGS = new Set([
+  "nextdotjs",
+  "notion",
+  "openjdk",
+  "vercel",
+  "github",
+  "expo",
+  "express",
+  "socketdotio",
+]);

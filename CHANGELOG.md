@@ -3,6 +3,57 @@
 이 프로젝트의 주요 변경 사항을 버전(작업 단위) 별로 기록합니다. 형식은
 [Keep a Changelog](https://keepachangelog.com/)를 참고합니다.
 
+## [0.7.46] - 2026-08-08
+
+### 이전 상태
+
+사용자가 스킬 태그 아이콘 관련 3가지를 보고: (1) 모바일(아이폰 크롬)에서 일부 아이콘이 아예 안
+보임, (2) 흰색/검은색 아이콘이 다크모드·라이트모드에 따라 가시성이 달라짐(노션 등), (3) AWS
+아이콘이 계속 실패. `lib/skillIcons.ts#SKILL_ICON_SLUGS`에 등록된 슬러그 53개 전체를 직접
+`curl`로 검증해서 원인을 확인:
+
+- `amazonaws`(AWS): 404. Simple Icons 최신 데이터셋(3453개 아이콘) 전체를 뒤져도 Amazon/AWS
+  관련 아이콘이 하나도 없음 — 상표권 이슈로 완전히 제거된 것으로 추정됨. 대체 슬러그 없음.
+- `css3`: 404(`css`로 슬러그명 변경됨) — 다만 실제 데이터에 "CSS" 단독 태그는 안 쓰여서 잠재
+  버그였을 뿐, 지금 눈에 보이는 문제의 원인은 아니었음.
+- 1번(모바일에서 안 보임)은 사용자에게 다크모드 여부를 확인한 결과 다크모드 문제(2번)와는
+  무관하다고 확인됨 — "AWS S3"/"AWS EC2" 태그가 `/about`과 `node-blog` 프로젝트 두 곳에 나오는
+  걸 "몇몇 아이콘"으로 인지했을 가능성이 높다고 보고 3번과 같은 원인으로 처리.
+- 2번은 `SkillTag`가 항상 배경 없는 `.tag-outline`으로 렌더링되는데, GitHub/Notion/Next.js/
+  Vercel/Expo/Express/Socket.io/OpenJDK의 Simple Icons 기본 브랜드색이 거의 검정이라 라이트모드
+  배경(`#f3f2f2`)에선 보이고 다크모드 배경(`#1b1a1d`, 거의 검정)에선 사라지는 것을 각 아이콘의
+  실제 hex 값을 데이터셋에서 대조해서 확인.
+
+### Fixed
+
+- `lib/skillIcons.ts`: `aws`/`amazon web services`/`aws s3`/`aws ec2` 매핑 제거(대체 아이콘 없이
+  텍스트만 표시하기로 사용자와 확인) — `SkillTag`의 기존 "슬러그 없으면 텍스트만" 폴백 경로를
+  그대로 타므로 추가 코드 불필요. `css3`/`css` 슬러그를 `css`로 수정.
+- `lib/skillIcons.ts`: `MONOCHROME_ICON_SLUGS` 집합 추가(근거 없이 검정인 슬러그
+  목록 — 위에서 확인한 8개).
+- `components/SkillTag.tsx`: `"use client"`로 전환해 `components/useTheme.ts`(기존
+  `GiscusComments.tsx`가 쓰는 것과 동일 패턴)로 현재 테마를 읽고, `MONOCHROME_ICON_SLUGS`에
+  속한 아이콘은 Simple Icons의 명시적 색상 오버라이드(`cdn.simpleicons.org/<slug>/<hex>`)로
+  라이트모드엔 `201e1d`, 다크모드엔 `eeecec`(각 테마의 `--color-text`)를 넘겨 페이지 텍스트
+  색을 따라가게 함. 서버는 `localStorage`를 못 읽어 항상 라이트로 렌더링하는데 클라이언트
+  첫 렌더는 이미 실제(어두울 수도 있는) 테마를 알고 있어서, `useTheme()` 값을 곧바로 `<img
+  src>`에 반영하면 하이드레이션 불일치가 남 — `ScrollReveal`이 쓰는 것과 같은 방식으로
+  마운트 후 `useEffect`로 재색칠을 미뤄서 해결.
+- `components/SkillTag.tsx`: `<img>`에 `onError` 추가 — 어떤 이유로든 아이콘 로드가 실패해도
+  깨진 이미지 자리 대신 텍스트만 남도록 방어(다음에 또 다른 슬러그가 죽어도 레이아웃이 안
+  깨지게 하는 안전망).
+
+### 검증
+
+- `npx tsc --noEmit`, `npx eslint .`(`.next` 없이), `npm run build` 통과.
+- 수정 후 남은 슬러그 52개 전체를 다시 `curl`로 일괄 검증 — 전부 200 확인.
+- `cdn.simpleicons.org/notion/eeecec` 같은 색상 오버라이드 URL을 직접 `curl`로 열어
+  `fill="#eeecec"`가 실제로 SVG에 반영되는지 확인.
+- `npx next start`로 실제 프로덕션 빌드를 브라우저에서 라이트/다크 모드 둘 다 스크린샷으로
+  확인: `/about`에서 "AWS S3"가 텍스트만 나오는 것, GitHub/Vercel/Notion 아이콘이 다크모드에서
+  밝은 색으로 잘 보이는 것, `/projects/node-blog`에서 Express/Socket.io 아이콘도 다크모드에서
+  잘 보이고 "AWS EC2"/"AWS S3" 둘 다 텍스트만 나오는 것 확인.
+
 ## [0.7.45] - 2026-08-08
 
 ### 이전 상태
