@@ -195,6 +195,39 @@ that ceiling entirely but is more infra than a single-owner blog's editor needs.
 **Header search** (`app/api/search/route.ts` + `lib/posts.ts#searchPosts`) does a regex
 match against title/summary/tags server-side — it is not a full-text/Atlas Search index.
 
+**SEO/share-preview metadata is generated, not static image files.** No favicon/OG image
+assets exist in the repo (no logo was ever made) — `app/icon.tsx`/`app/apple-icon.tsx`/
+`app/opengraph-image.tsx` all use `next/og`'s `ImageResponse` to render the same "초"
+initial-in-an-accent-circle idea already used for the `/about` avatar fallback and the career
+logo fallback, so there's one visual identity instead of three ad-hoc ones.
+`app/posts/[slug]/opengraph-image.tsx` / `app/projects/[slug]/opengraph-image.tsx` render the
+actual post/project title dynamically per request (reusing `getPostBySlug`/`getProjectBySlug`,
+the same `cache()`-wrapped functions `generateMetadata` already calls for that route, and the
+same `params`/`decodeURIComponent(slug)` shape as the page component). **Satori (what
+`ImageResponse` renders through) ships with zero Korean glyphs** in its default font — any
+Korean text in one of these silently renders blank unless a font covering those glyphs is
+passed via the `fonts` option. `lib/ogFont.ts` loads `public/fonts/Pretendard-Bold.otf` from
+disk for this (not fetched from a CDN per-request — no network dependency, and Satori only
+understands ttf/otf/woff, not woff2, which needs Brotli decompression Satori doesn't
+implement, so the CDN's default woff2 distribution wouldn't have worked anyway).
+
+**Setting a route's own `openGraph` object silently drops the site's default OG image.** Next
+merges metadata parent→child per top-level key, not deep-per-field — a child route that sets
+`openGraph: { title, description }` (needed so shared links show that route's own title
+instead of the root layout's, since `title` and `openGraph.title` are tracked separately and
+don't sync) **replaces** the entire inherited `openGraph` object, including the `images` entry
+that `app/opengraph-image.tsx` would otherwise contribute automatically via Next's file-
+convention inheritance (walks up the route tree to the nearest `opengraph-image` file for any
+segment that doesn't define its own). Confirmed by `curl`-ing rendered HTML before/after: the
+`<meta property="og:image">` tag disappeared entirely on `/about`, `/posts`, `/projects`,
+`/series`, `/series/[slug]` — every route that overrides `openGraph` but has no
+`opengraph-image.tsx` of its own — the moment `openGraph.title`/`description` were added,
+until `images: ["/opengraph-image"]` was added back explicitly alongside them. Routes with
+their own per-segment `opengraph-image.tsx` (`/posts/[slug]`, `/projects/[slug]`) are
+unaffected since the image and the metadata override live at the same segment. Any new route
+that both overrides `openGraph` and relies on the inherited default image needs this same
+explicit `images: ["/opengraph-image"]` restated, or it'll silently lose its preview image.
+
 **Tech-name tags with icons** (`/about`'s skills + career tags) go through
 `components/SkillTag.tsx`, which looks up an icon from `lib/skillIcons.ts#SKILL_ICON_SLUGS`
 (name → Simple Icons `cdn.simpleicons.org` slug) and falls back to a plain text tag if the

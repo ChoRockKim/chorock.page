@@ -9,8 +9,10 @@ import ProjectCard from "@/components/ProjectCard";
 import SkillTag from "@/components/SkillTag";
 import ScrollReveal from "@/components/ScrollReveal";
 
+// See app/posts/page.tsx for why openGraph needs its own explicit title/description/images.
 export const metadata: Metadata = {
   title: "소개 · chorock.page",
+  openGraph: { title: "소개 · chorock.page", description: PROFILE.shortIntro, images: ["/opengraph-image"] },
 };
 
 // Without this, this page has no dynamic data source (no cookies/searchParams), so Next.js

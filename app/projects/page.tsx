@@ -2,8 +2,10 @@ import type { Metadata } from "next";
 import { listProjects } from "@/lib/projects";
 import ProjectCard from "@/components/ProjectCard";
 
+// See app/posts/page.tsx for why openGraph needs its own explicit title/description/images.
 export const metadata: Metadata = {
   title: "프로젝트 · chorock.page",
+  openGraph: { title: "프로젝트 · chorock.page", description: "만든 프로젝트 모음", images: ["/opengraph-image"] },
 };
 
 export default async function ProjectsPage() {

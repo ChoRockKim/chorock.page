@@ -6,9 +6,27 @@ import Footer from "@/components/Footer";
 import QueryProvider from "@/components/QueryProvider";
 import AuthSessionProvider from "@/components/AuthSessionProvider";
 
+const SITE_TITLE = "chorock.page";
+const SITE_DESCRIPTION = "개발 기록을 남기는 블로그";
+
 export const metadata: Metadata = {
-  title: "chorock.page",
-  description: "개발 기록을 남기는 블로그",
+  // Without this, relative OG image URLs (from opengraph-image.tsx files) resolve against
+  // localhost in production instead of the real domain — a common Next.js metadata gotcha.
+  metadataBase: new URL("https://chorock.page"),
+  title: SITE_TITLE,
+  description: SITE_DESCRIPTION,
+  openGraph: {
+    type: "website",
+    siteName: SITE_TITLE,
+    locale: "ko_KR",
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+  },
+  twitter: {
+    // twitter.title/description fall back to the openGraph fields above when a route sets
+    // its own openGraph but not its own twitter — so only `card` needs to live here.
+    card: "summary_large_image",
+  },
 };
 
 // Without this, mobile browsers render at a ~980px virtual viewport and zoom out — every

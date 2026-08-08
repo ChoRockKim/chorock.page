@@ -14,6 +14,9 @@ export async function generateMetadata({
   return {
     title: `${series.title} · chorock.page`,
     description: series.description,
+    // See app/posts/page.tsx for why images needs restating here too (no per-series
+    // opengraph-image.tsx, so this would otherwise silently lose the inherited root image).
+    openGraph: { title: series.title, description: series.description, images: ["/opengraph-image"] },
   };
 }
 

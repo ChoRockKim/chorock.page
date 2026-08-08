@@ -5,6 +5,7 @@ import WritePostForm from "@/components/WritePostForm";
 
 export const metadata: Metadata = {
   title: "새 글 작성 · chorock.page",
+  robots: { index: false },
 };
 
 export default async function WritePostPage({

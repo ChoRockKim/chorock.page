@@ -25,6 +25,7 @@ export async function generateMetadata({
   return {
     title: `${project.title} · chorock.page`,
     description: project.summary,
+    openGraph: { title: project.title, description: project.summary },
   };
 }
 

@@ -2,8 +2,10 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { listSeriesWithCounts } from "@/lib/series";
 
+// See app/posts/page.tsx for why openGraph needs its own explicit title/description/images.
 export const metadata: Metadata = {
   title: "시리즈 · chorock.page",
+  openGraph: { title: "시리즈 · chorock.page", description: "여러 편으로 나눠 쓴 연재 글 모음", images: ["/opengraph-image"] },
 };
 
 // Same bug/fix as /about (CHANGELOG 0.7.33): no dynamic data source here, so without this

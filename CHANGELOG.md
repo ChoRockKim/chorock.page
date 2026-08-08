@@ -3,6 +3,61 @@
 이 프로젝트의 주요 변경 사항을 버전(작업 단위) 별로 기록합니다. 형식은
 [Keep a Changelog](https://keepachangelog.com/)를 참고합니다.
 
+## [0.7.44] - 2026-08-08
+
+### 이전 상태
+
+SEO 관련 설정이 사실상 전무했음(직접 조사로 확인): `layout.tsx`에 `metadataBase`/`openGraph`/
+`twitter`가 없어 카카오톡·슬랙 등에 링크를 공유해도 미리보기 이미지가 안 떴고, 파비콘 파일이
+저장소 어디에도 없었으며, `sitemap.ts`/`robots.ts`도 없었음. 로고/파비콘 이미지 자산도 없어서
+`/about` 아바타 fallback과 같은 "초" 이니셜 패턴을 재사용해 자동 생성하기로 함.
+
+### Added
+
+- `app/icon.tsx`, `app/apple-icon.tsx`: `next/og`의 `ImageResponse`로 액센트 색 배경 + "초"
+  글자를 렌더링해 파비콘/애플 터치 아이콘 자동 생성.
+- `app/opengraph-image.tsx`: 사이트 기본 OG 이미지(1200×630) — 자기 `opengraph-image`가 없는
+  모든 라우트가 이걸 상속.
+- `app/posts/[slug]/opengraph-image.tsx`, `app/projects/[slug]/opengraph-image.tsx`: 글/
+  프로젝트별로 실제 제목을 반영해 요청마다 동적 생성(`getPostBySlug`/`getProjectBySlug` 재사용).
+- `lib/ogFont.ts` + `public/fonts/Pretendard-Bold.otf`: Satori(next/og 내부 렌더러) 기본
+  폰트엔 한글 글리프가 없어서, 로컬 otf 폰트 파일을 읽어 `ImageResponse`의 `fonts` 옵션에
+  명시적으로 넘김(CDN fetch 대신 — 네트워크 의존 없음, Satori가 woff2를 지원 안 해서 CDN
+  기본 배포본도 어차피 못 씀).
+- `app/robots.ts`: `/posts/write`, `/posts/*/edit`, `/api/*` disallow + sitemap 경로 명시.
+- `app/sitemap.ts`: 정적 라우트 + 전체 글/프로젝트/시리즈 slug를 `listPostSlugs`/
+  `listProjectSlugs`/`listSeriesWithCounts`(전부 기존 함수 재사용)로 조합.
+- `app/layout.tsx`: `metadataBase`, 사이트 공통 `openGraph`/`twitter` 기본값 추가.
+- 각 라우트(`/posts`, `/projects`, `/series`, `/about`, `/posts/[slug]`, `/projects/[slug]`,
+  `/series/[slug]`)에 라우트별 `openGraph.title`/`description` 명시 추가 — Next의 메타데이터
+  병합이 `title`을 `openGraph.title`에 자동 동기화하지 않아서, 이게 없으면 공유 미리보기
+  제목이 계속 루트 기본값("chorock.page")으로 뜸.
+- `app/posts/write/page.tsx`, `app/posts/[slug]/edit/page.tsx`: `robots: { index: false }`
+  추가(소유자 전용 라우트, 검색 노출 의미 없음).
+
+### Fixed
+
+- **구현 중 발견한 회귀**: 위에서 라우트별 `openGraph.title`/`description`을 추가하자마자
+  `/about`, `/posts`, `/projects`, `/series`, `/series/[slug]`에서 `og:image`가 통째로
+  사라지는 걸 `curl`로 실제 렌더링된 HTML을 직접 대조해서 발견 — Next의 메타데이터 병합은
+  부모→자식이 최상위 키 단위로 교체되지, 필드별로 깊게 merge되지 않음. 자식이 `openGraph`
+  객체를 새로 설정하면 `app/opengraph-image.tsx`가 파일 컨벤션으로 자동 기여하던 `images`
+  항목까지 통째로 날아감. `images: ["/opengraph-image"]`를 각 `openGraph` 객체에 명시적으로
+  다시 넣어서 해결(자기 `opengraph-image.tsx`가 있는 `/posts/[slug]`, `/projects/[slug]`는
+  이미지와 메타데이터 오버라이드가 같은 세그먼트라 이 문제 자체가 없었음).
+
+### 검증
+
+- `npx tsc --noEmit`, `npx eslint .`(`.next` 빌드 산출물 없이), `npm run build` 통과.
+- `npx next start`로 실제 프로덕션 서버 띄운 뒤 `/opengraph-image`, `/posts/<slug>/opengraph-image`,
+  `/projects/<slug>/opengraph-image`, `/icon`을 직접 `curl`로 받아 실제 PNG(올바른 크기)인지
+  확인하고, 이미지를 읽어서 한글이 실제로 렌더링되는지(빈 화면 아님) 시각 확인함.
+- `curl /robots.txt`, `/sitemap.xml`로 실제 출력 확인 — 게시글 24개 URL 전부 포함 확인.
+- 모든 라우트에서 `curl`로 실제 렌더링된 `<meta property="og:title">`/`<meta property="og:image">`를
+  직접 대조 — 루트/글목록/프로젝트목록/시리즈목록/about/글상세/프로젝트상세/시리즈상세 전부
+  라우트별로 올바른 제목과 이미지가 나오는 것 확인(위 "Fixed" 회귀까지 포함해서 재확인).
+- 실제 배포 도메인에서 카카오톡/슬랙 등 실제 공유 미리보기는 배포 후 사용자가 직접 확인 필요.
+
 ## [0.7.43] - 2026-08-07
 
 ### 이전 상태
