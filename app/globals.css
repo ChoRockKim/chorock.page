@@ -449,6 +449,29 @@ html.theme-transition::view-transition-new(root) { animation: theme-reveal 0.6s 
   padding: 0.15em 0.4em;
   border-radius: 4px;
 }
+/* GFM tables (remark-gfm, already in the compileMarkdown pipeline) parse fine on their own —
+   this is purely styling, since a bare <table> otherwise falls back to unstyled browser
+   defaults. `display: block` + `overflow-x: auto` (same technique GitHub's own markdown CSS
+   uses) lets a wide table scroll horizontally instead of blowing out .pd-body's width — the
+   table's own child elements (thead/tbody/tr/td) keep their table-family display values, so
+   the grid layout itself is unaffected by the outer display: block. */
+.pd-body table {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  margin: var(--space-4) 0;
+  font-size: 14px;
+}
+.pd-body th,
+.pd-body td {
+  border: 1px solid var(--color-divider);
+  padding: 6px 12px;
+  text-align: left;
+}
+.pd-body thead th { background: var(--color-surface); font-weight: 600; }
+.pd-body tbody tr:nth-child(even) { background: color-mix(in srgb, var(--color-surface) 50%, transparent); }
 
 .code-block { background: #282c34; border-radius: 8px; overflow: hidden; margin: var(--space-4) 0; box-shadow: var(--shadow-md); }
 .code-block-header { display: flex; align-items: center; justify-content: space-between; padding: var(--space-2) var(--space-3); background: #3a3a3a; }

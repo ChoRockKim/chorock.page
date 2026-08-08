@@ -69,6 +69,12 @@ export default function WritePostForm({
   const titleRef = useRef<HTMLTextAreaElement>(null);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
+  // Which pane's scroll event triggered the sync — set right before programmatically
+  // scrolling the *other* pane, so that pane's own scroll handler can tell "this fired
+  // because I was just set by code, not because the user scrolled me" and skip re-syncing
+  // back (otherwise the two onScroll handlers would ping-pong off each other).
+  const scrollSyncSource = useRef<"body" | "preview" | null>(null);
 
   // Auto-grow the borderless title textarea so long titles wrap without a scrollbar.
   useEffect(() => {
@@ -208,6 +214,24 @@ export default function WritePostForm({
     if (!file) return;
     setImageError(null);
     uploadImageAtCursor(file, bodyRef.current?.selectionStart ?? body.length);
+  };
+
+  // Proportional (not line-accurate) scroll sync — mirrors how far down each pane is by
+  // percentage, since mapping a textarea's raw markdown position to a spot in the compiled
+  // preview tree would need source-position tracking through the whole rehype pipeline.
+  const syncScroll = (from: "body" | "preview") => {
+    if (scrollSyncSource.current === from) {
+      scrollSyncSource.current = null;
+      return;
+    }
+    const source = from === "body" ? bodyRef.current : previewRef.current;
+    const target = from === "body" ? previewRef.current : bodyRef.current;
+    if (!source || !target) return;
+    const sourceRange = source.scrollHeight - source.clientHeight;
+    const ratio = sourceRange > 0 ? source.scrollTop / sourceRange : 0;
+    const targetRange = target.scrollHeight - target.clientHeight;
+    scrollSyncSource.current = from === "body" ? "preview" : "body";
+    target.scrollTop = ratio * targetRange;
   };
 
   const buildInput = (): SavePostInput => ({
@@ -606,13 +630,19 @@ export default function WritePostForm({
               value={body}
               onChange={(e) => setBody(e.target.value)}
               onPaste={handleBodyPaste}
+              onScroll={() => syncScroll("body")}
             />
           </div>
           <div style={{ minWidth: 0 }}>
             <p className="text-muted" style={{ fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", margin: "0 0 var(--space-2)" }}>
               미리보기
             </p>
-            <div className="pd-body" style={{ height: "60vh", overflowY: "auto", paddingRight: "var(--space-2)" }}>
+            <div
+              ref={previewRef}
+              className="pd-body"
+              style={{ height: "60vh", overflowY: "auto", paddingRight: "var(--space-2)" }}
+              onScroll={() => syncScroll("preview")}
+            >
               {body.trim() ? (
                 previewContent
               ) : (
