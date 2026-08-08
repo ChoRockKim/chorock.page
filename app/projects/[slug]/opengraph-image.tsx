@@ -1,5 +1,5 @@
 import { ImageResponse } from "next/og";
-import { getProjectBySlug } from "@/lib/projects";
+import { getProjectBySlugForOg } from "@/lib/projects";
 import { loadOgFont } from "@/lib/ogFont";
 
 export const alt = "프로젝트 미리보기";
@@ -8,7 +8,9 @@ export const contentType = "image/png";
 
 export default async function Image({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const project = await getProjectBySlug(decodeURIComponent(slug));
+  // See app/posts/[slug]/opengraph-image.tsx — must never throw, or a crawler falls back to
+  // scraping some other image off the page instead of showing no preview at all.
+  const project = await getProjectBySlugForOg(decodeURIComponent(slug)).catch(() => null);
   const font = await loadOgFont();
 
   return new ImageResponse(

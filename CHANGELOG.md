@@ -3,6 +3,43 @@
 이 프로젝트의 주요 변경 사항을 버전(작업 단위) 별로 기록합니다. 형식은
 [Keep a Changelog](https://keepachangelog.com/)를 참고합니다.
 
+## [0.7.45] - 2026-08-08
+
+### 이전 상태
+
+사용자가 실제 게시글 URL을 카카오톡에 공유하니 미리보기 사진이 본인 프로필 사진(`PostAuthorCard`의
+아바타)으로 뜬다고 보고. 프로덕션에서 직접 `curl`로 확인해보니 원인은 카카오 캐시가 아니라
+**`app/posts/[slug]/opengraph-image.tsx`/`app/projects/[slug]/opengraph-image.tsx` 자체가
+프로덕션에서 500을 뱉고 있었음** — `og:image` 요청이 실패하니 카카오 크롤러가 페이지의 다른
+`<img>`(작성자 프로필 사진)를 대신 가져간 것. `app/opengraph-image.tsx`(루트 기본)와
+`app/icon.tsx`는 정상(200)이었고, slug 붙은 두 라우트만, 어떤 slug든 예외 없이 실패해서
+DB 조회가 얽힌 게 원인이라고 좁혀짐 — `getPostBySlug`/`getProjectBySlug`가 React `cache()`로
+감싸져 있는데(`generateMetadata`/페이지 본문이 같은 slug로 두 번 호출할 때 하나로 합치려고),
+`cache()`는 React Server Component 렌더 도중에만 쓰도록 정의된 API라 Next가 `opengraph-image`
+파일을 그 렌더 컨텍스트 밖에서 호출하면 깨짐 — 로컬 `next start`에서는 안 깨졌지만(관대하게
+동작한 듯) 실제 Vercel 배포에서는 500으로 나타남.
+
+### Fixed
+
+- `lib/posts.ts`/`lib/projects.ts`: `getPostBySlug`/`getProjectBySlug`의 실제 쿼리 로직을
+  `fetchPostBySlug`/`fetchProjectBySlug`로 분리하고, 기존 `cache()`로 감싼 버전은 그대로 페이지용으로
+  남기고, `cache()`를 안 씌운 `getPostBySlugForOg`/`getProjectBySlugForOg`를 새로 노출 — 이미지
+  라우트는 페이지 요청과 별개의 HTTP 요청이라 애초에 `cache()`로 얻을 dedup 이득도 없었음.
+- `app/posts/[slug]/opengraph-image.tsx`, `app/projects/[slug]/opengraph-image.tsx`: 위 uncached
+  버전을 사용하도록 변경. 추가로 `.catch(() => null)`을 붙여 DB 조회가 어떤 이유로든 실패해도
+  500 대신 사이트 기본 문구로 폴백하도록 방어(이 라우트가 죽으면 크롤러가 페이지의 엉뚱한
+  이미지를 대신 가져가버리는 게 실제로 확인된 만큼, "일어날 수 없는 상황"이 아니라 실제로
+  일어난 상황에 대한 방어임).
+
+### 검증
+
+- `npx tsc --noEmit`, `npx eslint .`(`.next` 없이), `npm run build` 통과.
+- `npx next start`로 실제 프로덕션 빌드 재검증 — 글/프로젝트 OG 이미지 둘 다 200, 실제 제목이
+  올바르게 렌더링된 PNG로 나오는 것을 이미지 직접 열어서 재확인.
+- 배포 후 실제 카카오톡 공유 미리보기 재확인은 사용자가 진행 필요 — 카카오는 한 번 스크랩한
+  미리보기를 오래 캐시하므로, 이전에 깨진 상태로 한 번이라도 공유된 적 있는 URL은 카카오 자체
+  캐시 갱신이 늦게 반영될 수 있음(카카오 디버거로 강제 재스크랩 가능).
+
 ## [0.7.44] - 2026-08-08
 
 ### 이전 상태

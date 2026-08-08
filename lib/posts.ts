@@ -54,11 +54,7 @@ function toSummary(doc: LeanPostDoc, readTime: number, seriesTitle?: string): Po
   };
 }
 
-/**
- * Wrapped in React's cache() so generateMetadata() and the page body (both call this with the
- * same slug during the same request) share one Mongo round-trip instead of two.
- */
-export const getPostBySlug = cache(async (slug: string): Promise<PostDetail | null> => {
+async function fetchPostBySlug(slug: string): Promise<PostDetail | null> {
   await connectToDatabase();
   const doc = await PostModel.findOne({ slug, status: "published" }).lean<
     LeanPostDoc & { seriesId?: unknown }
@@ -73,7 +69,25 @@ export const getPostBySlug = cache(async (slug: string): Promise<PostDetail | nu
     content: doc.content,
     seriesId: doc.seriesId ? String(doc.seriesId) : null,
   };
-});
+}
+
+/**
+ * Wrapped in React's cache() so generateMetadata() and the page body (both call this with the
+ * same slug during the same request) share one Mongo round-trip instead of two.
+ */
+export const getPostBySlug = cache(fetchPostBySlug);
+
+/**
+ * Same query, not cache()-wrapped — for app/posts/[slug]/opengraph-image.tsx. React's cache()
+ * is only defined for use inside a React Server Component render; calling the cache()-wrapped
+ * getPostBySlug from an opengraph-image route (which Next invokes outside that render context)
+ * 500'd in production even though it worked in a local `next start` — confirmed by isolating
+ * it: root opengraph-image.tsx (no cache()-wrapped call) succeeded on the same deployment,
+ * every per-slug one (calling the cache()-wrapped version) failed, regardless of which slug.
+ * No memoization benefit lost either way, since the image route is a separate HTTP request
+ * from the page anyway — cache() only dedupes within one render pass.
+ */
+export const getPostBySlugForOg = fetchPostBySlug;
 
 /** Published post slugs, for generateStaticParams — pre-renders every post at build time. */
 export async function listPostSlugs(): Promise<string[]> {

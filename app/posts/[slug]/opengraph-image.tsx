@@ -1,5 +1,5 @@
 import { ImageResponse } from "next/og";
-import { getPostBySlug } from "@/lib/posts";
+import { getPostBySlugForOg } from "@/lib/posts";
 import { loadOgFont } from "@/lib/ogFont";
 
 export const alt = "게시글 미리보기";
@@ -8,7 +8,11 @@ export const contentType = "image/png";
 
 export default async function Image({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const post = await getPostBySlug(decodeURIComponent(slug));
+  // A crashed OG image isn't just a missing image — link-preview scrapers (confirmed with
+  // KakaoTalk) fall back to grabbing the first <img> on the page instead, which for a post
+  // detail page is the author's own profile photo. So this must never throw a 500: better to
+  // render a generic fallback title than let a Mongo hiccup surface as someone's face.
+  const post = await getPostBySlugForOg(decodeURIComponent(slug)).catch(() => null);
   const font = await loadOgFont();
 
   return new ImageResponse(

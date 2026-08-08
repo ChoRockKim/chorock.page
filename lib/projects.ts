@@ -70,11 +70,7 @@ export async function listProjects(): Promise<ProjectSummary[]> {
   }));
 }
 
-/**
- * Wrapped in React's cache() so generateMetadata() and the page body (both call this with the
- * same slug during the same request) share one Mongo round-trip instead of two.
- */
-export const getProjectBySlug = cache(async (slug: string): Promise<ProjectDetail | null> => {
+async function fetchProjectBySlug(slug: string): Promise<ProjectDetail | null> {
   await connectToDatabase();
 
   const doc = await ProjectModel.findOne({ slug, status: "published" }).lean<ProjectLean | null>();
@@ -97,7 +93,20 @@ export const getProjectBySlug = cache(async (slug: string): Promise<ProjectDetai
     appStoreUrl: doc.appStoreUrl,
     overviewMd: doc.overviewMd,
   };
-});
+}
+
+/**
+ * Wrapped in React's cache() so generateMetadata() and the page body (both call this with the
+ * same slug during the same request) share one Mongo round-trip instead of two.
+ */
+export const getProjectBySlug = cache(fetchProjectBySlug);
+
+/**
+ * Same query, not cache()-wrapped — see lib/posts.ts#getPostBySlugForOg for why: React's
+ * cache() only works inside a React Server Component render, and calling the cache()-wrapped
+ * version from app/projects/[slug]/opengraph-image.tsx 500'd in production.
+ */
+export const getProjectBySlugForOg = fetchProjectBySlug;
 
 /** Published project slugs, for generateStaticParams — pre-renders every project at build time. */
 export async function listProjectSlugs(): Promise<string[]> {
