@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { Link } from "next-view-transitions";
 import Image from "next/image";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
@@ -63,7 +63,16 @@ export default async function ProjectDetailPage({
         >
           Project
         </p>
-        <h1 style={{ fontSize: 26, lineHeight: 1.3, margin: "0 0 var(--space-3)" }}>{project.title}</h1>
+        <h1
+          style={{
+            fontSize: 26,
+            lineHeight: 1.3,
+            margin: "0 0 var(--space-3)",
+            viewTransitionName: `project-title-${project.slug}`,
+          }}
+        >
+          {project.title}
+        </h1>
         <p style={{ fontSize: 13.5, opacity: 0.75, margin: "0 0 var(--space-4)" }}>{project.summary}</p>
 
         <div style={{ marginBottom: "var(--space-4)" }}>
@@ -157,36 +166,46 @@ export default async function ProjectDetailPage({
       </aside>
 
       <div style={{ minWidth: 0 }}>
-        <ScrollReveal>
-          {project.coverImage ? (
-            <div
+        {/* Not wrapped in ScrollReveal (unlike the sections below) — its own opacity:0-start
+            entrance would fight the view transition morphing this box in from ProjectCard's
+            grid position (components/ProjectCard.tsx carries the matching viewTransitionName). */}
+        {project.coverImage ? (
+          <div
+            style={{
+              position: "relative",
+              width: "100%",
+              aspectRatio: "16/9",
+              borderRadius: 10,
+              marginBottom: "var(--space-6)",
+              overflow: "hidden",
+              viewTransitionName: `project-cover-${project.slug}`,
+            }}
+          >
+            <Image
+              src={project.coverImage}
+              alt=""
+              fill
+              priority
+              sizes="(min-width: 900px) 700px, 100vw"
               style={{
-                position: "relative",
-                width: "100%",
-                aspectRatio: "16/9",
-                borderRadius: 10,
-                marginBottom: "var(--space-6)",
-                overflow: "hidden",
+                objectFit: project.coverImageFit,
+                background: project.coverImageFit === "contain" ? "var(--color-surface)" : undefined,
               }}
-            >
-              <Image
-                src={project.coverImage}
-                alt=""
-                fill
-                priority
-                sizes="(min-width: 900px) 700px, 100vw"
-                style={{
-                  objectFit: project.coverImageFit,
-                  background: project.coverImageFit === "contain" ? "var(--color-surface)" : undefined,
-                }}
-              />
-            </div>
-          ) : (
-            <div className="img-placeholder" style={{ width: "100%", aspectRatio: "16/9", marginBottom: "var(--space-6)" }}>
-              대표 이미지
-            </div>
-          )}
-        </ScrollReveal>
+            />
+          </div>
+        ) : (
+          <div
+            className="img-placeholder"
+            style={{
+              width: "100%",
+              aspectRatio: "16/9",
+              marginBottom: "var(--space-6)",
+              viewTransitionName: `project-cover-${project.slug}`,
+            }}
+          >
+            대표 이미지
+          </div>
+        )}
 
         {project.stack.length > 0 && (
           <section style={{ marginBottom: "var(--space-6)" }}>

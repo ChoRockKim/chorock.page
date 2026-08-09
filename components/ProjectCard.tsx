@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { Link } from "next-view-transitions";
 import Image from "next/image";
 import SkillTag from "@/components/SkillTag";
 import type { ProjectSummary } from "@/lib/projects";
@@ -23,7 +23,19 @@ export default function ProjectCard({
         color: "inherit",
       }}
     >
-      <div style={{ position: "relative", overflow: "hidden", borderRadius: 8, aspectRatio: "16/9" }}>
+      <div
+        style={{
+          position: "relative",
+          overflow: "hidden",
+          borderRadius: 8,
+          aspectRatio: "16/9",
+          // Matches the same viewTransitionName on app/projects/[slug]/page.tsx's cover image
+          // wrapper — the browser morphs this exact box (position/size) into that one across
+          // the navigation instead of a plain cut. Applied to the wrapper (not the <Image>
+          // itself) so it still works when there's no coverImage and the placeholder renders.
+          viewTransitionName: `project-cover-${project.slug}`,
+        }}
+      >
         {project.coverImage ? (
           <Image
             src={project.coverImage}
@@ -45,7 +57,16 @@ export default function ProjectCard({
           </div>
         )}
       </div>
-      <h3 style={{ fontSize: 17, margin: 0, color: "var(--color-text)" }}>{project.title}</h3>
+      <h3
+        style={{
+          fontSize: 17,
+          margin: 0,
+          color: "var(--color-text)",
+          viewTransitionName: `project-title-${project.slug}`,
+        }}
+      >
+        {project.title}
+      </h3>
       <p style={{ fontSize: 13, margin: 0, opacity: 0.72, lineHeight: 1.5 }}>{project.summary}</p>
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6, marginTop: 2 }}>
         {project.tags.slice(0, 3).map((tag) => (

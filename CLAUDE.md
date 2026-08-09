@@ -249,6 +249,48 @@ itself — that would remove the display race but introduce a real double-counti
 (two components racing to see "no cookie yet" and both incrementing) for a purely decorative
 counter, a worse trade.
 
+**`components/ScrollToTopButton.tsx` is mounted site-wide in `app/layout.tsx`** (not per-page
+like `components/ReadingProgressBar.tsx`, which only exists on `/posts/[slug]`) — appears bottom
+right once `window.scrollY` passes 400px, same `passive: true` scroll-listener pattern as
+`ReadingProgressBar`. It stays mounted through its own exit animation instead of vanishing
+instantly the moment you scroll back up: a `wasVisibleRef` (plain ref, not state — needs a
+synchronous read inside the scroll handler, which a `useState` value can't give you across
+renders) tracks the last known shown/hidden edge, and a `leaveTimer` delays the actual unmount
+until `globals.css`'s `scrollTopOut` keyframe (200ms) has had time to finish playing, matching
+its duration exactly. Clicking `window.scrollTo({ top: 0, behavior: "smooth" })`s and briefly
+toggles an `is-bouncing` class that replays a small arrow-bounce keyframe — this is a purely
+decorative "fun" touch the user explicitly asked for, not tied to any state that needs to
+survive a re-render.
+
+**`/projects` list → `/projects/[slug]` uses a real cross-page View Transition** (the card's
+cover image and title visually morph into the detail page's corresponding elements, not a plain
+cut) via the `next-view-transitions` package (`app/layout.tsx` wraps everything in its
+`<ViewTransitions>`; `components/ProjectCard.tsx` and `app/projects/[slug]/page.tsx` both import
+`Link` from `next-view-transitions` instead of `next/link` — a plain `next/link` navigation
+would NOT trigger a transition even with matching names, since the library's own router is what
+actually calls `document.startViewTransition()` around the navigation). Hand-rolling this with
+raw `document.startViewTransition()` (the way `components/Header.tsx`'s theme toggle does it)
+was considered and rejected — that works for the theme toggle because it's a synchronous
+same-page state flip, but sequencing `document.startViewTransition()` correctly against Next.js
+App Router's *async* client-side navigation (waiting for the new route's RSC payload to actually
+land before the "after" DOM snapshot is captured) is a known sharp edge; the library exists
+specifically to solve that timing problem. The actual visual pairing is just matching
+`viewTransitionName` inline-style values between the two pages — `project-cover-<slug>` on both
+`ProjectCard`'s image wrapper and the detail page's cover image wrapper, `project-title-<slug>`
+on both title elements — the browser handles the morph itself, no custom
+`::view-transition-group()` timing was added (the default was good enough once tested). The
+detail page's cover image is deliberately **not** wrapped in `<ScrollReveal>` the way the
+sections below it are — its own opacity:0-start entrance animation would fight the incoming
+morph. Confirmed working by patching `document.startViewTransition` to count invocations before
+clicking a card (not just by eye — the transition itself is sub-300ms and too fast to reliably
+catch with screenshot polling) and by diffing rendered HTML for matching `view-transition-name`
+values on both pages. Browsers without `startViewTransition` support (feature-detected inside
+the library) just navigate normally, same graceful-degradation shape as the theme toggle;
+`prefers-reduced-motion: reduce` is handled separately in `globals.css` (browsers don't skip
+View Transitions for that preference automatically, so it's a manual `animation: none` override
+on the `::view-transition-*` pseudo-elements — same reasoning as the theme toggle's manual
+`matchMedia` check).
+
 **SEO/share-preview metadata is generated, not static image files.** No favicon/OG image
 assets exist in the repo (no logo was ever made) — `app/icon.tsx`/`app/apple-icon.tsx`/
 `app/opengraph-image.tsx` all use `next/og`'s `ImageResponse` to render the same "초"

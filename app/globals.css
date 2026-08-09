@@ -331,6 +331,50 @@ html.theme-transition::view-transition-new(root) { animation: theme-reveal 0.6s 
   100% { transform: scale(1); opacity: 1; }
 }
 
+/* — ScrollToTopButton — */
+.scroll-top-btn {
+  position: fixed;
+  right: var(--space-6);
+  bottom: var(--space-6);
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: none;
+  background: var(--color-accent);
+  color: var(--color-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: var(--shadow-md);
+  z-index: 60;
+  animation: scrollTopIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.scroll-top-btn.is-leaving { animation: scrollTopOut 0.2s ease both; }
+.scroll-top-btn:hover { transform: scale(1.1); box-shadow: var(--shadow-lg); }
+.scroll-top-btn:active { transform: scale(0.95); }
+.scroll-top-btn svg { transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.scroll-top-btn.is-bouncing svg { animation: scrollTopArrowBounce 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); }
+@keyframes scrollTopIn {
+  0% { transform: scale(0.3) translateY(20px); opacity: 0; }
+  60% { transform: scale(1.15) translateY(-4px); }
+  100% { transform: scale(1) translateY(0); opacity: 1; }
+}
+@keyframes scrollTopOut {
+  from { transform: scale(1); opacity: 1; }
+  to { transform: scale(0.5); opacity: 0; }
+}
+@keyframes scrollTopArrowBounce {
+  0% { transform: translateY(0); }
+  40% { transform: translateY(-5px); }
+  100% { transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .scroll-top-btn { animation: none; }
+  .scroll-top-btn.is-bouncing svg { animation: none; }
+}
+
 /* — Header nav — */
 .nav-desktop { display: flex; }
 .nav-mobile-toggle { display: none; }
@@ -394,6 +438,20 @@ html.theme-transition::view-transition-new(root) { animation: theme-reveal 0.6s 
 }
 @media (prefers-reduced-motion: reduce) {
   .skeleton { animation: none; opacity: 0.7; }
+}
+
+/* — View Transitions (/projects list -> /projects/[slug], components/ProjectCard.tsx +
+   app/projects/[slug]/page.tsx's matching viewTransitionName pairs) — the browser's default
+   morph animation is used as-is (no custom ::view-transition-group() timing), but the browser
+   does NOT automatically skip View Transitions for reduced-motion the way some JS animation
+   libraries do, so this has to be turned off explicitly here, same reasoning as
+   components/Header.tsx's theme-toggle transition checking prefers-reduced-motion by hand. */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
 }
 
 .img-placeholder {

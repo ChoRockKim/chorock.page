@@ -3,6 +3,74 @@
 이 프로젝트의 주요 변경 사항을 버전(작업 단위) 별로 기록합니다. 형식은
 [Keep a Changelog](https://keepachangelog.com/)를 참고합니다.
 
+## [0.7.52] - 2026-08-09
+
+### 이전 상태
+
+사용자가 motion.dev에서 본 애니메이션(화면 녹화 영상)을 보여주며 비슷한 걸 추가하고 싶어함 —
+ffmpeg로 프레임을 뽑아 직접 확인해보니 그리드 카드를 클릭하면 카드의 이미지/제목이 자기 위치에서
+그대로 커지면서 상세 모달로 모프되는 "공유 레이아웃 전환"이었음. 원본은 같은 페이지 안 모달
+전환이지만, `/projects/[slug]`는 SEO/ISR/개별 링크 공유 때문에 실제 별도 URL 페이지로 남아야
+해서, 사용자 확인 후 **실제 페이지 이동은 유지하고 View Transitions API로 카드 이미지/제목만
+상세 페이지의 같은 요소로 모프**하는 방식으로 진행.
+
+### Added
+
+- `next-view-transitions` 패키지 설치 — Next.js App Router의 비동기 클라이언트 사이드 라우팅과
+  브라우저 View Transitions API의 타이밍을 직접 손으로 맞추는 건 알려진 함정이 많아서(새 라우트의
+  RSC 페이로드가 도착하기 전에 전환이 캡처되는 등), 이미 이 문제를 해결해주는 작은 래퍼(의존성
+  0개)를 사용.
+- `app/layout.tsx`: `<ViewTransitions>`로 전체를 감쌈.
+- `components/ProjectCard.tsx`, `app/projects/[slug]/page.tsx`: `next/link` → `next-view-
+  transitions`의 `Link`로 교체(양방향 다 — 목록 진입, "← 프로젝트 목록" 복귀 둘 다). 카드의
+  커버 이미지 wrapper와 상세 페이지의 커버 이미지 wrapper에 동일한
+  `viewTransitionName: "project-cover-<slug>"`, 제목 요소엔 `"project-title-<slug>"`를 부여해서
+  브라우저가 두 요소를 같은 것으로 인식하고 자동으로 모프하도록 함(커스텀 easing 없이 브라우저
+  기본 전환을 그대로 사용 — 실제로 확인해보니 이미 자연스러워서 추가 조정 안 함).
+- `app/projects/[slug]/page.tsx`: 커버 이미지를 감싸던 `<ScrollReveal>`을 제거(그 자체의
+  opacity:0 시작 등장 애니메이션이 막 모프해 들어오는 이미지와 충돌해 깜빡여 보일 수 있어서) —
+  다른 섹션(사용 기술/프로젝트 개요)의 `ScrollReveal`은 그대로 둠.
+- `app/globals.css`: `prefers-reduced-motion: reduce`에서 `::view-transition-group(*)` 등에
+  `animation: none !important` 추가 — 브라우저가 View Transitions를 reduced-motion에서 자동으로
+  꺼주지 않아서 직접 처리(`Header.tsx`의 테마 토글이 이미 수동으로 체크하는 것과 같은 이유).
+
+### 검증
+
+- `npx tsc --noEmit`, `npx eslint .`(`.next` 없이), `npm run build` 통과.
+- `next start` + 실제 Chrome 브라우저로 확인: `/projects` 카드 클릭 → 상세 페이지 이동, "←
+  프로젝트 목록"으로 복귀 둘 다 정상 동작. `document.startViewTransition`을 몽키패치해서 실제
+  호출되는지 직접 카운트로 확인(전환 자체가 300ms 이내로 짧아서 스크린샷 폴링으로는 중간 프레임을
+  안정적으로 못 잡음 — 그래서 눈으로 보는 대신 이 방법으로 검증). `/projects`와
+  `/projects/hufs-clock`의 렌더링된 HTML을 직접 diff해서 `view-transition-name` 값이 정확히
+  짝이 맞는지 확인.
+- 라이트/다크 모드 둘 다 스크린샷으로 레이아웃/스타일 깨짐 없는 것 확인.
+
+## [0.7.51] - 2026-08-09
+
+### 이전 상태
+
+스크롤을 내렸을 때 우측 하단에 맨 위로 이동하는 버튼을 원함, 애니메이션도 조금 넣어달라는
+요청.
+
+### Added
+
+- `components/ScrollToTopButton.tsx`(신규): `app/layout.tsx`에 사이트 전체 마운트(글 상세
+  전용인 `ReadingProgressBar`와 다르게 모든 페이지에 적용). `window.scrollY`가 400px 넘으면
+  우측 하단에 원형 버튼이 통통 튀듯 나타나고(스케일+위치 바운스 진입 애니메이션), 다시
+  올라오면 스케일다운+페이드로 사라짐 — 사라지는 애니메이션이 끝날 때까지는 실제로 마운트
+  해제하지 않도록 타이머로 처리. 클릭하면 부드럽게 맨 위로 스크롤되고, 화살표 아이콘이 살짝
+  튀어오르는 바운스가 클릭마다 재생됨. 호버 시 살짝 커지는 효과도 추가.
+- `app/globals.css`: `.scroll-top-btn` 관련 스타일 + `scrollTopIn`/`scrollTopOut`/
+  `scrollTopArrowBounce` 키프레임 추가(기존 `copyPopIn` 바운스 애니메이션과 결을 맞춤),
+  `prefers-reduced-motion: reduce`에서는 애니메이션 비활성화.
+
+### 검증
+
+- `npx tsc --noEmit`, `npx eslint .`(`.next` 없이), `npm run build` 통과.
+- `next start`로 실제 브라우저에서 스크롤 내려서 버튼이 애니메이션과 함께 나타나는 것, 클릭 시
+  부드럽게 맨 위로 스크롤되며 버튼이 사라지는 것, 라이트/다크 모드 둘 다 색상 대비가 괜찮은
+  것을 스크린샷으로 확인.
+
 ## [0.7.50] - 2026-08-09
 
 ### 이전 상태
