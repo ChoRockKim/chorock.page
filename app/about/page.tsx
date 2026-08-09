@@ -34,7 +34,6 @@ const SKILLS: { category: string; items: string[] }[] = [
       "React Native",
       "Tailwind CSS",
       "SCSS",
-      "Swift",
       "TanStack Query",
     ],
   },
@@ -44,9 +43,6 @@ const SKILLS: { category: string; items: string[] }[] = [
     items: [
       "Git",
       "GitHub",
-      "Vercel",
-      "AWS S3",
-      "Notion",
       "Docker",
       "GitHub Actions",
     ],
