@@ -1,4 +1,3 @@
-import { Link } from "next-view-transitions";
 import Image from "next/image";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
@@ -6,6 +5,7 @@ import { getProjectBySlug, listProjectSlugs } from "@/lib/projects";
 import { compileMarkdown } from "@/lib/markdown";
 import SkillTag from "@/components/SkillTag";
 import ScrollReveal from "@/components/ScrollReveal";
+import ProjectsBackLink from "@/components/ProjectsBackLink";
 
 export const revalidate = 300;
 
@@ -43,13 +43,9 @@ export default async function ProjectDetailPage({
   return (
     <div className="proj-grid">
       <aside className="proj-sidebar">
-        <Link
-          href="/projects"
-          className="btn btn-ghost"
-          style={{ fontSize: 13, paddingLeft: 0, marginBottom: "var(--space-4)" }}
-        >
+        <ProjectsBackLink style={{ fontSize: 13, paddingLeft: 0, marginBottom: "var(--space-4)" }}>
           ← 프로젝트 목록
-        </Link>
+        </ProjectsBackLink>
 
         <p
           style={{

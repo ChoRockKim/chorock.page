@@ -3,6 +3,46 @@
 이 프로젝트의 주요 변경 사항을 버전(작업 단위) 별로 기록합니다. 형식은
 [Keep a Changelog](https://keepachangelog.com/)를 참고합니다.
 
+## [0.7.58] - 2026-08-10
+
+### 이전 상태
+
+0.7.53에서 `/projects` 목록의 `.stagger-list`(카드 순차 페이드인)를 View Transition과의
+충돌 때문에 완전히 제거했는데, 그 결과 목록 페이지 자체가 밋밋해졌다는 피드백 — "평소 목록
+이동 시에는 페이드가 보이되, 상세→목록 뒤로가기처럼 트랜지션과 겹치는 상황에서만 배제할 수
+없냐"는 요청.
+
+### Fixed
+
+- `/projects`로 들어오는 경로 중 View Transition을 실제로 트리거하는 `next-view-transitions`의
+  `Link`를 쓰는 곳은 `app/projects/[slug]/page.tsx`의 "← 프로젝트 목록" 뒤로가기 링크
+  단 하나뿐임을 grep으로 직접 확인(`Header.tsx` 네비게이션 등 다른 모든 경로는 평범한
+  `next/link`) — 즉 겹칠 위험은 그 한 링크로만 국한됨.
+- `app/projects/page.tsx`의 그리드에 `className="stagger-list"` 복원(제거 전과 동일, 항상
+  마크업에 존재).
+- `components/ProjectsBackLink.tsx` 신규: 뒤로가기 링크를 클라이언트 컴포넌트로 추출,
+  `onClick`에서 네비게이션 직전 `document.documentElement.classList.add("projects-nav-no-
+  stagger")`를 동기 실행하고 ~700ms(View Transition 기본 지속시간·`cardIn` 0.45s 둘 다보다
+  넉넉히 긴 값) 후 제거 — `components/Header.tsx`의 테마 토글이 쓰는 `html.theme-transition`과
+  동일한 "특정 전환에만 애니메이션 억제" 기법.
+- `app/globals.css`: `html.projects-nav-no-stagger .stagger-list > * { animation: none
+  !important; }` 추가 — 목록 페이지 자체는 이 클래스의 존재를 몰라도 되는 순수 CSS 선택자
+  기반 억제라 `app/projects/page.tsx`는 손댈 필요 없음.
+
+### 검증
+
+- `npx tsc --noEmit`, `npx eslint .`, `rm -rf .next && npm run build` 통과.
+- `next start` + 실제 Chrome 브라우저: `/projects` 신규 진입 시 카드 3개 모두
+  `getComputedStyle(...).animationName`이 `"cardIn"`인 것 확인.
+- 스크린샷 폴링으로는 700ms 미만의 클래스 add/remove 타이밍을 못 잡을 수 있어
+  `MutationObserver`로 `<html>`의 `class` 속성 변화를 기록: 상세 페이지에서 뒤로가기 클릭 시
+  `projects-nav-no-stagger`가 동기적으로 추가되고 약 700ms 후 제거되는 것을 로그로 직접 확인.
+  또 CSS 규칙 자체도 그 클래스를 수동으로 걸고/떼는 것만으로 `animationName`이
+  `"cardIn"` ↔ `"none"`으로 정확히 전환되는 것 확인.
+- (테스트 중 발견) 좌표 기반 클릭(`computer` 툴)이 뒤로가기 링크를 살짝 빗나가 onClick이
+  전혀 안 찍힌 적이 있었음 — `element.click()`으로 직접 디스패치해 실제 원인이 로직 버그가
+  아니라 좌표 미스였음을 확인, 최종적으로는 로직 자체가 올바르게 동작함을 검증.
+
 ## [0.7.57] - 2026-08-09
 
 ### 이전 상태

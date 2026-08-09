@@ -22,16 +22,19 @@ export default async function ProjectsPage() {
         만들어보고 운영해본 사이드 프로젝트 모음입니다.
       </p>
 
-      {/* No .stagger-list here (unlike components/PostsListClient.tsx, which still uses it
-          fine — it doesn't participate in View Transitions) — its cardIn keyframe re-fires
-          opacity:0->1 on every mount of this grid, including landing back here via the
-          next-view-transitions Link from a project detail page, which fights the transition
-          morphing a card's cover image/title back into place. Same root cause as the
-          pageFadeIn removal above, just on the list side instead of the detail side. */}
+      {/* .stagger-list's cardIn keyframe re-fires on every mount of this grid, which used to
+          conflict with the View Transition morphing a card's cover image/title back into place
+          when landing here via the "← 프로젝트 목록" back-link (app/projects/[slug]/page.tsx).
+          That link is the ONLY way to reach /projects through next-view-transitions' Link —
+          Header.tsx's nav and every other arrival path use a plain next/link, so stagger is
+          always safe there. components/ProjectsBackLink.tsx suppresses cardIn specifically for
+          that one navigation via a short-lived html.projects-nav-no-stagger class (globals.css),
+          so it's safe to have this class present unconditionally here again. */}
       {projects.length === 0 ? (
         <p style={{ fontSize: 14, opacity: 0.65 }}>아직 등록된 프로젝트가 없습니다.</p>
       ) : (
         <div
+          className="stagger-list"
           style={{
             display: "grid",
             gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",

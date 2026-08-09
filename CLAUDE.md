@@ -364,9 +364,30 @@ only happened in *one* direction. `app/projects/page.tsx`'s grid had `className=
 (the same `cardIn` opacity/translateY keyframe `components/PostsListClient.tsx` uses, per-child
 `nth-child` delays), which re-fires on every mount of the grid — including landing back on it via
 `next-view-transitions`' `Link` from a detail page — fighting the transition's own morph of that
-same card's cover image/title back into place. The list page's own `<ProjectCard>` grid no longer
-uses `.stagger-list` (removed only from this usage — `PostsListClient.tsx`'s is untouched, it
-doesn't participate in View Transitions so there's nothing for it to conflict with there).
+same card's cover image/title back into place. `PostsListClient.tsx`'s own `.stagger-list` usage
+is untouched — it doesn't participate in View Transitions so there's nothing for it to conflict
+with there.
+
+**`.stagger-list` on `/projects` was later restored, suppressed only for the one navigation that
+can conflict with it.** Removing it entirely (previous paragraph) fixed the flicker but also
+killed the list's entrance animation for every visit, including ones with zero conflict risk —
+a user complaint prompted checking which arrivals into `/projects` actually go through
+`next-view-transitions`' `Link` (the only thing that triggers a View Transition at all):
+grepping confirmed it's exactly one place, the "← 프로젝트 목록" back-link on
+`app/projects/[slug]/page.tsx` (`Header.tsx`'s nav and every other path to `/projects` use a
+plain `next/link`, so they were never at risk). `components/ProjectsBackLink.tsx` extracts that
+one link into a client component whose `onClick` adds `projects-nav-no-stagger` to
+`<html>` synchronously before navigating (same `html.theme-transition` technique
+`components/Header.tsx`'s theme toggle already uses to scope an animation override to one
+specific transition) and removes it via `setTimeout` ~700ms later (comfortably longer than both
+the View Transition's default duration and `cardIn`'s own 0.45s). `app/globals.css`'s
+`html.projects-nav-no-stagger .stagger-list > * { animation: none !important; }` is the only
+thing that reads this class — `app/projects/page.tsx` itself stays a plain Server Component with
+`.stagger-list` unconditionally in its markup, no awareness of "how did the visitor arrive"
+needed. Verified with a `MutationObserver` on `<html>`'s `class` attribute (screenshot polling is
+too slow for a sub-second class add/remove) that the class is added synchronously on click and
+cleared ~700ms later, and separately confirmed the CSS rule itself flips `getComputedStyle(...)
+.animationName` between `"cardIn"` and `"none"` as expected.
 
 **View Transitions are disabled below 800px** (`app/globals.css`, same `@media (max-width: ...)`
 breakpoint `.proj-grid` itself uses to collapse to one column) — the morph reads as janky rather
