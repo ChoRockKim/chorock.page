@@ -3,6 +3,45 @@
 이 프로젝트의 주요 변경 사항을 버전(작업 단위) 별로 기록합니다. 형식은
 [Keep a Changelog](https://keepachangelog.com/)를 참고합니다.
 
+## [0.7.57] - 2026-08-09
+
+### 이전 상태
+
+`/series` 목록에서 시리즈 상세로 이동할 때 데이터 로딩이 끝날 때까지 화면이 멈춰있어 이동이
+느리게 느껴진다는 피드백, 그리고 맨 위로 가기 버튼이 스크롤 맨 아래에서 Footer의 GitHub/
+LinkedIn/Instagram 아이콘을 가린다는 별개의 피드백.
+
+### Fixed
+
+- `app/series/[slug]/page.tsx`가 `/posts/[slug]`/`/projects/[slug]`와 달리 ISR도 아니고
+  (`generateStaticParams` 없음) `loading.tsx`도 없어서 매 방문마다 Mongo 왕복 2번
+  (시리즈 findOne + 게시글 find) + 게시글마다 `estimateReadTime()` 재계산을 하면서도 그동안
+  화면에 아무 피드백이 없었음 — 정확히 CHANGELOG 0.7.29에서 진단·수정했던 "list→detail 네비게이션이
+  느렸던 지배적 원인"과 같은 패턴이 이 라우트에만 아직 안 고쳐져 있던 것. `lib/series.ts`에
+  `listSeriesSlugs()`(발행 글이 1편 이상 있는 시리즈만, `listSeriesWithCounts()`의 필터 재사용)
+  추가하고 `export const revalidate = 300` + `generateStaticParams()`로 ISR 전환,
+  `getSeriesWithPosts`를 React `cache()`로 감싸 `generateMetadata()`/페이지 본문이 같은 slug로
+  중복 조회하지 않도록 함(`getPostBySlug`/`getProjectBySlug`와 동일 패턴).
+- `app/series/[slug]/loading.tsx` 신규 추가 — `app/posts/[slug]/loading.tsx`/
+  `app/projects/[slug]/loading.tsx`와 같은 스켈레톤 컨벤션, 이 페이지의 실제 레이아웃(뒤로가기
+  링크/제목/설명/게시글 목록 행 4개)에 맞춤.
+- `app/globals.css`의 `.scroll-top-btn`: `bottom: var(--space-6)`는 `position: fixed`라
+  스크롤 위치와 무관하게 뷰포트 하단에서 항상 같은 거리를 유지하는데, 페이지 맨 아래(버튼이
+  보이는 조건이 만족되는 지점)에서 Footer의 아이콘 행(역시 우측 정렬, 하단 근처)과 정확히
+  겹쳤음 — `bottom: calc(var(--space-6) + 60px)`로 Footer 높이(패딩+아이콘+패딩 ≈ 84px)만큼
+  띄움.
+
+### 검증
+
+- `npx tsc --noEmit`, `npx eslint .`, `rm -rf .next && npm run build` 통과 — 빌드 출력에서
+  `/series/[slug]`가 `●`(SSG)로 표시되고 실제 시리즈 4개 슬러그가 prerender 목록에 나열되는
+  것 확인.
+- `next start` + 실제 Chrome 브라우저: `/series`에서 카드 클릭 → 프리렌더된 상세 페이지로
+  즉시 전환(콘텐츠가 이미 캐시되어 있어 스켈레톤이 보일 새도 없이 빠르게 뜨는 것 자체가
+  ISR 전환이 제대로 작동한다는 증거).
+- `/about`에서 `window.scrollTo(0, document.body.scrollHeight)`로 맨 아래까지 스크롤 후
+  스크린샷으로 버튼과 Footer 아이콘 행 사이에 충분한 간격이 있는 것 확인(겹침 없음).
+
 ## [0.7.56] - 2026-08-09
 
 ### 이전 상태

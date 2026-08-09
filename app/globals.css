@@ -335,7 +335,12 @@ html.theme-transition::view-transition-new(root) { animation: theme-reveal 0.6s 
 .scroll-top-btn {
   position: fixed;
   right: var(--space-6);
-  bottom: var(--space-6);
+  /* Fixed positioning means this stays the same distance from the viewport bottom regardless
+     of scroll position — at the very bottom of the page (button's own show condition includes
+     that point), var(--space-6) alone landed it right on top of Footer.tsx's GitHub/LinkedIn/
+     Instagram icon row (also right-aligned, also anchored near the bottom edge). Bumped clear
+     of the footer's own height (~30px padding + 24px icon row + 30px padding). */
+  bottom: calc(var(--space-6) + 60px);
   width: 44px;
   height: 44px;
   border-radius: 50%;

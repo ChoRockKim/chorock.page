@@ -298,7 +298,13 @@ until `globals.css`'s `scrollTopOut` keyframe (200ms) has had time to finish pla
 its duration exactly. Clicking `window.scrollTo({ top: 0, behavior: "smooth" })`s and briefly
 toggles an `is-bouncing` class that replays a small arrow-bounce keyframe — this is a purely
 decorative "fun" touch the user explicitly asked for, not tied to any state that needs to
-survive a re-render.
+survive a re-render. Its `bottom` offset (`app/globals.css`'s `.scroll-top-btn`) is
+`calc(var(--space-6) + 60px)`, not a plain `var(--space-6)` — `position: fixed` means it stays
+the same distance from the viewport bottom regardless of scroll position, so at the very bottom
+of the page (where the button's own show condition is satisfied) a bare `var(--space-6)` landed
+it directly on top of `Footer.tsx`'s GitHub/LinkedIn/Instagram icon row, which is also
+right-aligned near the bottom edge. The extra 60px clears the footer's own height (~30px padding
++ 24px icon row + 30px padding) so the two never overlap.
 
 **`/projects` list → `/projects/[slug]` uses a real cross-page View Transition** (the card's
 cover image and title visually morph into the detail page's corresponding elements, not a plain
@@ -493,6 +499,19 @@ during the same request) share one Mongo round-trip instead of two — plain asy
 are NOT deduped by Next.js automatically, only `cache()`-wrapped ones are, within a single
 request/render pass. Any new detail-page-shaped route that needs both `generateMetadata` and a
 page body should follow this same `cache()` pattern from the start.
+
+**`/series/[slug]` follows the exact same ISR + `cache()` pattern** (`lib/series.ts#listSeriesSlugs()`
+for `generateStaticParams()`, `getSeriesWithPosts` wrapped in `cache()`) — it was left fully
+dynamic with no `loading.tsx` for longer than the other two detail routes, which was the actual
+cause of a reported "list→series navigation feels slow" complaint: no ISR meant a fresh
+`SeriesModel.findOne` + `PostModel.find` + a per-post `estimateReadTime()` recompute on every
+single visit, and no `loading.tsx` meant zero visual feedback while that happened (same root
+cause CHANGELOG 0.7.29 diagnosed for `/posts/[slug]`/`/projects/[slug]`, just not yet applied
+here). `listSeriesSlugs()` mirrors `listSeriesWithCounts()`'s published-post-count filter so a
+series with zero published posts is never pre-rendered (it would 404 via `getSeriesWithPosts`
+anyway). `app/series/[slug]/loading.tsx` follows the same skeleton convention as
+`app/posts/[slug]/loading.tsx`/`app/projects/[slug]/loading.tsx` (the shared `.skeleton` class
+in `app/globals.css`), shaped to match this page's actual list-of-posts layout.
 
 ## What exists vs. doesn't
 

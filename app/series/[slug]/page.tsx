@@ -1,7 +1,17 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { getSeriesWithPosts } from "@/lib/series";
+import { getSeriesWithPosts, listSeriesSlugs } from "@/lib/series";
+
+// Was fully dynamic (fresh Mongo round-trips + estimateReadTime() on every visit) with no
+// loading.tsx — the exact "slow list->detail navigation" pattern already diagnosed and fixed
+// for /posts/[slug] and /projects/[slug] (CHANGELOG 0.7.29). ISR here matches that fix.
+export const revalidate = 300;
+
+export async function generateStaticParams() {
+  const slugs = await listSeriesSlugs();
+  return slugs.map((slug) => ({ slug }));
+}
 
 export async function generateMetadata({
   params,

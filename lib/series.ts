@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { connectToDatabase } from "@/lib/mongodb";
 import { PostModel } from "@/models/Post";
 import { SeriesModel } from "@/models/Series";
@@ -60,7 +61,23 @@ export async function listSeriesOptions(): Promise<SeriesOption[]> {
   return docs.map((d) => ({ id: String(d._id), title: d.title }));
 }
 
-export async function getSeriesWithPosts(slug: string): Promise<SeriesWithPosts | null> {
+/** Slugs of series with at least one published post — generateStaticParams() for
+ *  app/series/[slug]/page.tsx. Mirrors listSeriesWithCounts()'s published-count filter so a
+ *  slug that would 404 via getSeriesWithPosts (no published posts) is never pre-rendered. */
+export async function listSeriesSlugs(): Promise<string[]> {
+  await connectToDatabase();
+
+  const counts = await PostModel.aggregate<{ _id: unknown }>([
+    { $match: { status: "published", seriesId: { $ne: null } } },
+    { $group: { _id: "$seriesId" } },
+  ]);
+  const seriesIds = counts.map((c) => c._id);
+
+  const docs = await SeriesModel.find({ _id: { $in: seriesIds } }, { slug: 1 }).lean<{ slug: string }[]>();
+  return docs.map((d) => d.slug);
+}
+
+async function fetchSeriesWithPosts(slug: string): Promise<SeriesWithPosts | null> {
   await connectToDatabase();
 
   const series = await SeriesModel.findOne({ slug }).lean<{
@@ -94,3 +111,8 @@ export async function getSeriesWithPosts(slug: string): Promise<SeriesWithPosts 
     })),
   };
 }
+
+/** Wrapped in React's cache() so generateMetadata() and the page body (both call this with the
+ *  same slug during the same request) share one pair of Mongo round-trips instead of two —
+ *  same pattern as lib/posts.ts#getPostBySlug / lib/projects.ts#getProjectBySlug. */
+export const getSeriesWithPosts = cache(fetchSeriesWithPosts);
