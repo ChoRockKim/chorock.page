@@ -193,6 +193,23 @@ narrow+scrollable+monospace container before assuming it's a font-size or media-
 giscus script client-side against `NEXT_PUBLIC_GISCUS_*` env vars; if they're unset it
 renders a setup hint instead of erroring. There is no comment data in MongoDB.
 
+**Clicking a markdown-body image opens a full-screen pinch-zoom viewer** (Naver Blog-style),
+via `react-photo-view` — `components/Mdx.tsx#MDXImage` wraps its `<img>` in `PhotoView`, and
+`app/layout.tsx` mounts one global `PhotoProvider`. Scope is deliberately narrow: only images
+that come out of `compileMarkdown()`'s `img` mapping go through `MDXImage`, so project cover
+images (the `/projects` View Transition targets) and the `PostAuthorCard` avatar are untouched
+— confirmed by clicking a cover image directly, no viewer opens. **`react-photo-view` ships
+zero `"use client"` directives anywhere in its bundle** (checked directly —
+`grep -c "use client" node_modules/react-photo-view/dist/*.js` → `0` for every format), so
+`app/layout.tsx` (a Server Component) importing and rendering `PhotoProvider` straight from
+the package broke `npm run build` with `TypeError: (0, d.createContext) is not a function`
+during `/_not-found` page-data collection — Next's RSC bundler had no signal to treat the
+module as client-only. Fixed the same way as `QueryProvider.tsx`/`AuthSessionProvider.tsx`:
+`components/PhotoViewProvider.tsx` is a thin wrapper that starts with `"use client"` and
+re-exports `PhotoProvider`; `layout.tsx` imports that wrapper, never the package directly. Any
+future third-party provider that needs mounting in `layout.tsx` should be assumed to need this
+same wrapper treatment unless its bundle is confirmed to ship its own `"use client"`.
+
 **Pasting an image into the write-form editor uploads it, ported from the legacy Express
 blog's S3 setup.** `components/WritePostForm.tsx`'s body `<textarea>` isn't a rich editor
 (no built-in paste-blob hook the way Toast UI Editor gave the old blog), so the paste

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { ViewTransitions } from "next-view-transitions";
+import "react-photo-view/dist/react-photo-view.css";
 import "./globals.css";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -8,6 +9,7 @@ import QueryProvider from "@/components/QueryProvider";
 import AuthSessionProvider from "@/components/AuthSessionProvider";
 import VisitTracker from "@/components/VisitTracker";
 import ScrollToTopButton from "@/components/ScrollToTopButton";
+import PhotoViewProvider from "@/components/PhotoViewProvider";
 
 const SITE_TITLE = "chorock.page";
 const SITE_DESCRIPTION = "개발 기록을 남기는 블로그";
@@ -87,15 +89,17 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       </head>
       <body>
         <ViewTransitions>
-          <VisitTracker />
-          <ScrollToTopButton />
-          <AuthSessionProvider>
-            <QueryProvider>
-              <Header />
-              <div className="site-content">{children}</div>
-              <Footer />
-            </QueryProvider>
-          </AuthSessionProvider>
+          <PhotoViewProvider>
+            <VisitTracker />
+            <ScrollToTopButton />
+            <AuthSessionProvider>
+              <QueryProvider>
+                <Header />
+                <div className="site-content">{children}</div>
+                <Footer />
+              </QueryProvider>
+            </AuthSessionProvider>
+          </PhotoViewProvider>
         </ViewTransitions>
       </body>
     </html>

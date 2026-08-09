@@ -3,6 +3,56 @@
 이 프로젝트의 주요 변경 사항을 버전(작업 단위) 별로 기록합니다. 형식은
 [Keep a Changelog](https://keepachangelog.com/)를 참고합니다.
 
+## [0.7.55] - 2026-08-09
+
+### 이전 상태
+
+글/프로젝트 본문에 삽입된 이미지를 클릭해도 그냥 인라인 이미지일 뿐, 확대해서 볼 방법이 없음.
+네이버블로그처럼 클릭하면 전체화면 뷰어가 뜨고 핀치줌, 아래로 당기면 닫히는 UX를 원함.
+
+### Added
+
+- `react-photo-view` 설치(의존성 0개, React 19 호환) — `pullClosable`(기본 `true`, 아래로
+  당겨서 닫기), `maskOpacity`(당기는 동안 배경 투명도 실시간 반응) 등 원하는 동작이 기본값으로
+  이미 제공되어 제스처 물리 로직을 직접 구현할 필요 없었음.
+- `components/Mdx.tsx#MDXImage`를 `PhotoView`로 감쌈 — 클릭 시 전체화면 뷰어. 마크다운 본문
+  이미지(`compileMarkdown()`의 `img` 매핑)에만 적용되는 스코프라, 프로젝트 커버 이미지(View
+  Transition 대상)나 프로필 아바타 등 다른 `<img>`는 이 컴포넌트를 거치지 않으므로 영향 없음 —
+  브라우저로 직접 확인(커버 이미지 클릭 시 뷰어 안 뜸).
+- `app/layout.tsx`에 `<PhotoProvider>` 전역 마운트(뷰어는 포털로 `document.body`에 렌더되므로
+  트리 위치는 상관없음), `react-photo-view/dist/react-photo-view.css`를 루트 레이아웃에서 임포트.
+
+### Fixed
+
+- **빌드 에러**: `react-photo-view`를 `app/layout.tsx`(Server Component)에서 바로 임포트해
+  `<PhotoProvider>`를 렌더하자 `npm run build`가 `TypeError: (0, d.createContext) is not a
+  function`로 `/_not-found` 페이지 데이터 수집 단계에서 실패. 원인을 직접 확인: 이 패키지가
+  배포하는 번들 파일(`dist/react-photo-view.js`/`.module.js`/`.modern.js`) 전부 `"use client"`
+  지시문이 하나도 없음(`grep -c "use client"` → `0`, 파일 시작부에 pragma 없이 바로 React 훅
+  import). Next.js RSC 번들러 입장에선 이 모듈을 클라이언트 전용으로 취급할 신호가 전혀 없어서
+  서버 컨텍스트에서 평가하려다 깨진 것 — `QueryProvider.tsx`/`AuthSessionProvider.tsx`와 동일한
+  패턴으로 `components/PhotoViewProvider.tsx`(자체 `"use client"`를 가진 얇은 래퍼)를 새로 만들어
+  `layout.tsx`가 `react-photo-view`를 직접 참조하지 않고 이 래퍼만 참조하도록 수정, 빌드 정상화.
+  서드파티 패키지가 `"use client"` 없이 context/hook을 쓰는 Provider를 배포하면서 Server
+  Component에서 직접 렌더될 때 매번 재현 가능한 클래스의 버그로 기록.
+- `components/Mdx.tsx`: `PhotoView`의 `src` prop이 `string | undefined`만 받는데
+  `ComponentPropsWithoutRef<"img">`의 `src`는 `string | Blob | undefined`로 타입 추론되어
+  타입 에러 — `typeof src !== "string" || !src` 가드 추가.
+
+### 검증
+
+- `npx tsc --noEmit`, `npx eslint .`, `rm -rf .next && npm run build` 통과.
+- `next start` + 실제 Chrome 브라우저: 다이어그램 이미지가 있는 글 상세
+  (`/posts/threejs-시작하기-webgpurenderer-세팅`)에서 이미지 클릭 → 전체화면 뷰어("1/1" 카운터,
+  닫기 버튼) 정상 확인, 닫기도 확인.
+- `/projects/fora` 커버 이미지 클릭 → 뷰어 안 뜨는 것 확인(스코프가 마크다운 본문 이미지로만
+  한정됨을 실증).
+- 라이트/다크 모드 둘 다에서 뷰어 열어 확인 — 뷰어 배경은 항상 어두운 오버레이(라이브러리
+  기본 동작, 네이버블로그 방식과 동일해 의도된 것으로 판단, 사이트 테마와 무관).
+- 핀치줌/아래로 당겨서 닫기(pull-to-close)는 claude-in-chrome이 실제 멀티터치 제스처를
+  에뮬레이션하지 못해 자동으로 검증 불가 — `pullClosable`/핀치줌 모두 라이브러리 기본값으로
+  동작하는 문서화된 기능이라 코드 구현은 완료했으나, 실기기에서의 최종 확인은 사용자 필요.
+
 ## [0.7.54] - 2026-08-09
 
 ### 이전 상태
