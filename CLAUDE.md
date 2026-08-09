@@ -291,6 +291,29 @@ View Transitions for that preference automatically, so it's a manual `animation:
 on the `::view-transition-*` pseudo-elements — same reasoning as the theme toggle's manual
 `matchMedia` check).
 
+**Two follow-up causes of visible flicker during that transition, both fixed**: (1)
+`components/ProjectCard.tsx`'s cover image used a smaller `sizes` (`33vw`-ish, appropriate for
+its actual grid-tile size) than the detail page's cover image (`sizes="(min-width: 900px) 700px,
+100vw"`) — next/image resolves `sizes` to one of a handful of fixed candidate widths, so a
+different `sizes` hint meant the card and the detail page requested genuinely different-
+resolution files under different `/_next/image` URLs. The detail page's larger file was a cache
+miss on first visit, so it hadn't finished loading when the view transition captured the "after"
+frame — visible as a flash of empty space before the real image popped in a moment later,
+outside the transition's control. Fixed by making the card request the exact same `sizes` as the
+detail page, so the browser already has the file cached (from viewing the grid) by the time the
+transition fires — traded against the grid's own non-priority card images now taking slightly
+longer to paint (larger files), an acceptable trade for 3 projects. (2) **The bigger one**:
+`.proj-grid` (this file, `app/projects/[slug]/page.tsx`) and `/projects/page.tsx`'s `<main>` both
+had `animation: pageFadeIn 0.5s ease both` — a leftover from before either page used View
+Transitions. Once `ProjectCard`/the back-link started navigating through
+`next-view-transitions`' `Link`, EVERY mount of either page now got pageFadeIn's own opacity
+animation stacking on top of the view transition's own default page-level cross-fade — two
+separate opacity animations racing on the same content, in both directions (list→detail and
+detail→list), which is what actually read as "flickering" once a real person watched it live
+(screenshot-polling too slow to have caught this one — found by re-reading the plan's own
+flagged risk after the user reported it live). Fixed by removing `pageFadeIn` from both — no
+replacement entrance animation needed since the view transition itself already provides one.
+
 **SEO/share-preview metadata is generated, not static image files.** No favicon/OG image
 assets exist in the repo (no logo was ever made) — `app/icon.tsx`/`app/apple-icon.tsx`/
 `app/opengraph-image.tsx` all use `next/og`'s `ImageResponse` to render the same "초"

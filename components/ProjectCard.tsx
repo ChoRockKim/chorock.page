@@ -42,7 +42,15 @@ export default function ProjectCard({
             alt=""
             fill
             priority={priority}
-            sizes="(min-width: 768px) 33vw, 100vw"
+            // Deliberately matches app/projects/[slug]/page.tsx's cover image `sizes` exactly
+            // (not the card's actual smaller rendered size) — next/image resolves `sizes` to
+            // one of a fixed set of candidate widths, and a mismatched sizes hint here meant
+            // the card and detail page requested different-resolution files under different
+            // URLs. The detail page's image was a cache miss on first visit, so it hadn't
+            // loaded yet when the view transition captured the "after" frame — visible as a
+            // flash of empty space before the real image popped in. Requesting the same
+            // resolution here means the browser already has it cached from viewing the grid.
+            sizes="(min-width: 900px) 700px, 100vw"
             style={{
               objectFit: project.coverImageFit,
               background: project.coverImageFit === "contain" ? "var(--color-surface)" : undefined,

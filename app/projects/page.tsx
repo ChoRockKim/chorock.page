@@ -11,8 +11,12 @@ export const metadata: Metadata = {
 export default async function ProjectsPage() {
   const projects = await listProjects();
 
+  // No pageFadeIn here (unlike most other top-level pages) — this page and /projects/[slug]
+  // both navigate via next-view-transitions' Link now, whose own page-level cross-fade was
+  // stacking with pageFadeIn's opacity animation on every mount, which is what was actually
+  // causing the reported flicker in both directions.
   return (
-    <main style={{ maxWidth: 960, margin: "0 auto", padding: "var(--space-6)", animation: "pageFadeIn .5s ease both" }}>
+    <main style={{ maxWidth: 960, margin: "0 auto", padding: "var(--space-6)" }}>
       <h1 style={{ fontSize: 30, margin: "0 0 var(--space-2)" }}>프로젝트</h1>
       <p style={{ fontSize: 14, opacity: 0.65, margin: "0 0 var(--space-6)" }}>
         만들어보고 운영해본 사이드 프로젝트 모음입니다.
