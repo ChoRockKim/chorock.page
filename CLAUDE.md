@@ -234,6 +234,27 @@ the 1MB default) allows, so anything larger would fail with an unhelpful platfor
 instead of this action's own clear message. A presigned-URL direct-to-S3 upload would dodge
 that ceiling entirely but is more infra than a single-owner blog's editor needs.
 
+**The write-form body `<textarea>`'s Tab-indent, toolbar buttons (bold/italic/heading/code
+block/etc.), Shift+Tab-outdent, and the image-paste placeholder insert all go through
+`document.execCommand("insertText", false, text)`, not `setBody(splicedString)`.** This
+textarea is a React-controlled input (`value={body}`); splicing the string in JS and calling
+`setBody` makes React reassign the DOM `.value` property directly, which is NOT a native input
+event — and Chrome discards a textarea's undo/redo history for everything before a
+JS-assigned `.value`. Since this blog's actual content is code-block/file-tree heavy (constant
+Tab presses), Cmd+Z was effectively broken almost immediately in every real writing session
+(confirmed as the actual complaint, not a hypothetical edge case). `execCommand("insertText")`
+fires a genuine native `input` event instead, so it lands in the browser's own undo stack
+exactly like typing does, and the existing `onChange={(e) => setBody(e.target.value)}` picks up
+the result unchanged — no downstream logic (the debounced preview, etc.) needed to change.
+**Deliberate exception**: `uploadImageAtCursor`'s async placeholder→real-URL replace (after the
+upload Server Action resolves) is NOT part of this `execCommand` conversion — it stays a plain
+`setBody((prev) => prev.replace(...))`. That replace can happen well after the user has
+moved on to typing elsewhere; routing it through `execCommand` would require refocusing the
+textarea and moving the selection to the placeholder's location, hijacking the user's cursor
+mid-typing. Losing the undo baseline at that one specific moment (upload completing in the
+background) is the accepted tradeoff — the immediate placeholder insertion (a direct result of
+the user's own paste action) still goes through `execCommand`, so that step is undo-able.
+
 **Header search** (`app/api/search/route.ts` + `lib/posts.ts#searchPosts`) does a regex
 match against title/summary/tags server-side — it is not a full-text/Atlas Search index.
 
@@ -346,7 +367,15 @@ breakpoint `.proj-grid` itself uses to collapse to one column) — the morph rea
 than delightful at phone width (explicit user call), same `animation: none !important` on the
 `::view-transition-*` pseudo-elements as the `prefers-reduced-motion` block right above it, just
 gated on viewport width instead of the motion preference. Both rules can apply simultaneously
-with no conflict (same declaration, `!important` in both).
+with no conflict (same declaration, `!important` in both). With the morph fully off on mobile,
+navigating list→detail became an instant, jarring cut with no transition at all — the same
+`@media (max-width: 800px)` block on `.proj-grid` (the detail page's own root class; the list
+page doesn't use it, so this can't fire on `/projects` itself) reuses the existing `pageFadeIn`
+keyframe (`.pd-grid`'s post-detail entrance fade) as a plain `animation: pageFadeIn 0.4s ease
+both` to soften that cut. This does NOT risk the 0.7.53 bug (`pageFadeIn` stacking with View
+Transition's own cross-fade, which caused the original flicker) — that conflict can only happen
+where the browser's View Transition animation is actually running, and at this same breakpoint
+it's already force-disabled by the rule above, so there's nothing left to stack with.
 
 **SEO/share-preview metadata is generated, not static image files.** No favicon/OG image
 assets exist in the repo (no logo was ever made) — `app/icon.tsx`/`app/apple-icon.tsx`/

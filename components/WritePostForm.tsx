@@ -124,81 +124,90 @@ export default function WritePostForm({
       : seriesOptions
   ).slice(0, 6);
 
+  // All five body-mutation helpers below go through document.execCommand("insertText", ...)
+  // instead of setBody(splicedString) + manually reassigning el.value via React's controlled-
+  // input re-render. Setting a textarea's value via JS (which is what React does under the hood
+  // for a controlled input whenever the new value differs from the DOM's current one) discards
+  // the browser's native undo/redo history for everything before that point — execCommand fires
+  // a real "input" event instead, so it lands in the same undo stack as normal typing, and the
+  // existing onChange={(e) => setBody(e.target.value)} on the <textarea> picks up the resulting
+  // value exactly as before (no change needed there). This is why writing in this form used to
+  // make Cmd+Z stop working almost immediately — Tab-indenting a code block or file tree (common
+  // in this blog's content) reset the undo baseline every time. The one deliberate exception is
+  // uploadImageAtCursor's async placeholder->URL replace below, which stays a plain setBody call.
   const wrapSelection = (marker: string, endMarker = marker) => {
     const el = bodyRef.current;
     if (!el) return;
+    el.focus();
     const { selectionStart: s, selectionEnd: e } = el;
-    const selected = body.slice(s, e) || "텍스트";
-    const next = body.slice(0, s) + marker + selected + endMarker + body.slice(e);
-    setBody(next);
-    requestAnimationFrame(() => {
-      const pos = s + marker.length;
-      el.focus();
-      el.setSelectionRange(pos, pos + selected.length);
-    });
+    const selected = el.value.slice(s, e) || "텍스트";
+    document.execCommand("insertText", false, marker + selected + endMarker);
+    const pos = s + marker.length;
+    el.setSelectionRange(pos, pos + selected.length);
   };
 
   const insertLinePrefix = (prefix: string) => {
     const el = bodyRef.current;
     if (!el) return;
+    el.focus();
     const s = el.selectionStart;
-    const lineStart = body.lastIndexOf("\n", s - 1) + 1;
-    const next = body.slice(0, lineStart) + prefix + body.slice(lineStart);
-    setBody(next);
-    requestAnimationFrame(() => {
-      const pos = s + prefix.length;
-      el.focus();
-      el.setSelectionRange(pos, pos);
-    });
+    const lineStart = el.value.lastIndexOf("\n", s - 1) + 1;
+    el.setSelectionRange(lineStart, lineStart);
+    document.execCommand("insertText", false, prefix);
+    const pos = s + prefix.length;
+    el.setSelectionRange(pos, pos);
   };
 
   const insertBlock = (template: string, cursorOffset?: number) => {
     const el = bodyRef.current;
     if (!el) return;
+    el.focus();
     const s = el.selectionStart;
-    const e = el.selectionEnd;
-    const before = body.slice(0, s);
+    const before = el.value.slice(0, s);
     const needsNL = before.length > 0 && !before.endsWith("\n");
     const insertText = (needsNL ? "\n" : "") + template + "\n";
-    const next = before + insertText + body.slice(e);
-    setBody(next);
-    requestAnimationFrame(() => {
-      const pos = before.length + (needsNL ? 1 : 0) + (cursorOffset ?? template.length);
-      el.focus();
-      el.setSelectionRange(pos, pos);
-    });
+    document.execCommand("insertText", false, insertText);
+    const pos = before.length + (needsNL ? 1 : 0) + (cursorOffset ?? template.length);
+    el.setSelectionRange(pos, pos);
   };
 
   // A plain <textarea> treats Tab as "move focus to the next field" by default — markdown/code
-  // editing wants it to indent instead. No selection: insert 2 spaces at the cursor. Selection
-  // spanning one or more lines: indent every line in it (matches how code editors handle
-  // indenting a selected block), not just replace the selected text with spaces.
+  // editing wants it to indent instead, and Shift+Tab to outdent. No selection: Tab inserts 2
+  // spaces at the cursor, Shift+Tab removes up to 2 leading spaces from the current line.
+  // Selection spanning one or more lines: indent/outdent every line it touches (matches how code
+  // editors handle a selected block), not just replace the selected text.
   const handleBodyKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key !== "Tab") return;
     e.preventDefault();
     const el = bodyRef.current;
     if (!el) return;
     const { selectionStart: s, selectionEnd: selEnd } = el;
+    const value = el.value;
 
     if (s === selEnd) {
-      const next = body.slice(0, s) + "  " + body.slice(s);
-      setBody(next);
-      requestAnimationFrame(() => {
-        el.focus();
-        el.setSelectionRange(s + 2, s + 2);
-      });
+      if (!e.shiftKey) {
+        document.execCommand("insertText", false, "  ");
+        return;
+      }
+      const lineStart = value.lastIndexOf("\n", s - 1) + 1;
+      const lineEnd = value.indexOf("\n", s);
+      const line = value.slice(lineStart, lineEnd === -1 ? value.length : lineEnd);
+      const removed = line.match(/^ {1,2}/)?.[0].length ?? 0;
+      if (removed === 0) return;
+      el.setSelectionRange(lineStart, lineStart + removed);
+      document.execCommand("insertText", false, "");
+      const pos = Math.max(lineStart, s - removed);
+      el.setSelectionRange(pos, pos);
       return;
     }
 
-    const lineStart = body.lastIndexOf("\n", s - 1) + 1;
-    const selected = body.slice(lineStart, selEnd);
-    const indented = selected.replace(/^/gm, "  ");
-    const next = body.slice(0, lineStart) + indented + body.slice(selEnd);
-    setBody(next);
-    requestAnimationFrame(() => {
-      el.focus();
-      el.setSelectionRange(lineStart, lineStart + indented.length);
-    });
+    const lineStart = value.lastIndexOf("\n", s - 1) + 1;
+    const selected = value.slice(lineStart, selEnd);
+    const transformed = e.shiftKey ? selected.replace(/^ {1,2}/gm, "") : selected.replace(/^/gm, "  ");
+    if (transformed === selected) return;
+    el.setSelectionRange(lineStart, selEnd);
+    document.execCommand("insertText", false, transformed);
+    el.setSelectionRange(lineStart, lineStart + transformed.length);
   };
 
   // Matches the 4MB cap actions.ts#uploadImage enforces server-side — checked here too so an
@@ -221,7 +230,14 @@ export default function WritePostForm({
 
     const token = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const placeholder = `![업로드 중...](uploading:${token})`;
-    setBody((prev) => prev.slice(0, pos) + placeholder + "\n" + prev.slice(pos));
+    const el = bodyRef.current;
+    if (el) {
+      el.focus();
+      el.setSelectionRange(pos, pos);
+      document.execCommand("insertText", false, `${placeholder}\n`);
+    } else {
+      setBody((prev) => prev.slice(0, pos) + placeholder + "\n" + prev.slice(pos));
+    }
 
     const formData = new FormData();
     formData.append("image", file);

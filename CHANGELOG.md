@@ -3,6 +3,53 @@
 이 프로젝트의 주요 변경 사항을 버전(작업 단위) 별로 기록합니다. 형식은
 [Keep a Changelog](https://keepachangelog.com/)를 참고합니다.
 
+## [0.7.56] - 2026-08-09
+
+### 이전 상태
+
+세 가지 별개 피드백: (1) 모바일에서는 View Transition을 아예 꺼놨더니(0.7.54) 프로젝트 상세
+진입이 순간적으로 컷되는 느낌이라 "딱딱하다"는 후속 피드백. (2) 글쓰기 폼 본문에서 Tab으로
+들여쓰기는 되는데 Shift+Tab으로 내어쓰기가 안 됨. (3) 같은 곳에서 Cmd+Z(되돌리기)가 아예 안 먹음.
+
+### Fixed
+
+- **Cmd+Z 되돌리기 안 먹던 근본 원인**: `components/WritePostForm.tsx`의 본문 `<textarea>`는
+  React 컨트롤드 컴포넌트(`value={body}`)인데, Tab 들여쓰기·툴바 버튼(굵게/기울임/헤딩/코드블록
+  등)·이미지 붙여넣기 placeholder 삽입이 전부 `setBody(스플라이싱한문자열)`로 구현되어 있었음 —
+  이건 React가 DOM의 `.value`를 JS로 직접 재설정하는 경로라, 브라우저(Chrome)가 그 시점 이전의
+  네이티브 실행취소 스택을 버림. 이 블로그 글쓰기는 코드블록/파일트리처럼 Tab을 자주 쓰는
+  콘텐츠가 많아서 사실상 거의 항상 깨져있었던 것. `wrapSelection`/`insertLinePrefix`/
+  `insertBlock`/Tab 처리/이미지 placeholder 즉시삽입 5곳을 `document.execCommand("insertText",
+  false, text)`로 전환 — 진짜 네이티브 `input` 이벤트를 발생시켜 브라우저 실행취소 스택에
+  정상 편입되고, 기존 `onChange`가 그 결과를 그대로 받아 `setBody`로 동기화하므로 이후 로직(디바운스
+  미리보기 등)은 변경 없음. `uploadImageAtCursor`의 업로드 완료 후 placeholder→URL 교체(비동기,
+  사용자가 이미 다른 곳을 타이핑 중일 수 있음)만 의도적으로 `setBody` 유지 — execCommand로 바꾸면
+  업로드가 끝나는 순간 커서가 강제로 placeholder 위치로 이동해 타이핑을 방해하게 됨.
+
+### Added
+
+- `components/WritePostForm.tsx`의 `handleBodyKeyDown`에 Shift+Tab 내어쓰기 추가: 캐럿만 있으면
+  현재 줄 시작의 공백 최대 2칸 제거, 선택 범위가 있으면 선택이 걸친 모든 줄 앞의 공백을 각각 최대
+  2칸까지 제거(`replace(/^ {1,2}/gm, "")`) — 기존 Tab 들여쓰기의 멀티라인 처리와 대칭.
+- `app/globals.css`: `.proj-grid`(프로젝트 상세 페이지 전용 클래스 — 목록 페이지는 이 클래스를
+  안 씀)의 `@media (max-width: 800px)` 블록에 기존 `pageFadeIn` 키프레임 재사용(`0.4s ease
+  both`). 이 너비에서는 View Transition 자체가 이미 `!important`로 완전히 꺼져있어서(0.7.54)
+  0.7.53에서 겪었던 "pageFadeIn과 View Transition 크로스페이드가 겹쳐서 깜빡이는" 충돌이 애초에
+  발생할 수 없는 조건이라 안전하게 재사용 가능 — `prefers-reduced-motion: reduce`에서는 기존
+  view-transition 무효화 블록에 `.proj-grid { animation: none; }`를 같이 추가해 끔.
+
+### 검증
+
+- `npx tsc --noEmit`, `npx eslint .`, `rm -rf .next && npm run build` 통과.
+- `next start` + 실제 Chrome 브라우저(JS 실행으로 textarea.value 직접 확인, 스크린샷 픽셀
+  비교가 아님): "hello world" 입력 → Tab → `"  hello world"` 확인 → Shift+Tab → `"hello
+  world"`로 복원 확인 → Cmd+Z 두 번 → 들여쓰기 상태 → 원래 타이핑 상태로 순서대로 되돌아가는 것
+  확인. 전체 선택 후 굵게 툴바 버튼 클릭 → `"**hello world**"` 확인 → Cmd+Z → `"hello
+  world"`로 복원 확인(Tab뿐 아니라 툴바 액션도 실행취소 체인에 들어감을 확인).
+- `window.innerWidth`를 500px(모바일)로 두고 `/projects/fora` 방문 → `getComputedStyle(.proj-grid)
+  .animationName`이 `"pageFadeIn"`인 것 확인, 1200px(데스크톱)로 리사이즈 → `"none"`인 것 확인
+  (데스크톱에서 회귀 없음).
+
 ## [0.7.55] - 2026-08-09
 
 ### 이전 상태

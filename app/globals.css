@@ -427,6 +427,12 @@ html.theme-transition::view-transition-new(root) { animation: theme-reveal 0.6s 
 @media (max-width: 800px) {
   .proj-grid { grid-template-columns: 1fr; }
   .proj-sidebar { position: static; top: auto; }
+  /* View Transitions are force-disabled at this width (below), so there's no morph animation
+     at all on mobile — reusing pageFadeIn here doesn't risk the desktop stacking-animation
+     flicker that .proj-grid deliberately avoids above. Softens what was otherwise an instant,
+     jarring cut into the detail page. Only .proj-grid has this class (the /projects list page
+     is a plain <main>), so this only ever fires on entering the detail page, never the list. */
+  .proj-grid { animation: pageFadeIn 0.4s ease both; }
 }
 
 /* — loading.tsx skeletons — */
@@ -455,6 +461,7 @@ html.theme-transition::view-transition-new(root) { animation: theme-reveal 0.6s 
   ::view-transition-new(*) {
     animation: none !important;
   }
+  .proj-grid { animation: none; }
 }
 /* Mobile: the morph reads as janky rather than delightful at phone widths (small viewport,
    image/title jumping a large relative distance in a short time) — same 800px breakpoint
