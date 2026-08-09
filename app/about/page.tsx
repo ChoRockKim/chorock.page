@@ -162,7 +162,9 @@ export default async function AboutPage() {
           <span style={{ fontSize: 12.5, opacity: 0.55 }}>
             · {PROFILE.role}
           </span>
-          <VisitCounter />
+          <span style={{ marginLeft: "auto" }}>
+            <VisitCounter />
+          </span>
         </div>
         <h1
           style={{

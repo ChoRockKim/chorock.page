@@ -24,7 +24,7 @@ export default function VisitCounter() {
 
   return (
     <span style={{ fontSize: 12.5, opacity: 0.55 }}>
-      · 오늘 {counts.today} · 총 {counts.total}
+      today {counts.today} · total {counts.total}
     </span>
   );
 }
