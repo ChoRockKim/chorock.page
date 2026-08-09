@@ -169,12 +169,56 @@ export default function WritePostForm({
     });
   };
 
+  // A plain <textarea> treats Tab as "move focus to the next field" by default — markdown/code
+  // editing wants it to indent instead. No selection: insert 2 spaces at the cursor. Selection
+  // spanning one or more lines: indent every line in it (matches how code editors handle
+  // indenting a selected block), not just replace the selected text with spaces.
+  const handleBodyKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key !== "Tab") return;
+    e.preventDefault();
+    const el = bodyRef.current;
+    if (!el) return;
+    const { selectionStart: s, selectionEnd: selEnd } = el;
+
+    if (s === selEnd) {
+      const next = body.slice(0, s) + "  " + body.slice(s);
+      setBody(next);
+      requestAnimationFrame(() => {
+        el.focus();
+        el.setSelectionRange(s + 2, s + 2);
+      });
+      return;
+    }
+
+    const lineStart = body.lastIndexOf("\n", s - 1) + 1;
+    const selected = body.slice(lineStart, selEnd);
+    const indented = selected.replace(/^/gm, "  ");
+    const next = body.slice(0, lineStart) + indented + body.slice(selEnd);
+    setBody(next);
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(lineStart, lineStart + indented.length);
+    });
+  };
+
+  // Matches the 4MB cap actions.ts#uploadImage enforces server-side — checked here too so an
+  // oversized paste never leaves the browser. Vercel's own serverless request body cap
+  // (~4.5MB, independent of our code) rejects an over-limit request before it ever reaches our
+  // Server Action, which surfaces client-side as Next's generic masked production error
+  // instead of this action's own clear message — catching it client-side avoids that entirely.
+  const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
+
   // Textareas can't show an inline image while it uploads, so a unique-token placeholder
   // stands in for it — insert immediately at `pos` for feedback, then once the upload
   // action resolves, find-and-replace that exact placeholder string with the real markdown
   // image. The token makes the replace precise even if several images are uploading at once
   // or the user keeps typing elsewhere in the body while they wait.
   const uploadImageAtCursor = (file: File, pos: number): number => {
+    if (file.size > MAX_UPLOAD_BYTES) {
+      setImageError("이미지가 너무 큽니다 (4MB 이하로 올려주세요).");
+      return pos;
+    }
+
     const token = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const placeholder = `![업로드 중...](uploading:${token})`;
     setBody((prev) => prev.slice(0, pos) + placeholder + "\n" + prev.slice(pos));
@@ -182,8 +226,13 @@ export default function WritePostForm({
     const formData = new FormData();
     formData.append("image", file);
     uploadImage(formData)
-      .then(({ url }) => {
-        setBody((prev) => prev.replace(placeholder, `![](${url})`));
+      .then((result) => {
+        if ("error" in result) {
+          setBody((prev) => prev.replace(`${placeholder}\n`, ""));
+          setImageError(result.error);
+        } else {
+          setBody((prev) => prev.replace(placeholder, `![](${result.url})`));
+        }
       })
       .catch((err) => {
         setBody((prev) => prev.replace(`${placeholder}\n`, ""));
@@ -249,9 +298,13 @@ export default function WritePostForm({
     setSaveError(null);
     try {
       const result = await saveDraft(buildInput());
-      setSlug(result.slug);
-      syncSlugToUrl(result.slug);
-      setStatusLabel("임시 저장됨");
+      if ("error" in result) {
+        setSaveError(result.error);
+      } else {
+        setSlug(result.slug);
+        syncSlugToUrl(result.slug);
+        setStatusLabel("임시 저장됨");
+      }
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : "저장에 실패했습니다.");
     } finally {
@@ -264,7 +317,11 @@ export default function WritePostForm({
     setSaveError(null);
     try {
       const result = await publishPost(buildInput());
-      router.push(`/posts/${encodeURIComponent(result.slug)}`);
+      if ("error" in result) {
+        setSaveError(result.error);
+      } else {
+        router.push(`/posts/${encodeURIComponent(result.slug)}`);
+      }
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : "발행에 실패했습니다.");
     } finally {
@@ -630,6 +687,7 @@ export default function WritePostForm({
               value={body}
               onChange={(e) => setBody(e.target.value)}
               onPaste={handleBodyPaste}
+              onKeyDown={handleBodyKeyDown}
               onScroll={() => syncScroll("body")}
             />
           </div>

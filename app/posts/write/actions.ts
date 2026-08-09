@@ -24,13 +24,23 @@ export async function previewMarkdown(markdown: string): Promise<{ content: Reac
 const MAX_UPLOAD_BYTES = 4 * 1024 * 1024; // Vercel's serverless function request body cap
 // (~4.5MB) sits above this regardless of Next's own bodySizeLimit config — see next.config.ts.
 
-export async function uploadImage(formData: FormData): Promise<{ url: string }> {
+// Next.js redacts EVERY thrown Server Action error into a generic "Server Components render"
+// digest message in production, regardless of whether the throw was a genuine bug or a
+// deliberate, safe-to-show validation message — confirmed the hard way: a plain
+// `throw new Error("요약을 입력해주세요.")` for a missing field showed up to the user as the
+// scary generic crash text instead. The fix Next.js actually supports for user-facing messages
+// is to not throw at all for expected/validation outcomes — return a result object instead, so
+// the message reaches the client verbatim. `throw` is reserved for genuinely unexpected errors
+// (DB down, etc.), where showing the generic masked message is the correct/safe behavior.
+export type ActionResult<T> = T | { error: string };
+
+export async function uploadImage(formData: FormData): Promise<ActionResult<{ url: string }>> {
   await requireOwner();
 
   const file = formData.get("image");
-  if (!(file instanceof File)) throw new Error("파일이 없습니다.");
-  if (!file.type.startsWith("image/")) throw new Error("이미지 파일만 업로드할 수 있습니다.");
-  if (file.size > MAX_UPLOAD_BYTES) throw new Error("이미지가 너무 큽니다 (4MB 이하로 올려주세요).");
+  if (!(file instanceof File)) return { error: "파일이 없습니다." };
+  if (!file.type.startsWith("image/")) return { error: "이미지 파일만 업로드할 수 있습니다." };
+  if (file.size > MAX_UPLOAD_BYTES) return { error: "이미지가 너무 큽니다 (4MB 이하로 올려주세요)." };
 
   const buffer = Buffer.from(await file.arrayBuffer());
   const url = await uploadPostImage(buffer);
@@ -88,16 +98,16 @@ async function uniqueSeriesSlug(base: string): Promise<string> {
   return candidate;
 }
 
-async function upsertPost(input: SavePostInput, status: "draft" | "published"): Promise<string> {
+async function upsertPost(input: SavePostInput, status: "draft" | "published"): Promise<ActionResult<{ slug: string }>> {
   await requireOwner();
 
   // Post.summary/content are required at the schema level (no separate "empty draft" state),
   // so validate up front with a message the form can show as-is — otherwise this only
   // surfaces as a raw Mongoose ValidationError with no client-side handler to display it,
   // which looks like the save silently did nothing.
-  if (!input.title.trim()) throw new Error("제목을 입력해주세요.");
-  if (!input.summary.trim()) throw new Error("요약을 입력해주세요.");
-  if (!input.content.trim()) throw new Error("본문을 입력해주세요.");
+  if (!input.title.trim()) return { error: "제목을 입력해주세요." };
+  if (!input.summary.trim()) return { error: "요약을 입력해주세요." };
+  if (!input.content.trim()) return { error: "본문을 입력해주세요." };
 
   await connectToDatabase();
 
@@ -120,7 +130,7 @@ async function upsertPost(input: SavePostInput, status: "draft" | "published"): 
       existing.status = status;
       await existing.save();
       revalidatePosts(existing.slug);
-      return existing.slug;
+      return { slug: existing.slug };
     }
   }
 
@@ -136,7 +146,7 @@ async function upsertPost(input: SavePostInput, status: "draft" | "published"): 
     publishedAt: new Date(),
   });
   revalidatePosts(slug);
-  return slug;
+  return { slug };
 }
 
 /**
@@ -159,12 +169,10 @@ function revalidatePosts(slug: string) {
   revalidatePath("/series");
 }
 
-export async function saveDraft(input: SavePostInput): Promise<{ slug: string }> {
-  const slug = await upsertPost(input, "draft");
-  return { slug };
+export async function saveDraft(input: SavePostInput): Promise<ActionResult<{ slug: string }>> {
+  return upsertPost(input, "draft");
 }
 
-export async function publishPost(input: SavePostInput): Promise<{ slug: string }> {
-  const slug = await upsertPost(input, "published");
-  return { slug };
+export async function publishPost(input: SavePostInput): Promise<ActionResult<{ slug: string }>> {
+  return upsertPost(input, "published");
 }

@@ -195,6 +195,30 @@ that ceiling entirely but is more infra than a single-owner blog's editor needs.
 **Header search** (`app/api/search/route.ts` + `lib/posts.ts#searchPosts`) does a regex
 match against title/summary/tags server-side — it is not a full-text/Atlas Search index.
 
+**Visitor counting (`오늘`/`총` next to the avatar on `/about`) is two separate client
+components, deliberately not merged into one.** `components/VisitTracker.tsx` (mounted once in
+`app/layout.tsx`, no UI, fires on every route) `POST`s `app/api/visits/route.ts` to record a
+visit; `components/VisitCounter.tsx` (mounted only in `app/about/page.tsx`) separately `GET`s
+the same route to display current counts, never recording. This has to be client-side at all
+(not counted during the page's own server render) because `/about` — like most routes — is ISR
+(`revalidate = 300`), so a server-render-time count would only tick on cache regeneration, not
+on real visits. `DailyVisitModel` (`models/Visit.ts`) is one document per KST calendar day
+(`Intl.DateTimeFormat` with an explicit `timeZone: "Asia/Seoul"` — Vercel's functions run in UTC,
+so a plain `Date` would roll "today" over at 9am KST instead of midnight); the site total is a
+`$sum` aggregation across that collection rather than a second, separately-maintained running
+counter, so the two numbers can never drift apart. Uniqueness is a single httpOnly cookie
+(`chorock_last_visit`, value = last-recorded KST date) checked in the `POST` handler, not
+IP-based, to avoid storing IPs at all. **Known, accepted quirk**: on the very first `/about`
+load of a browser session (no cookie yet), `VisitTracker`'s `POST` and `VisitCounter`'s `GET`
+fire as two independent concurrent requests with no ordering guarantee, so the displayed numbers
+can be momentarily inconsistent (e.g. "오늘 1 · 총 0") if the `GET` resolves before the `POST`'s
+increment commits — confirmed via direct testing, and confirmed it self-corrects on the very
+next load once the cookie exists (`VisitTracker`'s `POST` becomes a dedup no-op, so there's only
+one request in flight). Deliberately not "fixed" by having `VisitCounter` do the recording
+itself — that would remove the display race but introduce a real double-counting risk instead
+(two components racing to see "no cookie yet" and both incrementing) for a purely decorative
+counter, a worse trade.
+
 **SEO/share-preview metadata is generated, not static image files.** No favicon/OG image
 assets exist in the repo (no logo was ever made) — `app/icon.tsx`/`app/apple-icon.tsx`/
 `app/opengraph-image.tsx` all use `next/og`'s `ImageResponse` to render the same "초"
@@ -428,6 +452,23 @@ if you still have/remember its `?slug=` URL. `publishedAt` only gets stamped at 
 draft→published transition (checked via `existing.status !== "published"`, not via
 `publishedAt` presence — the schema requires `publishedAt` to always have *some* value, so it
 can't double as a "never published" signal the way a nullable field could).
+
+**Server Actions must `return { error }`, never `throw`, for any message meant to reach the
+user.** Next.js redacts every thrown Server Action error into a generic "An error occurred in
+the Server Components render..." message in production, *regardless of whether the throw was a
+genuine bug or a deliberate, safe validation message* — hit this for real: a plain
+`throw new Error("요약을 입력해주세요.")` for an empty summary field showed up to the user as
+that scary generic crash text instead, confirmed by reading the actual Vercel function log
+(`Error: 요약을 입력해주세요.` was right there — the message was never wrong, just discarded
+before reaching the client). `app/posts/write/actions.ts`'s `ActionResult<T> = T | { error:
+string }` return-value pattern (used by `saveDraft`/`publishPost`/`uploadImage`, and mirrored in
+`app/posts/[slug]/actions.ts#deletePost`) is the actual fix Next.js supports — returning a plain
+object isn't "error handling" from Next's perspective at all, just a normal serializable return
+value, so it always reaches the client verbatim. Reserve `throw` for genuinely unexpected
+failures (DB down, etc.) where the generic masked message is the correct, safe behavior — every
+caller (`WritePostForm.tsx`, `DeletePostButton.tsx`) checks `"error" in result` first and only
+falls through to its `catch` block for the truly-unexpected case. Any new Server Action with a
+user-facing validation message needs this same pattern from the start, not a `throw`.
 
 **`app/posts/[slug]/edit/page.tsx` reuses `WritePostForm` via a `mode: "write" | "edit"` prop**
 rather than being a separate form. The two modes differ only where reusing `/posts/write`'s

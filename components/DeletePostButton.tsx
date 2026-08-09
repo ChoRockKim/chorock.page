@@ -13,8 +13,13 @@ export default function DeletePostButton({ slug }: { slug: string }) {
 
     setDeleting(true);
     try {
-      await deletePost(slug);
-      router.push("/posts");
+      const result = await deletePost(slug);
+      if (result && "error" in result) {
+        window.alert(result.error);
+        setDeleting(false);
+      } else {
+        router.push("/posts");
+      }
     } catch (err) {
       window.alert(err instanceof Error ? err.message : "삭제에 실패했습니다.");
       setDeleting(false);

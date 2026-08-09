@@ -5,6 +5,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import QueryProvider from "@/components/QueryProvider";
 import AuthSessionProvider from "@/components/AuthSessionProvider";
+import VisitTracker from "@/components/VisitTracker";
 
 const SITE_TITLE = "chorock.page";
 const SITE_DESCRIPTION = "개발 기록을 남기는 블로그";
@@ -83,6 +84,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         </noscript>
       </head>
       <body>
+        <VisitTracker />
         <AuthSessionProvider>
           <QueryProvider>
             <Header />

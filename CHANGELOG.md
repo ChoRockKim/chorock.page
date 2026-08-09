@@ -3,6 +3,111 @@
 이 프로젝트의 주요 변경 사항을 버전(작업 단위) 별로 기록합니다. 형식은
 [Keep a Changelog](https://keepachangelog.com/)를 참고합니다.
 
+## [0.7.49] - 2026-08-09
+
+### 이전 상태
+
+방문자 집계 인프라가 전혀 없었음(Vercel Analytics 미사용). `/about` 프로필 사진 오른쪽에
+오늘/총 방문자 수를 표시하고 싶다는 요청 — 쿠키 기반 고유 방문자 중복제거, 사이트 전체 방문
+집계로 결정.
+
+### Added
+
+- `models/Visit.ts`: `DailyVisitModel`(KST 날짜별 1문서 + count, unique index). 총 방문자 수는
+  별도 카운터 없이 이 컬렉션 전체를 `$sum` 집계해서 계산(두 숫자가 서로 어긋날 여지 자체를 없앰).
+- `app/api/visits/route.ts`: `POST`(기록 — httpOnly 쿠키로 하루 1회만 증가, KST 기준 날짜는
+  `Intl.DateTimeFormat`에 `timeZone: "Asia/Seoul"` 명시해서 계산 — Vercel 함수는 UTC라 그냥
+  `Date`를 쓰면 한국 기준 자정이 아니라 오전 9시에 날짜가 바뀜), `GET`(조회 전용, 기록 안 함).
+- `components/VisitTracker.tsx`: UI 없는 클라이언트 컴포넌트, `app/layout.tsx`에 한 번만
+  마운트해서 모든 페이지 방문 시 `POST` 호출(사이트 전체 집계). `/about`이 ISR라 서버 렌더
+  시점에 카운트하면 실제 방문이 아니라 캐시 재생성 시점에만 올라가므로, 클라이언트 마운트
+  시점에 기록하는 방식이 필수.
+- `components/VisitCounter.tsx`: `app/about/page.tsx`의 프로필 사진+핸들 줄에 추가, 마운트 시
+  `GET`으로 현재 오늘/총 카운트를 받아와 "오늘 N · 총 N"으로 표시(기록은 안 함 — VisitTracker가
+  이미 이 페이지 방문도 기록하므로 중복 집계 방지).
+
+### 검증
+
+- `npx tsc --noEmit`, `npx eslint .`(`.next` 없이), `npm run build` 통과.
+- 실제 프로덕션 DB에 대해 `curl`로 POST/GET 반복 테스트: 같은 쿠키로 재요청 시 중복 증가 안
+  됨, 쿠키 없는 새 요청은 정상 증가, GET은 절대 증가 안 시킴 — 전부 확인 후 테스트로 만든
+  더미 방문 기록은 정리(실제 배포 카운트에 안 섞이게).
+- 브라우저로 `/about` 실제 방문해서 숫자가 뜨는 것 확인. 첫 방문(쿠키 없음) 시 `VisitTracker`의
+  기록 요청과 `VisitCounter`의 조회 요청이 동시에 나가면서 아주 잠깐 숫자가 어긋나 보일 수
+  있음을 확인(예: "오늘 1 · 총 0") — 두 번째 로드부터는 정확히 일치(쿠키가 이미 있어서
+  `VisitTracker`의 요청이 중복 방지로 아무것도 안 하므로 요청이 하나만 남음). 의도적으로 그대로
+  둠 — 둘을 하나로 합치면 이 사소한 표시 어긋남은 없어지지만 대신 진짜 이중 카운트 위험이
+  생겨서, 장식용 카운터에 그 위험을 감수할 이유가 없다고 판단(`CLAUDE.md`에 기록).
+
+## [0.7.48] - 2026-08-08
+
+### 이전 상태
+
+0.7.47에서 이미지 크기 문제로 추정하고 방어 코드를 넣었는데도 "발행"에서까지 동일한
+"An error occurred in the Server Components render..." 에러가 재현됨. 사용자가 Vercel
+함수 로그를 직접 확인해서 붙여넣어준 덕분에 진짜 원인 확인: `Error: 요약을 입력해주세요.`
+— 즉 `app/posts/write/actions.ts#upsertPost`가 의도적으로 던지는 검증 메시지 그 자체였음.
+Next.js가 프로덕션에서 Server Action의 모든 `throw`를 (의도한 메시지든 진짜 버그든 상관없이)
+일반 마스킹 메시지로 바꿔버려서, 사용자에게는 "요약을 입력해주세요"라는 친절한 안내 대신
+정체불명의 크래시 메시지만 보였던 것. 0.7.47에서 의심했던 Vercel 요청 크기 한도는 실제
+원인이 아니었음(다만 이미지 크기 방어 코드 자체는 유효하니 유지).
+
+### Fixed
+
+- `app/posts/write/actions.ts`: `ActionResult<T> = T | { error: string }` 타입 도입.
+  `upsertPost`/`saveDraft`/`publishPost`/`uploadImage`의 의도적 검증 에러(빈 제목/요약/본문,
+  파일 없음, 이미지 아님, 4MB 초과)를 전부 `throw` 대신 `return { error }`로 변경 — Next.js는
+  Server Action의 **반환값**은 그대로 클라이언트에 전달하므로(마스킹 대상은 오직 `throw`뿐),
+  이렇게 하면 의도한 메시지가 실제로 사용자에게 도달함. 진짜 예상 못 한 에러(DB 다운 등)는
+  여전히 `throw`로 남겨서 일반 마스킹 메시지가 뜨는 게 맞는 경우와 구분함.
+- `app/posts/[slug]/actions.ts#deletePost`도 동일 패턴 적용(이미 삭제된 글 재삭제 시도 등).
+- `components/WritePostForm.tsx`, `components/DeletePostButton.tsx`: 반환값에
+  `"error" in result`가 있으면 그 메시지를 그대로 보여주고, 없으면 성공 처리하도록 수정
+  (기존 `try/catch`는 진짜 예외 상황을 위해 그대로 유지).
+
+### 검증
+
+- `npx tsc --noEmit`, `npx eslint .`(`.next` 없이), `npm run build` 통과.
+- `actions.ts`에 남은 `throw new Error(...)`가 `requireOwner()`(미들웨어가 이미 막아주는 로그인
+  가드, 정상 플로우에서 도달 불가)뿐인지 직접 확인.
+
+## [0.7.47] - 2026-08-08
+
+### 이전 상태
+
+두 가지 보고: (1) 글쓰기 중 "임시 저장"을 누르면 "An error occurred in the Server Components
+render..."(프로덕션에서 실제 에러 내용을 가리는 Next.js 기본 메시지)가 뜸 — 원인 조사 결과
+DB 저장 로직(`upsertPost`)과 마크다운 컴파일 파이프라인을 실제 프로덕션 DB로 직접 테스트해도
+문제가 재현되지 않았고, 사용자 확인으로 (a) 에러 직전 이미지를 붙여넣었고 (b) Vercel에 S3
+환경변수는 이미 등록돼 있다는 게 확인됨 — 이미지 붙여넣기 업로드 요청이 Vercel 서버리스
+함수 자체의 요청 본문 한도(~4.5MB, 우리 쪽 4MB 제한과는 별개의 더 바깥 하드 캡)에 걸려서
+우리 코드에 도달하기도 전에 거부되고, 그게 이 마스킹된 에러로 나타났을 가능성이 가장 유력한
+것으로 좁혀짐(완전히 재현/확정하진 못했지만 가장 설명이 되는 시나리오). (2) 글쓰기 본문에서
+Tab을 누르면 들여쓰기 대신 다른 요소로 포커스가 넘어가는 게 불편하다는 요청.
+
+### Fixed
+
+- `components/WritePostForm.tsx`의 `uploadImageAtCursor`에 클라이언트 사이드 4MB 크기 체크
+  추가(`app/posts/write/actions.ts#uploadImage`의 서버 사이드 체크와 동일한 값) — 큰 이미지가
+  아예 브라우저를 벗어나지 않게 해서, Vercel의 요청 본문 한도에 걸려 마스킹된 에러로 나타나던
+  것을 방지하고 대신 "이미지가 너무 큽니다" 메시지를 바로 보여줌.
+
+### Added
+
+- `components/WritePostForm.tsx`: 본문 textarea에 `onKeyDown` 핸들러 추가 — Tab 키를 누르면
+  기본 동작(포커스 이동)을 막고 커서 위치에 공백 2칸을 삽입. 여러 줄이 선택된 상태에서 Tab을
+  누르면 선택된 모든 줄을 한 번에 들여쓰기(코드 에디터의 블록 들여쓰기와 동일한 동작).
+
+### 검증
+
+- `npx tsc --noEmit`, `npx eslint .`(`.next` 없이), `npm run build` 통과.
+- Tab 들여쓰기는 `/posts/write`가 로그인 필요 라우트라 브라우저로 직접 조작 확인은 못 함 —
+  기존 `wrapSelection`/`insertLinePrefix`와 동일한 커서 조작 패턴을 그대로 따른 코드라 로직상
+  안전하다고 판단했지만, 사용자가 직접 최종 확인 필요.
+- 임시 저장 에러의 정확한 근본 원인(Vercel 요청 본문 한도 vs. 다른 원인)은 실제 서버 로그
+  접근 없이 100% 확정하지 못함 — 4MB 미만 이미지로 재현되는지, 문제가 재발하는지 사용자가
+  직접 확인 필요.
+
 ## [0.7.46] - 2026-08-08
 
 ### 이전 상태

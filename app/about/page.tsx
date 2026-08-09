@@ -8,6 +8,7 @@ import PostCard from "@/components/PostCard";
 import ProjectCard from "@/components/ProjectCard";
 import SkillTag from "@/components/SkillTag";
 import ScrollReveal from "@/components/ScrollReveal";
+import VisitCounter from "@/components/VisitCounter";
 
 // See app/posts/page.tsx for why openGraph needs its own explicit title/description/images.
 export const metadata: Metadata = {
@@ -161,6 +162,7 @@ export default async function AboutPage() {
           <span style={{ fontSize: 12.5, opacity: 0.55 }}>
             · {PROFILE.role}
           </span>
+          <VisitCounter />
         </div>
         <h1
           style={{

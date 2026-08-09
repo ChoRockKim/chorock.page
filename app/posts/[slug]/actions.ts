@@ -10,12 +10,15 @@ async function requireOwner() {
   if (!session) throw new Error("로그인이 필요합니다.");
 }
 
-export async function deletePost(slug: string): Promise<void> {
+// See app/posts/write/actions.ts's ActionResult comment — Next.js masks every thrown Server
+// Action error into a generic production message, so an intentional/expected error like "already
+// deleted" needs to be a return value instead of a throw to actually reach the user.
+export async function deletePost(slug: string): Promise<{ error: string } | void> {
   await requireOwner();
   await connectToDatabase();
 
   const result = await PostModel.deleteOne({ slug });
-  if (result.deletedCount === 0) throw new Error("삭제할 글을 찾지 못했습니다.");
+  if (result.deletedCount === 0) return { error: "삭제할 글을 찾지 못했습니다." };
 
   // Same cache-busting as app/posts/write/actions.ts#revalidatePosts — otherwise the deleted
   // post keeps showing on /posts (0.7.26), its own now-404 detail page keeps serving the
