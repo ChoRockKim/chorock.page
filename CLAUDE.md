@@ -53,6 +53,31 @@ type-checking and ESLint as part of `build`, so a green build implies both pass)
     built-in theme out of the box. Required bumping `shiki` from `^1` to `^4` (the transformer
     package pins shiki 4.x internally); `rehype-pretty-code@0.14.5`'s peer range
     (`^1 || ^2 || ^3 || ^4`) already covered this, so no other pipeline changes were needed.
+    **Rainbow brackets (and syntax highlighting generally) silently no-op for two distinct
+    reasons**, both confirmed directly against real post content and both fixed in the same
+    pass: (1) a fenced code block with no language at all (```` ``` ```` alone) — `rehype-
+    pretty-code` skips it entirely, passing through a bare `<pre><code>` with no highlighting,
+    no `.code-block` styling, no bracket colors; fixed with `defaultLang: "tsx"` so every
+    language-less fence gets tokenized as tsx rather than skipped (imperfect for a genuinely
+    non-JS/TS unlabeled snippet, but "always trigger" was the explicit ask). (2) A language *is*
+    specified but wrong-cased (` ```JAVASCRIPT `/` ```Javascript ` instead of ` ```javascript `)
+    — Shiki's grammar lookup is case-sensitive, and a case mismatch isn't treated as invalid (an
+    error `rehype-pretty-code` would fall back to `defaultLang` for) — it silently renders as
+    one plain unstyled span with zero token colors, while `data-language` (and the header badge
+    it feeds) still shows the original string, so the block *looks* labeled and fine. This is
+    the actual explanation behind "works sometimes, not others" reports — real posts have
+    inconsistently-cased fences throughout. Fixed with a small custom remark plugin
+    (`remarkLowercaseCodeLang`, right before `remarkRehype`) that lowercases every `code` node's
+    `lang` before `rehypePrettyCode` ever sees it — covers every casing at once, whereas
+    `defaultLang` alone only ever covers the fully-missing-language case.
+    **`remark-breaks`** (also in this pipeline) turns every single newline within a
+    paragraph/blockquote into a hard `<br>` instead of CommonMark's default "soft break"
+    (collapsed to a space) — without it, anything typed with single Enters between lines (the
+    write form is a plain `<textarea>`, so that's the natural way to type it) silently runs
+    together into one line. Confirmed as the real cause of a bug report: a post's `> /src` /
+    `> /components` file-tree listing, one path per line, rendered as a single run-on line. This
+    is a site-wide rendering change (affects prose paragraphs everywhere, not just blockquotes)
+    and was applied deliberately as the fix, not as a scoped-down workaround.
 - Series "prev/next" and "related posts" are computed by query (sibling posts sorted by
   `publishedAt`, tag overlap) rather than stored as arrays on the document — there is no
   denormalized ordering to keep in sync when posts are added.
@@ -195,11 +220,16 @@ that ceiling entirely but is more infra than a single-owner blog's editor needs.
 **Header search** (`app/api/search/route.ts` + `lib/posts.ts#searchPosts`) does a regex
 match against title/summary/tags server-side — it is not a full-text/Atlas Search index.
 
-**Visitor counting (`오늘`/`총` next to the avatar on `/about`) is two separate client
-components, deliberately not merged into one.** `components/VisitTracker.tsx` (mounted once in
-`app/layout.tsx`, no UI, fires on every route) `POST`s `app/api/visits/route.ts` to record a
-visit; `components/VisitCounter.tsx` (mounted only in `app/about/page.tsx`) separately `GET`s
-the same route to display current counts, never recording. This has to be client-side at all
+**Visitor counting (`today`/`total`, right-aligned in the avatar row on `/about`) is two
+separate client components, deliberately not merged into one.** `components/VisitTracker.tsx`
+(mounted once in `app/layout.tsx`, no UI, fires on every route) `POST`s
+`app/api/visits/route.ts` to record a visit; `components/VisitCounter.tsx` (mounted only in
+`app/about/page.tsx`) separately `GET`s the same route to display current counts, never
+recording. `VisitCounter` renders `today 0 · total 0` immediately (state initialized to
+`{ today: 0, total: 0 }`, not `null`) rather than nothing while the fetch is in flight — it
+used to render nothing until loaded, which per user feedback meant the counter was slow enough
+to show up that people didn't notice it existed in the first place; showing 0 immediately and
+letting the real numbers replace it a moment later is the fix. This has to be client-side at all
 (not counted during the page's own server render) because `/about` — like most routes — is ISR
 (`revalidate = 300`), so a server-render-time count would only tick on cache regeneration, not
 on real visits. `DailyVisitModel` (`models/Visit.ts`) is one document per KST calendar day

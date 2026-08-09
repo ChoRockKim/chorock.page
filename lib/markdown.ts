@@ -5,6 +5,7 @@ import { jsx, jsxs } from "react/jsx-runtime";
 import { unified } from "unified";
 import remarkParse from "remark-parse";
 import remarkGfm from "remark-gfm";
+import remarkBreaks from "remark-breaks";
 import remarkRehype from "remark-rehype";
 import rehypeSlug from "rehype-slug";
 import rehypePrettyCode from "rehype-pretty-code";
@@ -43,6 +44,25 @@ export function extractHeadings(markdown: string): Heading[] {
   return headings;
 }
 
+/**
+ * Shiki's grammar lookup is case-sensitive and only recognizes lowercase ids ("javascript",
+ * not "JAVASCRIPT" or "Javascript") — a mismatched-case fence isn't treated as invalid/missing
+ * (which would at least fall back to `defaultLang` below), it silently tokenizes as one plain
+ * unstyled span, no syntax colors, no bracket colors, while `data-language` still shows the
+ * original-cased string so the header badge looks fine. Confirmed directly against a real post
+ * whose code fences were inconsistently ```JAVASCRIPT / ``` Javascript / ```(no language) —
+ * exactly the "sometimes triggers, sometimes doesn't" symptom reported. Lowercasing here, before
+ * rehypePrettyCode ever sees it, fixes this for every casing at once instead of only the
+ * genuinely-missing-language case defaultLang covers.
+ */
+function remarkLowercaseCodeLang() {
+  return (tree: import("mdast").Root) => {
+    visit(tree, "code", (node) => {
+      if (node.lang) node.lang = node.lang.toLowerCase();
+    });
+  };
+}
+
 const CJK_RANGE = /[ㄱ-힝一-鿿]/g;
 
 export function estimateReadTime(markdown: string): number {
@@ -64,16 +84,34 @@ export function estimateReadTime(markdown: string): number {
  * compileMDX. Plain remark/rehype treats `{}` as literal text, matching the
  * old blog's markdown-it rendering, and rehype-pretty-code/rehype-slug work
  * identically either way since they operate on the hast tree, not on MDX.
+ *
+ * remarkBreaks turns every single newline within a paragraph/blockquote into a hard <br>
+ * instead of CommonMark's default "soft break" (collapsed to a space) — without it, content
+ * typed with single Enters between lines (the write form is a plain <textarea>, so that's the
+ * natural way to type it) silently runs together into one line. Confirmed as the actual cause
+ * of a real bug report: a post's `> /src` / `> /components` file-tree listing, one path per
+ * line, rendered as a single run-on line. This affects prose paragraphs site-wide too, not just
+ * blockquotes — every existing post with Enter-separated lines within a paragraph now renders
+ * those as visible line breaks, which is the intended fix, not a side effect to guard against.
  */
 export async function compileMarkdown(markdown: string): Promise<{ content: ReactNode }> {
   const file = await unified()
     .use(remarkParse)
     .use(remarkGfm)
+    .use(remarkBreaks)
+    .use(remarkLowercaseCodeLang)
     .use(remarkRehype)
     .use(rehypeSlug)
     .use(rehypePrettyCode, {
       theme: "github-dark",
       keepBackground: true,
+      // Fenced code blocks with no language (```` ``` ```` alone) otherwise get skipped by
+      // rehype-pretty-code entirely — no highlighting, no .code-block styling, no bracket
+      // colors, just a bare <pre><code> passthrough (confirmed directly). Treating them as tsx
+      // guarantees every code block gets colorized brackets regardless of whether the author
+      // remembered a language tag, at the cost of possibly-wrong syntax coloring for a
+      // non-JS/TS snippet that forgot its language — an acceptable trade for "always trigger".
+      defaultLang: "tsx",
       // VSCode-style rainbow bracket matching (nested (), [], {}, <> each get a distinct,
       // rotating color) — supported for every built-in Shiki theme with no extra config.
       transformers: [transformerColorizedBrackets()],

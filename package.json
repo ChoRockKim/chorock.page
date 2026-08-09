@@ -1,6 +1,6 @@
 {
   "name": "next-blog",
-  "version": "0.7.49",
+  "version": "0.7.50",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -24,6 +24,7 @@
     "rehype-pretty-code": "^0.14.0",
     "rehype-react": "^8.0.0",
     "rehype-slug": "^6.0.0",
+    "remark-breaks": "^4.0.0",
     "remark-gfm": "^4.0.0",
     "remark-parse": "^11.0.0",
     "remark-rehype": "^11.1.1",
