@@ -3,6 +3,40 @@
 이 프로젝트의 주요 변경 사항을 버전(작업 단위) 별로 기록합니다. 형식은
 [Keep a Changelog](https://keepachangelog.com/)를 참고합니다.
 
+## [0.7.54] - 2026-08-09
+
+### 이전 상태
+
+0.7.53에서 pageFadeIn 제거로 목록→상세 방향은 깜빡임이 없어졌는데, 상세→목록으로 돌아올 때는
+여전히 깜빡인다는 재보고. 방향에 따라 다르다는 게 힌트 — 같은 원인(pageFadeIn)이 아니라
+목록 페이지 쪽에만 있는 다른 무언가일 가능성. 추가로, 트랜지션 자체가 모바일 화면에서는
+경험이 별로라 모바일에서는 꺼달라는 요청.
+
+### Fixed
+
+- `app/projects/page.tsx`: 그리드에 걸려있던 `className="stagger-list"` 제거 —
+  `components/PostsListClient.tsx`도 같은 클래스(카드 진입 시 `cardIn` opacity/translateY
+  애니메이션)를 쓰지만 거긴 View Transition을 안 써서 문제 없음. 이 페이지에서만 목록으로
+  돌아올 때마다 카드가 opacity:0부터 다시 애니메이션을 타면서, 그 안에 있는 View Transition
+  대상(커버 이미지/제목)이 제자리로 모프해 들어오는 것과 충돌해 깜빡였던 것 — pageFadeIn 때와
+  같은 종류의 문제였지만 목록 쪽 컴포넌트라 별도로 찾아서 제거.
+
+### Added
+
+- `app/globals.css`: `@media (max-width: 800px)`(`.proj-grid`가 1열로 접히는 것과 같은
+  기준)에서 View Transition 애니메이션을 꺼서 즉시 전환되도록 함(`prefers-reduced-motion`
+  처리와 동일한 패턴, 기준만 다름) — 모바일 화면에서는 이 모프 효과가 오히려 어색하다는
+  사용자 판단.
+
+### 검증
+
+- `npx tsc --noEmit`, `npx eslint .`(`.next` 없이), `npm run build` 통과.
+- `next start` + 실제 Chrome 브라우저로 목록→상세→목록 왕복 확인(스크린샷상 깨짐 없음 —
+  다만 애니메이션 자체의 매끄러움은 300ms 미만이라 스크린샷 폴링으로 완전히 보장은 못 함,
+  최종 확인은 사용자 필요). 브라우저 창을 390px로 줄여서 `window.matchMedia("(max-width:
+  800px)").matches`가 `true`로 뜨는 것 확인, 그 너비에서 카드 클릭 → 상세 이동이 정상 동작하는
+  것도 스크린샷으로 확인.
+
 ## [0.7.53] - 2026-08-09
 
 ### 이전 상태

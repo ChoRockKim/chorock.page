@@ -456,6 +456,17 @@ html.theme-transition::view-transition-new(root) { animation: theme-reveal 0.6s 
     animation: none !important;
   }
 }
+/* Mobile: the morph reads as janky rather than delightful at phone widths (small viewport,
+   image/title jumping a large relative distance in a short time) — same 800px breakpoint
+   .proj-grid itself uses to collapse to a single column, so "mobile" means the same thing here
+   as it already does for this page's own layout. Just an instant swap below that width. */
+@media (max-width: 800px) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}
 
 .img-placeholder {
   display: flex;

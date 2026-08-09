@@ -314,6 +314,23 @@ detail→list), which is what actually read as "flickering" once a real person w
 flagged risk after the user reported it live). Fixed by removing `pageFadeIn` from both — no
 replacement entrance animation needed since the view transition itself already provides one.
 
+**A third, asymmetric flicker source**: fixing both of the above made list→detail smooth, but
+detail→list still flickered — the giveaway that it wasn't the same root cause again is that it
+only happened in *one* direction. `app/projects/page.tsx`'s grid had `className="stagger-list"`
+(the same `cardIn` opacity/translateY keyframe `components/PostsListClient.tsx` uses, per-child
+`nth-child` delays), which re-fires on every mount of the grid — including landing back on it via
+`next-view-transitions`' `Link` from a detail page — fighting the transition's own morph of that
+same card's cover image/title back into place. The list page's own `<ProjectCard>` grid no longer
+uses `.stagger-list` (removed only from this usage — `PostsListClient.tsx`'s is untouched, it
+doesn't participate in View Transitions so there's nothing for it to conflict with there).
+
+**View Transitions are disabled below 800px** (`app/globals.css`, same `@media (max-width: ...)`
+breakpoint `.proj-grid` itself uses to collapse to one column) — the morph reads as janky rather
+than delightful at phone width (explicit user call), same `animation: none !important` on the
+`::view-transition-*` pseudo-elements as the `prefers-reduced-motion` block right above it, just
+gated on viewport width instead of the motion preference. Both rules can apply simultaneously
+with no conflict (same declaration, `!important` in both).
+
 **SEO/share-preview metadata is generated, not static image files.** No favicon/OG image
 assets exist in the repo (no logo was ever made) — `app/icon.tsx`/`app/apple-icon.tsx`/
 `app/opengraph-image.tsx` all use `next/og`'s `ImageResponse` to render the same "초"
