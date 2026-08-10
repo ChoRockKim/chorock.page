@@ -677,11 +677,29 @@ the first save, the client rewrites the URL to `/posts/write?slug=<slug>` via
 `history.replaceState` (same pattern as `PostsListClient`'s `syncUrl`) so refreshing the page
 resumes the same draft — `getPostForEditing()` in `lib/posts.ts` is the no-status-filter
 counterpart to `getPostBySlug()` that makes this possible (drafts aren't visible through the
-normal published-only lookups). There's no "my drafts" list page — resuming a draft only works
-if you still have/remember its `?slug=` URL. `publishedAt` only gets stamped at the actual
-draft→published transition (checked via `existing.status !== "published"`, not via
-`publishedAt` presence — the schema requires `publishedAt` to always have *some* value, so it
-can't double as a "never published" signal the way a nullable field could).
+normal published-only lookups). `publishedAt` only gets stamped at the actual draft→published
+transition (checked via `existing.status !== "published"`, not via `publishedAt` presence — the
+schema requires `publishedAt` to always have *some* value, so it can't double as a "never
+published" signal the way a nullable field could).
+
+**`components/DraftsPopup.tsx` is the "my drafts" list** (a "임시글 목록" button + modal on
+`/posts/write`, write mode only) — before this, resuming a draft only worked if you still had/
+remembered its `?slug=` URL, since there was no other way back into one. It calls
+`app/posts/write/actions.ts#listDrafts()` (`status: "draft"`, sorted by mongoose's own
+`updatedAt` — `models/Post.ts` has `{ timestamps: true }`, so this is free and always accurate,
+no separate "last edited" bookkeeping needed) and filters out whichever draft is currently open
+(`currentSlug` prop, `WritePostForm`'s own `slug` state) since resuming the draft you're already
+on is meaningless. Reuses the exact `.dialog-backdrop`/`.dialog`/`backdropIn`/`modalPop`
+conventions `Header.tsx`'s search modal already established (including the same
+Escape-to-close/backdrop-click-to-close behavior), so this didn't need any new CSS. Picking a
+draft is a real `<a href="/posts/write?slug=...">` navigation, not a client-side route change —
+`/posts/write` has no `[slug]` dynamic segment (the slug lives in a searchParam, read by
+`app/posts/write/page.tsx` and passed down as the `initial` prop), and `WritePostForm`'s
+title/body state is seeded from `initial` via a `useState` initializer, which only runs on a
+component's first mount. A searchParams-only client-side navigation would very likely just
+re-render the same `WritePostForm` instance with a new `initial` prop instead of remounting it,
+leaving the form showing whatever was being edited before instead of the picked draft — a real
+navigation sidesteps this entirely by forcing everything to load fresh from scratch.
 
 **Server Actions must `return { error }`, never `throw`, for any message meant to reach the
 user.** Next.js redacts every thrown Server Action error into a generic "An error occurred in

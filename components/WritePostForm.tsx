@@ -13,6 +13,7 @@ import {
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { previewMarkdown, saveDraft, publishPost, uploadImage, type SavePostInput } from "@/app/posts/write/actions";
+import DraftsPopup from "@/components/DraftsPopup";
 
 type SeriesOption = { id: string; title: string };
 
@@ -379,9 +380,12 @@ export default function WritePostForm({
           )}
           <span style={{ marginLeft: saveError ? 0 : "auto", fontSize: 12, opacity: 0.5 }}>{statusLabel}</span>
           {mode === "write" && (
-            <button type="button" className="btn btn-secondary" disabled={saving} onClick={handleSaveDraft}>
-              임시 저장
-            </button>
+            <>
+              <DraftsPopup currentSlug={slug} />
+              <button type="button" className="btn btn-secondary" disabled={saving} onClick={handleSaveDraft}>
+                임시 저장
+              </button>
+            </>
           )}
           <button type="button" className="btn btn-primary" disabled={saving} onClick={handlePublish}>
             {mode === "edit" ? "저장" : "발행하기"}

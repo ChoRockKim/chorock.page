@@ -3,6 +3,38 @@
 이 프로젝트의 주요 변경 사항을 버전(작업 단위) 별로 기록합니다. 형식은
 [Keep a Changelog](https://keepachangelog.com/)를 참고합니다.
 
+## [0.7.61] - 2026-08-10
+
+### 이전 상태
+
+"임시저장은 어디에 되는 거냐"는 질문에 답하며 확인한 기존 한계: 임시저장은 실제로 MongoDB
+`posts` 컬렉션(발행 글과 같은 컬렉션, `status: "draft"`만 다름)에 정상 저장되지만, 목록
+페이지가 따로 없어서 `?slug=` URL을 기억해두지 않으면 다시 쓰다가 나갔다가 돌아왔을 때
+불러올 방법이 없었음.
+
+### Added
+
+- `app/posts/write/actions.ts#listDrafts()`: `status: "draft"`인 글을 mongoose의 자동
+  `updatedAt`(`models/Post.ts`의 `{ timestamps: true }`) 기준 최신순으로 조회하는 Server
+  Action 추가.
+- `components/DraftsPopup.tsx`(신규): `/posts/write`(글쓰기 모드에만) "임시글 목록" 버튼 +
+  팝업. `Header.tsx` 검색 모달과 동일한 `.dialog-backdrop`/`.dialog`/`backdropIn`/`modalPop`
+  컨벤션 재사용(Esc·배경 클릭으로 닫기 포함), 현재 편집 중인 글은 목록에서 제외. 항목 클릭 시
+  `/posts/write?slug=...`로 **실제 `<a href>` 네비게이션**(클라이언트 라우팅 아님) — `/posts/
+  write`는 `[slug]` 동적 세그먼트가 없는 라우트라(slug는 searchParam), 클라이언트 사이드
+  이동만으로는 `WritePostForm`이 리마운트되지 않고 새 `initial` prop만 받은 채 그대로 재렌더될
+  가능성이 높음(제목/본문 state는 `useState` 초기값이라 첫 마운트에만 반영됨) — 진짜 네비게이션을
+  써서 매번 처음부터 새로 로드되도록 함.
+
+### 검증
+
+- `npx tsc --noEmit`, `npx eslint .`, `rm -rf .next && npm run build` 통과.
+- `next start` + 실제 Chrome 브라우저: 새 글 임시저장 → `/posts/write`로 완전히 새로 진입 →
+  "임시글 목록" 열어서 방금 저장한 글이 최신순 맨 위에 보이는 것 확인 → 실제 기존 임시글
+  (`three.js - 보일러플레이트(1)`)을 클릭해 제목/요약/태그/시리즈/본문/미리보기가 전부 정확히
+  불러와지는 것 확인 → 그 글을 편집 중인 상태에서 다시 "임시글 목록"을 열면 그 글 자체는
+  빠지고 나머지만 보이는 것 확인. 테스트로 만든 임시글은 정리(삭제).
+
 ## [0.7.60] - 2026-08-10
 
 ### 이전 상태

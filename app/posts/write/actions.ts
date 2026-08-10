@@ -21,6 +21,31 @@ export async function previewMarkdown(markdown: string): Promise<{ content: Reac
   return { content, readTime };
 }
 
+export type DraftSummary = {
+  slug: string;
+  title: string;
+  summary: string;
+  updatedAt: string; // ISO string — Date isn't serializable across the Server Action boundary
+};
+
+// There's no dedicated "drafts" page — DraftsPopup.tsx (a modal on /posts/write) calls this
+// to list resumable drafts, since a draft's ?slug= URL was otherwise the only way back into it.
+export async function listDrafts(): Promise<DraftSummary[]> {
+  await requireOwner();
+  await connectToDatabase();
+
+  const docs = await PostModel.find({ status: "draft" }, { slug: 1, title: 1, summary: 1, updatedAt: 1 })
+    .sort({ updatedAt: -1 })
+    .lean<{ slug: string; title: string; summary: string; updatedAt: Date }[]>();
+
+  return docs.map((d) => ({
+    slug: d.slug,
+    title: d.title || "(제목 없음)",
+    summary: d.summary,
+    updatedAt: d.updatedAt.toISOString(),
+  }));
+}
+
 const MAX_UPLOAD_BYTES = 4 * 1024 * 1024; // Vercel's serverless function request body cap
 // (~4.5MB) sits above this regardless of Next's own bodySizeLimit config — see next.config.ts.
 
