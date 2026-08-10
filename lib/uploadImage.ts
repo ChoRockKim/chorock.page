@@ -19,7 +19,11 @@ const s3Client = new S3Client({
  * random suffix does the same job.
  */
 export async function uploadPostImage(buffer: Buffer): Promise<string> {
-  const optimized = await sharp(buffer)
+  // animated: true is required to read every frame of an animated GIF — sharp defaults to
+  // reading just the first frame, so without this an uploaded GIF silently became a static
+  // WebP with no animation. Harmless for a plain (single-frame) image: resize/webp() behave
+  // identically either way when there's only one frame to begin with.
+  const optimized = await sharp(buffer, { animated: true })
     .resize(1200, null, { withoutEnlargement: true })
     .webp({ quality: 80 })
     .toBuffer();

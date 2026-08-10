@@ -3,6 +3,30 @@
 이 프로젝트의 주요 변경 사항을 버전(작업 단위) 별로 기록합니다. 형식은
 [Keep a Changelog](https://keepachangelog.com/)를 참고합니다.
 
+## [0.7.59] - 2026-08-10
+
+### 이전 상태
+
+"글쓰기 환경에서 GIF도 넣을 수 있냐"는 질문에 코드를 직접 확인 — 파일 형식 제한은 없어서
+GIF도 붙여넣기/업로드 자체는 되지만, `lib/uploadImage.ts`가 `sharp(buffer)`를 옵션 없이
+호출하고 있어서 sharp가 기본값(`animated: false`)대로 GIF의 첫 프레임만 읽고 있었음 —
+업로드하면 애니메이션이 조용히 사라지고 정적 이미지가 되는 문제.
+
+### Fixed
+
+- `lib/uploadImage.ts#uploadPostImage`: `sharp(buffer)` → `sharp(buffer, { animated: true })`로
+  변경 — sharp 공식 타입 정의로 `animated` 기본값이 `false`(첫 프레임만 읽음)임을 직접 확인.
+  단일 프레임 이미지에는 옵션 유무가 결과에 차이가 없어서 GIF 여부로 분기할 필요 없이 항상
+  이 옵션을 켜도 안전함.
+
+### 검증
+
+- `npx tsc --noEmit`, `npx eslint .`, `rm -rf .next && npm run build` 통과.
+- `ffmpeg`로 직접 만든 4프레임 테스트 GIF(빨강→파랑)를 실제 변환 로직에 통과시켜 확인: 수정
+  전 코드 경로는 결과 WebP의 `sharp(...).metadata().pages`가 `undefined`(프레임 1개, 애니메이션
+  없음)였고, 수정 후 코드 경로는 `pages: 2`(여러 프레임 유지, 애니메이션 살아있음)로 확인 —
+  추측이 아니라 실제 sharp 변환 결과로 직접 검증.
+
 ## [0.7.58] - 2026-08-10
 
 ### 이전 상태

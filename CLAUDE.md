@@ -233,6 +233,14 @@ whatever `next.config.ts`'s `experimental.serverActions.bodySizeLimit` (bumped t
 the 1MB default) allows, so anything larger would fail with an unhelpful platform-level error
 instead of this action's own clear message. A presigned-URL direct-to-S3 upload would dodge
 that ceiling entirely but is more infra than a single-owner blog's editor needs.
+`lib/uploadImage.ts#uploadPostImage` reads with `sharp(buffer, { animated: true })`, not a bare
+`sharp(buffer)` — sharp's own type defs say `animated` defaults to `false`, meaning it silently
+reads only an image's first frame/page. Without this, an uploaded animated GIF converted to a
+WebP with zero animation (confirmed directly: a real 4-frame test GIF run through the old,
+option-less call produced a `metadata().pages` of `undefined` — a single static frame — while
+the same input with `animated: true` kept multiple frames through the resize+webp() pipeline).
+Harmless to pass unconditionally for every upload, animated or not — a single-frame image
+behaves identically either way, so there's no need to branch on file type.
 
 **The write-form body `<textarea>`'s Tab-indent, toolbar buttons (bold/italic/heading/code
 block/etc.), Shift+Tab-outdent, and the image-paste placeholder insert all go through
