@@ -43,8 +43,20 @@ export async function uploadImage(formData: FormData): Promise<ActionResult<{ ur
   if (file.size > MAX_UPLOAD_BYTES) return { error: "이미지가 너무 큽니다 (4MB 이하로 올려주세요)." };
 
   const buffer = Buffer.from(await file.arrayBuffer());
-  const url = await uploadPostImage(buffer);
-  return { url };
+  try {
+    const url = await uploadPostImage(buffer);
+    return { url };
+  } catch (err) {
+    // uploadPostImage (sharp decode/resize/encode, then S3 PutObject) is an external, fallible
+    // operation — unlike requireOwner()'s throw (unreachable in practice, middleware already
+    // blocks this), a real failure here (e.g. a malformed image, or a real-world animated GIF
+    // large enough to hit sharp's default 268M-pixel safety limit once every frame counts
+    // toward it) is exactly the kind of thing the single owner using this form needs to actually
+    // see to diagnose, not Next's generic masked "Server Components render" message.
+    return {
+      error: `이미지 업로드에 실패했습니다: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
 }
 
 export type SavePostInput = {

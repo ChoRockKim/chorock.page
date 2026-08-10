@@ -23,7 +23,19 @@ export async function uploadPostImage(buffer: Buffer): Promise<string> {
   // reading just the first frame, so without this an uploaded GIF silently became a static
   // WebP with no animation. Harmless for a plain (single-frame) image: resize/webp() behave
   // identically either way when there's only one frame to begin with.
-  const optimized = await sharp(buffer, { animated: true })
+  //
+  // limitInputPixels: false disables sharp's default ~268M-pixel safety cap. That default
+  // exists to guard against decompression-bomb-style input on public/untrusted upload
+  // endpoints; this action is behind requireOwner() (single authenticated owner, never public)
+  // and already bounded by the 4MB compressed-file cap in actions.ts#uploadImage, so the extra
+  // guard just gets in the way of legitimate animated GIFs — sharp's animated read reports an
+  // image's height as ALL frames stacked (frame height * frame count), so pixel count scales
+  // with frame count too, and a real screen-recording-derived GIF can cross 268M pixels well
+  // before it's anywhere near suspicious. Confirmed directly: forcing a low limit on a real
+  // multi-frame test GIF reproduces sharp's own "Input image exceeds pixel limit" throw, which
+  // (before actions.ts#uploadImage wrapped this call in try/catch) is exactly what Next.js was
+  // masking into the generic "Server Components render" error a real GIF paste triggered.
+  const optimized = await sharp(buffer, { animated: true, limitInputPixels: false })
     .resize(1200, null, { withoutEnlargement: true })
     .webp({ quality: 80 })
     .toBuffer();

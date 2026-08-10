@@ -3,6 +3,41 @@
 이 프로젝트의 주요 변경 사항을 버전(작업 단위) 별로 기록합니다. 형식은
 [Keep a Changelog](https://keepachangelog.com/)를 참고합니다.
 
+## [0.7.60] - 2026-08-10
+
+### 이전 상태
+
+0.7.59로 GIF 애니메이션 유지 수정 배포 직후, 실제 GIF를 글쓰기 폼에 붙여넣으니 "An error
+occurred in the Server Components render..."라는 마스킹된 일반 에러가 떴다는 보고.
+
+### Fixed
+
+- **진짜 원인 2개를 직접 재현해서 확인**: `app/posts/write/actions.ts#uploadImage`가
+  `uploadPostImage(buffer)`를 try/catch 없이 호출하고 있어서, 그 안에서 예외가 터지면 Server
+  Action 밖으로 그대로 던져지고 Next.js가 프로덕션에서 이걸 무조건 저 일반 마스킹 메시지로
+  가려버림(이 파일 자체에 이미 문서화된 "Server Actions는 throw 대신 반드시 { error } 반환"
+  규칙을 정작 이 호출엔 적용 안 하고 있었음). 실제 트리거는 sharp의 애니메이션 읽기가 이미지
+  `height`를 "프레임 높이 × 프레임 수"로 보고하기 때문에 픽셀 수가 프레임 수에 비례해서
+  커진다는 점 — 실제 다중 프레임 테스트 GIF에 픽셀 제한을 낮게 강제해서 sharp가 던지는
+  `Input image exceeds pixel limit` 에러를 직접 재현해 확인함. 화면 녹화로 만든 것 같은
+  실제 GIF는 다른 어떤 기준으로도 수상해 보이기 훨씬 전에 sharp 기본 제한(약 2억 6천만
+  픽셀)을 넘길 수 있음.
+- `uploadImage`에서 `uploadPostImage(buffer)`를 try/catch로 감싸 `{ error: "이미지 업로드에
+  실패했습니다: " + 실제메시지 }`를 반환하도록 수정 — 이 파일의 기존 `ActionResult<T>` 패턴을
+  검증 실패뿐 아니라 이 특정 외부 작업(이미지 디코드/인코드 + S3 업로드)의 예상 밖 실패까지
+  포괄하도록 확장. 단일 소유자만 쓰는 폼이라 실제 에러 메시지를 그대로 보여주는 게 안전하고
+  훨씬 유용함.
+- `lib/uploadImage.ts`: `sharp(buffer, { animated: true })` → `sharp(buffer, { animated: true,
+  limitInputPixels: false })`로 변경 — 이 액션은 `requireOwner()`로 막혀있어 퍼블릭 노출이
+  전혀 없고, 이미 4MB 압축 파일 크기 상한(`MAX_UPLOAD_BYTES`)으로 입력이 제한되어 있어서
+  sharp의 압축폭탄 방지용 픽셀 제한이 여기선 그냥 정상적인 GIF를 막는 장애물일 뿐이었음.
+
+### 검증
+
+- `npx tsc --noEmit`, `npx eslint .`, `rm -rf .next && npm run build` 통과.
+- 픽셀 제한을 강제로 낮춰 실제 `Input image exceeds pixel limit` 에러를 재현 → 수정 후
+  (`limitInputPixels: false`) 같은 입력으로 동일 시나리오에서 정상 변환되는 것을 직접 확인.
+
 ## [0.7.59] - 2026-08-10
 
 ### 이전 상태

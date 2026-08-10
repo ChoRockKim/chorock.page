@@ -242,6 +242,30 @@ the same input with `animated: true` kept multiple frames through the resize+web
 Harmless to pass unconditionally for every upload, animated or not — a single-frame image
 behaves identically either way, so there's no need to branch on file type.
 
+**That `animated: true` change immediately surfaced a second, pre-existing bug when a real GIF
+was pasted**: `app/posts/write/actions.ts#uploadImage` called `uploadPostImage(buffer)` with no
+try/catch, so any exception it threw propagated out of the Server Action uncaught — and per this
+file's own "Server Actions must `return { error }`, never `throw`" rule (see below), Next.js
+masks every uncaught Server Action throw into the generic "An error occurred in the Server
+Components render..." message in production, with zero diagnostic info. Confirmed the actual
+trigger directly: sharp's animated read reports an image's `height` as every frame stacked
+(frame height × frame count), so total pixel count scales with frame count — a real
+screen-recording-derived GIF can cross sharp's default ~268M-pixel safety cap
+(`limitInputPixels`, meant to guard against decompression-bomb-style input on
+public/untrusted endpoints) well before it looks suspicious by any other measure; forcing that
+limit low on a real multi-frame test GIF reproduces sharp's own `Input image exceeds pixel
+limit` throw exactly. Fixed two ways together: (1) wrapped `uploadPostImage(buffer)` in
+try/catch, returning `{ error: "이미지 업로드에 실패했습니다: " + <real message> }` so any future
+failure here is actually visible instead of masked — matches this file's own established
+`ActionResult<T>` pattern already used for deliberate validation, just extended to also cover
+this specific external, fallible operation's *unexpected* failures (image decode/encode + S3
+`PutObject`), since the single owner using this form benefits far more from a real diagnostic
+message than from the generic mask this route had been silently relying on. (2) Set
+`limitInputPixels: false` in `uploadPostImage`'s own `sharp()` call — this action is behind
+`requireOwner()` (never public) and already bounded by the 4MB compressed-input cap
+(`app/posts/write/actions.ts`'s `MAX_UPLOAD_BYTES`), so sharp's own decompression-bomb guard is
+redundant here and was the actual thing standing between the owner and a normal, legitimate GIF.
+
 **The write-form body `<textarea>`'s Tab-indent, toolbar buttons (bold/italic/heading/code
 block/etc.), Shift+Tab-outdent, and the image-paste placeholder insert all go through
 `document.execCommand("insertText", false, text)`, not `setBody(splicedString)`.** This
