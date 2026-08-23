@@ -78,7 +78,7 @@ const projects = [
     summary: "국내 최초 ADHD 커뮤니티 앱, 앱스토어·구글 플레이스토어 서비스 중",
     role: "프론트엔드 유지보수 및 기능 개발",
     team: "포에이 팀",
-    period: "2026.03 — 2026.06",
+    period: "2026.01 — 현재",
     tags: ["React Native", "Expo", "Tanstack Query", "React-Hook-Form"],
     stack: [
       {

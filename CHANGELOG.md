@@ -3,6 +3,29 @@
 이 프로젝트의 주요 변경 사항을 버전(작업 단위) 별로 기록합니다. 형식은
 [Keep a Changelog](https://keepachangelog.com/)를 참고합니다.
 
+## [0.7.62] - 2026-08-23
+
+### 이전 상태
+
+포에이(ForA) 재직 기간이 `/about` 경력 카드와 `/projects/fora` 양쪽에 `2026.03 — 2026.06`
+(종료된 기간)으로 적혀 있었음. 실제로는 2026년 1월부터 현재까지 진행 중.
+
+### Changed
+
+- `app/about/page.tsx`의 `CAREER` 포에이 항목, `scripts/seed-projects.ts`의 `fora` 항목
+  `period`를 둘 다 `2026.01 — 현재`로 수정. 프로젝트 쪽은 시드 배열이 `Project` 컬렉션의
+  단일 소스라 `npm run seed:projects` 재실행으로 DB에 반영(3개 upsert, 삭제 0).
+
+### 참고 (코드 변경 아님)
+
+- "`npm run dev`가 안 먹는다"를 조사한 결과, 원인은 `next dev` 프로세스가 **두 개 동시에 떠서
+  같은 `.next/cache/webpack`에 쓰던 것**이었음. 증상은 `ENOENT: rename '0.pack.gz_' ->
+  '0.pack.gz'` 경고와 극단적인 시작/컴파일 지연(`Ready in 25.7s` / `Compiled / in 170.9s`).
+  프로세스를 하나만 남기고 `.next`를 지우면 `Ready in 1433ms` / `Compiled / in 2.8s`로 정상
+  복귀. iCloud 데스크탑 동기화를 의심했으나 `~/Library/Mobile Documents/com~apple~CloudDocs/
+  Desktop`은 실제 폴더가 아니라 `~/Desktop`를 가리키는 심볼릭 링크였고(컨테이너 0B, 미다운로드
+  플레이스홀더 0개), 데스크탑 동기화는 애초에 꺼져 있었음 — 무관한 원인이었음.
+
 ## [0.7.61] - 2026-08-10
 
 ### 이전 상태
