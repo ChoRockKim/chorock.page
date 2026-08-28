@@ -3,6 +3,49 @@
 이 프로젝트의 주요 변경 사항을 버전(작업 단위) 별로 기록합니다. 형식은
 [Keep a Changelog](https://keepachangelog.com/)를 참고합니다.
 
+## [0.7.76] - 2026-08-29
+
+### Added
+
+- **프로젝트 2건 추가** — `부 키우기`(캡스톤디자인, `boo-game`), `Chrono-Derm`(멋쟁이사자처럼
+  애니멀리그 중앙해커톤, `chrono-derm`). 둘 다 `scripts/seed-projects.ts`의 `projects` 배열에
+  넣고 `npm run seed:projects`로 심었음.
+- 이미지 14장을 `public/projects/boo-game/`(8), `public/projects/chrono-derm/`(6)에 추가.
+  전부 1600x900 webp. `components/ProjectCard.tsx`의 이미지 컨테이너가 `aspectRatio: "16/9"`라
+  발표 슬라이드(1920x1080)가 잘림 없이 들어감.
+
+### Changed
+
+- **`scripts/seed-projects.ts`가 항목별 `status`를 존중하도록 수정.** 기존에는 upsert 시
+  `status: "published"`를 하드코딩하고 있어서, 아직 공개하고 싶지 않은 항목을 넣어둘 방법이
+  배열에서 빼는 것(= DB에서 삭제)밖에 없었음. 이제 각 항목이 `status`를 직접 갖는다.
+  `lib/projects.ts`는 목록·상세·`generateStaticParams`·사이트맵 전부 `status: "published"`로
+  거르므로, `draft` 항목은 어디에도 노출되지 않고 파일에는 남는다. 배열 리터럴이라 일부 항목만
+  `status`를 가지면 `p.status` 접근이 타입 에러가 나므로 6개 항목 전부에 명시했음.
+  (Chrono-Derm을 이미지 준비될 때까지 draft로 두려고 넣은 장치인데, 같은 작업 중에 이미지가
+  준비되어 결과적으로는 둘 다 published로 심었음.)
+
+### 근거
+
+두 항목 모두 본인이 준 발표 자료와 레포를 직접 확인해서 작성. 서브에이전트가 낸 Chrono-Derm
+초안의 수치 2개가 실제와 달라 수정했음 — 테스트 케이스 441 → **439**, 커밋 113 → **114**.
+- `부 키우기`: 백엔드가 내려가 있어(`capstonedesign-production.up.railway.app/docs` → 404)
+  `demoUrl`은 `null`. Expo 웹 빌드는 200이지만 로그인이 서버를 타므로 동작하지 않음.
+  `utils/getTodayMeal.ts`가 `hufs-clock-api.vercel.app`을 호출하는 것을 발견 —
+  외대종강시계용으로 만든 크롤러 API를 학식 기능에 재사용한 것이라 `/projects/hufs-clock`으로
+  내부 링크를 걸었음. 부하 테스트 실패율 0%는 **비로그인 GET API 3종 대상**이라는 단서를 달았음.
+- `Chrono-Derm`: 프론트 커밋 114건이 전부 본인(최초 세팅 커밋 1건 제외), 화면 15개,
+  테스트 파일 87개·케이스 439개, `app.json`의 `reactCompiler: true`, 백엔드 Django/DRF
+  기여자 3명을 각각 직접 확인. 문제 해결 두 건의 근거(`exif=6 turns=0` 진단 로그,
+  `$[3] !== form` → `$[3] !== form || $[4] !== isValid` 컴파일 산출물 비교)도 레포
+  `WORKLOG.md`에서 확인함.
+
+### 검증
+
+- `npm run build` 통과. `/projects/[slug]` 6개 전부 프리렌더되고 `/projects` 목록에 6개 링크가
+  모두 들어간 것을 빌드 산출물에서 확인.
+- 빌드된 HTML이 참조하는 webp 14개가 `public/` 아래에 실제로 존재하는지 대조 — 누락 0건.
+
 ## [0.7.75] - 2026-08-29
 
 ### 이전 상태
