@@ -5,9 +5,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project context
 
 Next.js + MongoDB Atlas rewrite of a personal blog (chorock.page) previously run as
-Express(SSR) + MongoDB Atlas + Docker + GitHub Actions + EC2. Only the post detail
-page (`/posts/[slug]`) and the shared chrome it needs (header/footer/search/TOC/comments)
-are implemented — see "What exists" below before assuming a page/route is present.
+Express(SSR) + MongoDB Atlas + Docker + GitHub Actions + EC2. Most of the site is now
+implemented (posts, series, projects, about, the write/edit editor, owner auth, search) —
+see "What exists" below before assuming a page/route is present.
 
 ## Commands
 
@@ -451,9 +451,21 @@ passed via the `fonts` option. `lib/ogFont.ts` loads `public/fonts/Pretendard-Bo
 disk for this (not fetched from a CDN per-request — no network dependency, and Satori only
 understands ttf/otf/woff, not woff2, which needs Brotli decompression Satori doesn't
 implement, so the CDN's default woff2 distribution wouldn't have worked anyway).
+**That disk read is invisible to Next's file tracer, and `public/` is not bundled into
+serverless functions** — so every per-slug OG route 500'd in production for two weeks with
+`ENOENT: /var/task/public/fonts/Pretendard-Bold.otf` while nothing looked wrong locally or in
+the build. The root `/opengraph-image` masked it: it has no dynamic params, so it's
+pre-rendered at build time on a machine where `public/` really does exist, and only the
+`[slug]` routes actually run in a Lambda. `next.config.ts`'s `outputFileTracingIncludes` names
+the font explicitly for those two routes — there is no way for the tracer to infer a
+`readFile(path.join(process.cwd(), ...))`, so any future runtime read of a `public/` asset
+needs the same treatment. `loadOgFont()` also returns `null` instead of throwing now: a blank
+Korean title is bad, but a 500 here is worse, because link scrapers fall back to the page's
+first `<img>` — on a post detail page that's the author's own profile photo.
 
-**Setting a route's own `openGraph` object silently drops the site's default OG image.** Next
-merges metadata parent→child per top-level key, not deep-per-field — a child route that sets
+**Setting a route's own `openGraph` object silently drops every field the parent set** — the
+default OG image included, but also `type`/`siteName`/`locale`. Next merges metadata
+parent→child per top-level key, not deep-per-field — a child route that sets
 `openGraph: { title, description }` (needed so shared links show that route's own title
 instead of the root layout's, since `title` and `openGraph.title` are tracked separately and
 don't sync) **replaces** the entire inherited `openGraph` object, including the `images` entry
@@ -468,6 +480,23 @@ their own per-segment `opengraph-image.tsx` (`/posts/[slug]`, `/projects/[slug]`
 unaffected since the image and the metadata override live at the same segment. Any new route
 that both overrides `openGraph` and relies on the inherited default image needs this same
 explicit `images: ["/opengraph-image"]` restated, or it'll silently lose its preview image.
+
+**This is why `lib/siteMeta.ts` exists.** The same replacement rule that ate `images` had also
+been quietly eating `type`/`siteName`/`locale` site-wide — confirmed by curling the live HTML,
+not one page emitted those three. Rather than restating literals in seven routes, they live in
+`SITE_OG_BASE` and get spread into each route's own `openGraph`. `SITE_OG_BASE` deliberately
+omits `type` (post detail needs `"article"`, and a baked-in `"website"` makes TypeScript widen
+the union awkwardly) and `images` (a segment with its own `opengraph-image.tsx` would have its
+per-slug image overridden by the generic one). `canonicalPath()` is there too, because a
+canonical URL built from a Korean slug needs the same `encodeURIComponent` treatment as
+`app/sitemap.ts` and `permanentRedirect`'s `Location` header. **Canonical is set per route and
+deliberately NOT in the root layout** — inheritance is per top-level key, so a root
+`canonical: "/"` would be claimed by every child route that doesn't override it, which is worse
+than having none. Structured data goes through `components/JsonLd.tsx`, which escapes `<` as
+`\u003c`: `JSON.stringify` alone won't, and post summaries are raw excerpts of migrated forum
+content that really does contain HTML fragments. The site-wide `WebSite`+`Person` `@graph` in
+`app/layout.tsx` gives `Person` a stable `@id` (`PERSON_ID`) so per-post `BlogPosting` nodes
+reference it instead of re-inlining the author on every page.
 
 **Tech-name tags with icons** (`/about`'s skills + career tags) go through
 `components/SkillTag.tsx`, which looks up an icon from `lib/skillIcons.ts#SKILL_ICON_SLUGS`
@@ -742,6 +771,10 @@ cookies and force the whole page dynamic, undoing that. The route itself doesn't
 gating to be secure — `middleware.ts` already blocks unauthenticated `/posts/write` — this is
 purely so a non-owner visitor doesn't see a write button that would just redirect them to sign-in.
 
-Not implemented (Header/PostsPage link to these routes but they 404): home. `/posts/[slug]/edit`
-and delete (the "삭제" button) are both implemented (see above). Don't assume `home` is functional
-when tracing a user flow.
+There is no standalone home page, but `/` is not a 404 either — `app/page.tsx` is a bare
+`redirect("/about")`, which Next serves as a **307** (temporary; making it permanent is still
+open). Because `/` never returns content, the JSON-LD breadcrumbs on post/project detail pages
+deliberately start at `/posts`/`/projects` rather than the site root. `app/sitemap.ts` does
+still list `/` among its static routes — submitting a redirecting URL isn't harmful, but it's
+inconsistent with the above and worth revisiting if the sitemap is touched. `/posts/[slug]/edit`
+and delete (the "삭제" button) are both implemented (see above).
