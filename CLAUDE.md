@@ -609,9 +609,10 @@ once).
 
 `/about` is real code, mostly real content now (`CAREER`, `CONTACT_GITHUB_URL` edited by the
 user; "최근 프로젝트"/"최근 글" pull live from MongoDB via `listProjects()`/`getCachedPosts()`) —
-but `PROFILE` (now `lib/profile.ts`, shared with `components/PostAuthorCard.tsx` — see below) and
-`SKILLS` (still local to `app/about/page.tsx`) are still `// TODO` placeholder stand-ins, not the
-user's real bio/skills. Don't treat their content as factual about the site owner.
+`PROFILE` (`lib/profile.ts`, shared with `components/PostAuthorCard.tsx` — see below) and
+`SKILLS` (local to `app/about/page.tsx`) are **no longer placeholders** — `SKILLS` was replaced
+with real data migrated from the user's previous portfolio (CHANGELOG 0.7.9), and `PROFILE`'s
+copy was rewritten to the owner's own words (0.7.74). Treat both as factual about the site owner.
 
 **Post detail's bottom section order is body → author card → comments → related posts**
 (`app/posts/[slug]/page.tsx`) — `components/PostAuthorCard.tsx` renders `lib/profile.ts`'s
