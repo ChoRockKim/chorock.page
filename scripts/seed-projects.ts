@@ -311,7 +311,7 @@ const projects = [
         items: ["remark / rehype", "Shiki", "Vercel", "giscus"],
       },
     ],
-    coverImage: null,
+    coverImage: "/projects/chorock-page/home.webp",
     coverImageFit: "cover",
     overviewMd: `Express(SSR) + MongoDB + Docker + EC2로 직접 운영하던 개인 블로그를 Next.js App Router + MongoDB Atlas + Vercel 조합으로 다시 만든 프로젝트입니다. 지금 보고 계신 이 사이트이고, 글 19편과 시리즈 4개를 운영하고 있습니다. 옛 블로그의 게시글을 실제로 이관해서, 예전 링크가 죽지 않은 채로 갈아탔습니다.
 
@@ -376,6 +376,14 @@ const projects = [
 - 변경 76건을 "이전 상태 → 변경 → 검증" 형식으로 기록해두고 있어, 몇 달 전 판단의 이유를 지금도 되짚을 수 있습니다.
 - 검색은 제목·요약·태그 정규식 매칭이라 본문은 걸리지 않습니다. 글이 늘면 전문 검색 인덱스로 옮겨야 합니다.
 - 테스트 스위트가 없습니다. 지금은 빌드(타입 체크·린트 포함)가 유일한 정합성 게이트입니다.
+
+## 스크린샷
+
+![홈 화면](/projects/chorock-page/home.webp)
+
+![글 목록](/projects/chorock-page/posts.webp)
+
+![글 상세 — 코드 하이라이팅과 목차](/projects/chorock-page/post-detail.webp)
 `,
     demoUrl: "https://chorock.page",
     repoUrl: "https://github.com/ChoRockKim/chorock.page",
