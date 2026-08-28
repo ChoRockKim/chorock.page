@@ -213,7 +213,7 @@ const projects = [
       "Node.js Express로 만든 토이 블로그 사이트 (chorock.page 이전 버전)",
     role: "기획·프론트엔드·백엔드·인프라",
     team: "1인 개발",
-    period: "Mar 2026",
+    period: "2026.03 — 2026.05",
     tags: [
       "MongoDB Atlas",
       "Node.js",
@@ -243,19 +243,36 @@ const projects = [
     ],
     coverImage: "/projects/node-blog/nodeblog-main.webp",
     coverImageFit: "cover",
-    overviewMd: `Node.js Express로 만든 토이 블로그 사이트입니다. 글 작성/수정/삭제, 댓글 작성/수정/삭제, 쪽지 기능, 프로필 설정 기능을 구현했습니다. 이후 이 블로그를 Next.js로 다시 만들었고, 그 결과물이 [chorock.page](/projects/chorock-page)입니다.
+    overviewMd: `Node.js Express로 만든 블로그입니다. 서버 렌더링부터 배포까지 직접 해보려고 만들었고, 글·댓글·쪽지·실시간 채팅을 붙인 뒤 Docker와 GitHub Actions로 EC2에 자동 배포되게 구성했습니다. 이후 이 블로그를 Next.js로 다시 만들었고, 그 결과물이 [chorock.page](/projects/chorock-page)입니다.
+
+## 맡은 일
+
+기획부터 인프라까지 1인 개발입니다. EJS 템플릿으로 서버에서 화면을 그리고, MongoDB로 데이터를 다루고, Docker 이미지를 만들어 EC2에 올리는 배포 파이프라인까지 직접 구성했습니다.
 
 ## 주요 기능
 
-- 세션 방식을 통해 로그인 기능 구현, 관리자 기능 존재
-- 회원가입 및 로그인 시 유효성 검사
-- MongoDB skip, limit 으로 페이지네이션 구현
-- nodemailer 로 사용자 이메일 인증 방식 구현
-- multer + S3 통해 이미지 업로드 구현, 프로필 사진 구현
-- Search Index로 조회 성능 향상
-- 글 리스트 조회 성능 향상을 위해 비정규화 (글 정보 DB에 유저 이름, id 등 추가)
-- 웹소켓 Socket.io 로 채팅기능 구현
-- Docker + Github Actions로 CI/CD 파이프라인 구성
+- 글 작성·수정·삭제와 마크다운 편집, 코드블록 스타일링
+- 세션 기반 로그인·회원가입(유효성 검사)과 관리자 기능
+- 댓글, 쪽지, Socket.io를 이용한 실시간 채팅
+- nodemailer 이메일 인증, S3 이미지 업로드와 프로필 사진
+- Docker + GitHub Actions + EC2 CI/CD 파이프라인
+
+## 문제 해결
+
+### 글 목록을 여는 데 시간이 걸리던 문제
+
+글이 쌓일수록 목록 페이지가 눈에 띄게 느려졌습니다.
+
+원인은 목록을 그리는 방식이었습니다. 글 문서에는 작성자의 식별자만 들어 있어서, 목록에 스무 개를 뿌리려면 글을 한 번 조회한 뒤 작성자를 알아내기 위해 사용자 정보를 다시 조회해야 했습니다. 목록의 길이에 비례해 조회가 늘어나는 구조였습니다.
+
+인덱스를 걸어 조회 자체를 빠르게 만드는 것과, 데이터 모양을 바꾸는 것 두 가지를 놓고 봤습니다. 인덱스는 넣었지만 조회 횟수 자체는 줄지 않았습니다. 그래서 정규화를 깨기로 했습니다. 글을 저장할 때 작성자의 이름과 식별자를 글 문서에 함께 복사해 두어, 목록을 그릴 때 사용자 정보를 다시 찾지 않아도 되게 했습니다.
+
+대가가 있는 선택입니다. 사용자가 이름을 바꾸면 이미 써둔 글에 남은 이름과 어긋납니다. 읽기가 쓰기보다 압도적으로 많은 블로그라 그 정도는 치를 만한 비용이라고 봤습니다.
+
+## 성과와 한계
+
+- Express 서버 렌더링, 세션 인증, 소켓 통신, 그리고 Docker·GitHub Actions·EC2로 이어지는 배포 파이프라인을 처음으로 끝까지 직접 만들어본 프로젝트입니다.
+- 지금은 운영하지 않습니다. 서버를 직접 띄워두고 관리하는 비용을 겪은 것이 이 블로그를 Next.js와 Vercel로 다시 만든 이유가 됐습니다. 그 결과물은 [chorock.page](/projects/chorock-page)에 따로 정리해 뒀습니다.
 
 ## 스크린샷
 
@@ -264,7 +281,6 @@ const projects = [
 ![글쓰기](/projects/node-blog/nodeblog-write.webp)
 
 ![로그인](/projects/node-blog/desktop-login.webp)
-
 `,
     demoUrl: null,
     repoUrl: "https://github.com/ChoRockKim/Node-blog",
