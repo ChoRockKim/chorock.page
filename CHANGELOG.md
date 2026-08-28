@@ -3,6 +3,27 @@
 이 프로젝트의 주요 변경 사항을 버전(작업 단위) 별로 기록합니다. 형식은
 [Keep a Changelog](https://keepachangelog.com/)를 참고합니다.
 
+## [0.7.72] - 2026-08-29
+
+### 이전 상태
+
+`public/projects/react-shopping-mall/`(3개)과 `rn-toy-blog/`(4개)에 이미지 7개가 남아 있었음.
+두 슬러그 모두 과거 `scripts/seed-projects.ts`의 `projects` 배열에 있다가 제거된 항목이라
+(0.7.x 초반 기록 참고), 배열이 단일 소스인 구조상 DB 문서는 시드 스크립트의
+`deleteMany({ slug: { $nin: currentSlugs } })`로 함께 지워졌지만 **이미지 파일은 남았음.**
+
+### Removed
+
+- `public/projects/react-shopping-mall/`, `public/projects/rn-toy-blog/` 삭제 (7개 파일, 약 944KB).
+
+### 검증
+
+- 삭제 전에 참조가 없음을 두 단계로 확인: (1) 저장소 전체 grep — CHANGELOG의 과거 기록 외에
+  코드·시드 어디에도 참조 없음. (2) **프리렌더된 산출물 전체(`.next/server`) grep — 0건.**
+  글 19개·시리즈 4개·프로젝트 4개·소개 페이지가 모두 정적 생성되므로, 글 본문(MongoDB)에서
+  참조하는 경우까지 이 검색으로 걸러짐.
+- 두 디렉터리 모두 git 추적 중이었으므로 필요하면 이력에서 복구 가능.
+
 ## [0.7.71] - 2026-08-29
 
 ### 이전 상태
