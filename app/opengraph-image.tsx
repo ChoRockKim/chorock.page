@@ -46,6 +46,6 @@ export default async function Image() {
         </div>
       </div>
     ),
-    { ...size, fonts: [font] }
+    { ...size, fonts: font ? [font] : undefined }
   );
 }

@@ -1,11 +1,21 @@
 import Link from "next/link";
 import type { Metadata } from "next";
+import { SITE_OG_BASE, SITE_OG_IMAGE } from "@/lib/siteMeta";
 import { listSeriesWithCounts } from "@/lib/series";
 
-// See app/posts/page.tsx for why openGraph needs its own explicit title/description/images.
+// See app/posts/page.tsx for why every field the root layout sets has to be repeated here.
 export const metadata: Metadata = {
   title: "시리즈 · chorock.page",
-  openGraph: { title: "시리즈 · chorock.page", description: "여러 편으로 나눠 쓴 연재 글 모음", images: ["/opengraph-image"] },
+  description: "여러 편으로 나눠 쓴 연재 글 모음",
+  alternates: { canonical: "/series" },
+  openGraph: {
+    ...SITE_OG_BASE,
+    type: "website",
+    url: "/series",
+    title: "시리즈 · chorock.page",
+    description: "여러 편으로 나눠 쓴 연재 글 모음",
+    images: SITE_OG_IMAGE,
+  },
 };
 
 // Same bug/fix as /about (CHANGELOG 0.7.33): no dynamic data source here, so without this

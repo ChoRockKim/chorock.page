@@ -12,6 +12,8 @@ import PostCard from "@/components/PostCard";
 import GiscusComments from "@/components/GiscusComments";
 import PostOwnerActions from "@/components/PostOwnerActions";
 import PostAuthorCard from "@/components/PostAuthorCard";
+import JsonLd from "@/components/JsonLd";
+import { SITE_URL, SITE_OG_BASE, PERSON_ID, canonicalPath } from "@/lib/siteMeta";
 
 function formatDate(iso: string) {
   return iso.slice(0, 10).split("-").join(".");
@@ -32,10 +34,25 @@ export async function generateMetadata({
   const { slug } = await params;
   const post = await getPostBySlug(decodeURIComponent(slug));
   if (!post) return {};
+  const url = canonicalPath("posts", post.slug);
   return {
     title: `${post.title} · chorock.page`,
     description: post.summary,
-    openGraph: { title: post.title, description: post.summary },
+    alternates: { canonical: url },
+    openGraph: {
+      ...SITE_OG_BASE,
+      // The one route family where "website" would be wrong. `images` is deliberately NOT set:
+      // this segment has its own opengraph-image.tsx, and restating a default here would
+      // override the per-post generated image with the generic site-wide one.
+      type: "article",
+      url,
+      title: post.title,
+      description: post.summary,
+      publishedTime: post.publishedAt,
+      modifiedTime: post.updatedAt,
+      authors: [`${SITE_URL}/about`],
+      tags: post.tags,
+    },
   };
 }
 
@@ -55,8 +72,44 @@ export default async function PostDetailPage({
   ]);
   const headings = extractHeadings(post.content);
 
+  const postUrl = `${SITE_URL}${canonicalPath("posts", post.slug)}`;
+  // BlogPosting is what makes a post eligible for Google's article rich results. author and
+  // publisher reference the Person declared once in app/layout.tsx's @graph (PERSON_ID) rather
+  // than re-inlining it on every post. The breadcrumb deliberately starts at /posts, not the
+  // site root — app/page.tsx redirects "/" to /about, so a root crumb would point at a URL
+  // that never returns content.
+  const postJsonLd = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "BlogPosting",
+        "@id": `${postUrl}#post`,
+        headline: post.title,
+        description: post.summary,
+        url: postUrl,
+        datePublished: post.publishedAt,
+        dateModified: post.updatedAt ?? post.publishedAt,
+        keywords: post.tags,
+        inLanguage: "ko-KR",
+        author: { "@id": PERSON_ID },
+        publisher: { "@id": PERSON_ID },
+        image: `${postUrl}/opengraph-image`,
+        mainEntityOfPage: { "@type": "WebPage", "@id": postUrl },
+        isPartOf: { "@id": `${SITE_URL}#website` },
+      },
+      {
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          { "@type": "ListItem", position: 1, name: "글", item: `${SITE_URL}/posts` },
+          { "@type": "ListItem", position: 2, name: post.title, item: postUrl },
+        ],
+      },
+    ],
+  };
+
   return (
     <>
+      <JsonLd data={postJsonLd} />
       <ReadingProgressBar />
       <div className="pd-grid">
         <article className="pd-body">

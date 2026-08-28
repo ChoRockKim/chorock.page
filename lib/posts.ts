@@ -27,6 +27,10 @@ export type SeriesNav = {
 export type PostDetail = PostSummary & {
   content: string;
   seriesId: string | null;
+  /** mongoose `{ timestamps: true }` (models/Post.ts) gives this for free — used only as
+   *  schema.org `dateModified` on the post detail page's BlogPosting JSON-LD. Optional
+   *  because getPostForEditing() doesn't bother projecting it. */
+  updatedAt?: string;
 };
 
 type LeanPostDoc = {
@@ -37,6 +41,7 @@ type LeanPostDoc = {
   content: string;
   tags?: string[];
   publishedAt: Date | string;
+  updatedAt?: Date | string;
 };
 
 type LeanPostDocWithSeries = LeanPostDoc & { seriesId?: { title?: string } | null };
@@ -68,6 +73,7 @@ async function fetchPostBySlug(slug: string): Promise<PostDetail | null> {
     ...toSummary(doc, readTime),
     content: doc.content,
     seriesId: doc.seriesId ? String(doc.seriesId) : null,
+    updatedAt: doc.updatedAt ? new Date(doc.updatedAt).toISOString() : undefined,
   };
 }
 

@@ -2,6 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { getSeriesWithPosts, listSeriesSlugs } from "@/lib/series";
+import JsonLd from "@/components/JsonLd";
+import { SITE_URL, SITE_OG_BASE, SITE_OG_IMAGE, canonicalPath } from "@/lib/siteMeta";
 
 // Was fully dynamic (fresh Mongo round-trips + estimateReadTime() on every visit) with no
 // loading.tsx — the exact "slow list->detail navigation" pattern already diagnosed and fixed
@@ -21,12 +23,21 @@ export async function generateMetadata({
   const { slug } = await params;
   const series = await getSeriesWithPosts(decodeURIComponent(slug));
   if (!series) return {};
+  const url = canonicalPath("series", series.slug);
   return {
     title: `${series.title} · chorock.page`,
     description: series.description,
-    // See app/posts/page.tsx for why images needs restating here too (no per-series
-    // opengraph-image.tsx, so this would otherwise silently lose the inherited root image).
-    openGraph: { title: series.title, description: series.description, images: ["/opengraph-image"] },
+    alternates: { canonical: url },
+    // See app/posts/page.tsx for why every field the root sets has to be restated here —
+    // including `images`, since there's no per-series opengraph-image.tsx to fill it in.
+    openGraph: {
+      ...SITE_OG_BASE,
+      type: "website",
+      url,
+      title: series.title,
+      description: series.description,
+      images: SITE_OG_IMAGE,
+    },
   };
 }
 
@@ -39,8 +50,44 @@ export default async function SeriesDetailPage({
   const series = await getSeriesWithPosts(decodeURIComponent(slug));
   if (!series) notFound();
 
+  const seriesUrl = `${SITE_URL}${canonicalPath("series", series.slug)}`;
+  // A series is an ordered reading list, so its posts go in as an ItemList with explicit
+  // positions rather than as an unordered CollectionPage — the order is the point.
+  const seriesJsonLd = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "CollectionPage",
+        "@id": `${seriesUrl}#series`,
+        name: series.title,
+        description: series.description,
+        url: seriesUrl,
+        inLanguage: "ko-KR",
+        isPartOf: { "@id": `${SITE_URL}#website` },
+        mainEntity: {
+          "@type": "ItemList",
+          numberOfItems: series.posts.length,
+          itemListElement: series.posts.map((post, i) => ({
+            "@type": "ListItem",
+            position: i + 1,
+            name: post.title,
+            url: `${SITE_URL}${canonicalPath("posts", post.slug)}`,
+          })),
+        },
+      },
+      {
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          { "@type": "ListItem", position: 1, name: "시리즈", item: `${SITE_URL}/series` },
+          { "@type": "ListItem", position: 2, name: series.title, item: seriesUrl },
+        ],
+      },
+    ],
+  };
+
   return (
     <main style={{ maxWidth: 760, margin: "0 auto", padding: "var(--space-6)", animation: "pageFadeIn .5s ease both" }}>
+      <JsonLd data={seriesJsonLd} />
       <Link
         href="/series"
         className="btn btn-ghost"

@@ -27,6 +27,6 @@ export default async function Icon() {
         초
       </div>
     ),
-    { ...size, fonts: [font] }
+    { ...size, fonts: font ? [font] : undefined }
   );
 }

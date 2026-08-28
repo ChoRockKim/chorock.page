@@ -3,6 +3,83 @@
 이 프로젝트의 주요 변경 사항을 버전(작업 단위) 별로 기록합니다. 형식은
 [Keep a Changelog](https://keepachangelog.com/)를 참고합니다.
 
+## [0.7.63] - 2026-08-23
+
+### 이전 상태
+
+SEO 설정 점검 결과 실제 프로덕션에서 다음이 확인됨.
+
+1. **개별 글/프로젝트 OG 이미지가 2주 넘게 전부 500.** Vercel 런타임 로그에
+   `ENOENT: no such file or directory, open '/var/task/public/fonts/Pretendard-Bold.otf'`
+   (routes=`/posts/[slug]/opengraph-image`, `/projects/[slug]/opengraph-image`, 2026-08-08
+   최초 ~ 조사 시점까지 계속). `lib/ogFont.ts`가 `process.cwd()/public/...`를 런타임에
+   `readFile` 하는데 `public/`은 서버리스 함수 번들에 포함되지 않고, 이 런타임 읽기는 Next의
+   파일 트레이서에도 잡히지 않아 폰트가 함수에 아예 복사되지 않았음. 루트
+   `/opengraph-image`가 멀쩡했던 건 동적 파라미터가 없어서 **빌드 타임에 프리렌더**되기
+   때문 — public/이 실제로 존재하는 빌드 머신에서 렌더돼서 문제가 드러나지 않았음.
+   `app/posts/[slug]/opengraph-image.tsx`의 주석이 "여기서 500이 나면 링크 스크래퍼가 페이지
+   첫 `<img>`(= 작성자 프로필 사진)를 대신 긁어간다"고 경고한 그 상황이 실제로 벌어지고 있었음.
+2. **`og:type`/`og:site_name`/`og:locale`이 사이트 전체에서 누락.** 루트 레이아웃은 셋 다
+   설정하지만, 자식 라우트가 `openGraph` 객체를 설정하면 Next가 **병합이 아니라 치환**한다
+   (CLAUDE.md가 `images`에 대해서만 문서화해둔 그 함정). 렌더된 HTML을 직접 curl해서 확인 —
+   `/`, `/about`, `/posts`, `/projects`, `/series` 어디에도 이 세 태그가 없었음. `/`는
+   `/about`으로 리다이렉트되므로 루트 `openGraph`가 실제로 쓰이는 페이지가 하나도 없었음.
+3. **canonical URL 전무.** `alternates`가 코드 전체에 없었음.
+4. **구조화 데이터(JSON-LD) 전무.** `application/ld+json` 0건.
+
+### Fixed
+
+- `next.config.ts`에 `outputFileTracingIncludes`로 `public/fonts/Pretendard-Bold.otf`를
+  `/posts/[slug]/opengraph-image`, `/projects/[slug]/opengraph-image` 두 함수 번들에 명시적으로
+  포함. 런타임 `readFile(path.join(process.cwd(), ...))`는 정적 분석이 안 되므로 이렇게
+  이름을 직접 적어주는 것 외에 트레이서가 폰트를 끌어올 방법이 없음.
+- `lib/ogFont.ts#loadOgFont()`가 throw 대신 `null`을 반환하도록 변경(`OgFont | null`).
+  이 회귀가 다시 일어나도 한글 제목이 빈 칸으로 나오는 선에서 그치고 500은 나지 않음 —
+  위 주석의 논리(500이 프로필 사진 유출로 이어짐) 그대로. 호출부 5개(`app/icon.tsx`,
+  `app/apple-icon.tsx`, OG 이미지 3개)를 `fonts: font ? [font] : undefined`로 수정.
+
+### Added
+
+- `lib/siteMeta.ts`: `SITE_TITLE`/`SITE_DESCRIPTION`/`SITE_URL`, `SITE_OG_BASE`
+  (`siteName`+`locale`), `SITE_OG_IMAGE`, `PERSON_ID`, `canonicalPath()`. 라우트마다 다시
+  적어야 하는 값들을 한 곳에 모은 것 — Next의 치환 동작상 "루트에 적었으니 상속되겠지"가
+  성립하지 않기 때문. `SITE_OG_BASE`에 `type`을 넣지 않은 건 의도적: 글 상세는
+  `type: "article"`이라 `"website"`를 깔아두면 TS 유니온이 꼬임. `images`를 넣지 않은 것도
+  의도적: 자체 `opengraph-image.tsx`가 있는 세그먼트(`/posts/[slug]`, `/projects/[slug]`)에
+  기본값을 다시 적으면 글별 생성 이미지가 사이트 공용 이미지로 덮여버림.
+- 인덱싱 대상 라우트 전부에 `alternates.canonical` + `openGraph.url` 추가
+  (`/about`, `/posts`, `/posts/[slug]`, `/projects`, `/projects/[slug]`, `/series`,
+  `/series/[slug]`). 한글 슬러그는 `canonicalPath()`가 `encodeURIComponent` 처리 —
+  `app/sitemap.ts`/`permanentRedirect`와 같은 요구사항.
+  **루트 레이아웃에는 일부러 넣지 않음**: 메타데이터는 최상위 키 단위로 상속되므로 루트에
+  `canonical: "/"`가 있으면 이를 덮지 않은 모든 자식 라우트가 자기를 `/`의 사본이라고
+  주장하게 됨 — 없느니만 못한 상태.
+- `components/JsonLd.tsx` + 구조화 데이터:
+  - `app/layout.tsx` — `WebSite` + `Person`을 `@graph`로 사이트 전역 1회. `Person`은 고정
+    `@id`(`PERSON_ID`)를 가져서 아래 노드들이 객체를 복제하지 않고 참조만 함.
+  - `app/posts/[slug]` — `BlogPosting`(구글 아티클 리치 결과 대상) + `BreadcrumbList`.
+  - `app/projects/[slug]` — `CreativeWork` + `BreadcrumbList`. `SoftwareApplication`이 아닌
+    이유는 스토어/데모 URL이 아예 없는 항목도 있어서.
+  - `app/series/[slug]` — `CollectionPage` + 순서 있는 `ItemList` + `BreadcrumbList`.
+  - JSON 직렬화 시 `<`를 `\u003c`로 이스케이프 — 마이그레이션된 글 요약에 HTML 조각이 실제로
+    들어있어서 `</script>` 탈출이 이론상 가능함.
+- `app/posts/[slug]` OG를 `type: "article"`로 바꾸고 `publishedTime`/`modifiedTime`/
+  `authors`/`tags` 추가. `modifiedTime`/`dateModified`용으로 `lib/posts.ts`의 `PostDetail`에
+  `updatedAt` 추가 — `models/Post.ts`가 이미 `{ timestamps: true }`라 조회만 하면 되는 값.
+
+### 참고 (코드 변경 아님)
+
+- 빌드 검증 중 `node_modules`가 손상돼 있는 것을 발견(`@swc/helpers/package.json`,
+  `next/dist/server/config-shared.d.ts` 등이 크기는 정상인데 내용이 전부 비어 있어
+  `ERR_INVALID_PACKAGE_CONFIG`로 `next build` 자체가 실패). `rm -rf node_modules &&
+  npm install`로 복구. 코드와 무관한 로컬 환경 문제.
+- 마이그레이션된 글들의 `summary`가 본문 앞부분을 잘라낸 것이라 `<meta name="description">`이
+  문장 중간에서 끊기거나(`"...폼을 관리할 때 useSt"`) 코드 조각을 포함함
+  (`"export default function PostMessage..."`). 코드 버그가 아닌 데이터 품질 문제라 이번
+  변경에는 포함하지 않음.
+- 아직 남은 항목: `app/sitemap.ts`의 `lastModified`, RSS 피드, 네이버 서치어드바이저 인증,
+  `app/page.tsx`의 `/` → `/about` 리다이렉트가 307(임시)인 점.
+
 ## [0.7.62] - 2026-08-23
 
 ### 이전 상태

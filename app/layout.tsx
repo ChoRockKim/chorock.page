@@ -10,20 +10,23 @@ import AuthSessionProvider from "@/components/AuthSessionProvider";
 import VisitTracker from "@/components/VisitTracker";
 import ScrollToTopButton from "@/components/ScrollToTopButton";
 import PhotoViewProvider from "@/components/PhotoViewProvider";
-
-const SITE_TITLE = "chorock.page";
-const SITE_DESCRIPTION = "개발 기록을 남기는 블로그";
+import JsonLd from "@/components/JsonLd";
+import { PROFILE } from "@/lib/profile";
+import { SITE_TITLE, SITE_DESCRIPTION, SITE_URL, SITE_OG_BASE, PERSON_ID } from "@/lib/siteMeta";
 
 export const metadata: Metadata = {
   // Without this, relative OG image URLs (from opengraph-image.tsx files) resolve against
   // localhost in production instead of the real domain — a common Next.js metadata gotcha.
-  metadataBase: new URL("https://chorock.page"),
+  metadataBase: new URL(SITE_URL),
   title: SITE_TITLE,
   description: SITE_DESCRIPTION,
+  // No `alternates.canonical` / `openGraph.url` here on purpose: metadata is inherited
+  // per top-level key, so a root-level canonical of "/" would be silently claimed by every
+  // child route that doesn't override it — worse than having none. Each indexable route sets
+  // its own (see lib/siteMeta.ts#canonicalPath).
   openGraph: {
+    ...SITE_OG_BASE,
     type: "website",
-    siteName: SITE_TITLE,
-    locale: "ko_KR",
     title: SITE_TITLE,
     description: SITE_DESCRIPTION,
   },
@@ -74,6 +77,35 @@ const PRETENDARD_ASYNC_LOAD_SCRIPT = `
 })();
 `;
 
+/**
+ * Site-wide structured data, emitted on every page. Declared as a @graph so the Person node
+ * exists exactly once under a stable @id (lib/siteMeta.ts#PERSON_ID) that post detail pages
+ * can point `author`/`publisher` at by reference instead of re-inlining the whole object.
+ */
+const SITE_JSON_LD = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": `${SITE_URL}#website`,
+      url: SITE_URL,
+      name: SITE_TITLE,
+      description: SITE_DESCRIPTION,
+      inLanguage: "ko-KR",
+      publisher: { "@id": PERSON_ID },
+    },
+    {
+      "@type": "Person",
+      "@id": PERSON_ID,
+      name: PROFILE.handle,
+      url: `${SITE_URL}/about`,
+      image: `${SITE_URL}${PROFILE.avatar}`,
+      description: PROFILE.shortIntro,
+      jobTitle: PROFILE.role,
+    },
+  ],
+};
+
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="ko" suppressHydrationWarning>
@@ -88,6 +120,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         </noscript>
       </head>
       <body>
+        <JsonLd data={SITE_JSON_LD} />
         <ViewTransitions>
           <PhotoViewProvider>
             <VisitTracker />

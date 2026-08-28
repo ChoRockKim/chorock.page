@@ -6,6 +6,8 @@ import { compileMarkdown } from "@/lib/markdown";
 import SkillTag from "@/components/SkillTag";
 import ScrollReveal from "@/components/ScrollReveal";
 import ProjectsBackLink from "@/components/ProjectsBackLink";
+import JsonLd from "@/components/JsonLd";
+import { SITE_URL, SITE_OG_BASE, PERSON_ID, canonicalPath } from "@/lib/siteMeta";
 
 export const revalidate = 300;
 
@@ -22,10 +24,20 @@ export async function generateMetadata({
   const { slug } = await params;
   const project = await getProjectBySlug(decodeURIComponent(slug));
   if (!project) return {};
+  const url = canonicalPath("projects", project.slug);
   return {
     title: `${project.title} · chorock.page`,
     description: project.summary,
-    openGraph: { title: project.title, description: project.summary },
+    alternates: { canonical: url },
+    openGraph: {
+      ...SITE_OG_BASE,
+      type: "website",
+      url,
+      title: project.title,
+      description: project.summary,
+      // No `images` on purpose — this segment has its own opengraph-image.tsx, and restating
+      // a default would override the per-project generated image with the site-wide one.
+    },
   };
 }
 
@@ -40,8 +52,42 @@ export default async function ProjectDetailPage({
 
   const { content } = await compileMarkdown(project.overviewMd);
 
+  const projectUrl = `${SITE_URL}${canonicalPath("projects", project.slug)}`;
+  // CreativeWork rather than SoftwareApplication: these entries describe the work itself and
+  // several have no installable artifact (no store/demo URL at all), which SoftwareApplication
+  // effectively assumes. sameAs collects whatever external links this project happens to have.
+  const projectJsonLd = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "CreativeWork",
+        "@id": `${projectUrl}#project`,
+        name: project.title,
+        description: project.summary,
+        url: projectUrl,
+        inLanguage: "ko-KR",
+        creator: { "@id": PERSON_ID },
+        keywords: project.tags,
+        image: `${projectUrl}/opengraph-image`,
+        sameAs: [project.repoUrl, project.demoUrl, project.playStoreUrl, project.appStoreUrl].filter(
+          (url): url is string => Boolean(url)
+        ),
+        mainEntityOfPage: { "@type": "WebPage", "@id": projectUrl },
+        isPartOf: { "@id": `${SITE_URL}#website` },
+      },
+      {
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          { "@type": "ListItem", position: 1, name: "프로젝트", item: `${SITE_URL}/projects` },
+          { "@type": "ListItem", position: 2, name: project.title, item: projectUrl },
+        ],
+      },
+    ],
+  };
+
   return (
     <div className="proj-grid">
+      <JsonLd data={projectJsonLd} />
       <aside className="proj-sidebar">
         <ProjectsBackLink style={{ fontSize: 13, paddingLeft: 0, marginBottom: "var(--space-4)" }}>
           ← 프로젝트 목록

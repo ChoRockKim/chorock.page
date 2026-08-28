@@ -59,6 +59,6 @@ export default async function Image({ params }: { params: Promise<{ slug: string
         <div style={{ display: "flex", fontSize: 24, color: "#201e1d", opacity: 0.55 }}>chorock.page</div>
       </div>
     ),
-    { ...size, fonts: [font] }
+    { ...size, fonts: font ? [font] : undefined }
   );
 }

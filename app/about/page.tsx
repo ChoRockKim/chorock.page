@@ -4,16 +4,26 @@ import type { Metadata } from "next";
 import { getCachedPosts } from "@/lib/posts";
 import { listProjects } from "@/lib/projects";
 import { PROFILE } from "@/lib/profile";
+import { SITE_OG_BASE, SITE_OG_IMAGE } from "@/lib/siteMeta";
 import PostCard from "@/components/PostCard";
 import ProjectCard from "@/components/ProjectCard";
 import SkillTag from "@/components/SkillTag";
 import ScrollReveal from "@/components/ScrollReveal";
 import VisitCounter from "@/components/VisitCounter";
 
-// See app/posts/page.tsx for why openGraph needs its own explicit title/description/images.
+// See app/posts/page.tsx for why every field the root layout sets has to be repeated here.
 export const metadata: Metadata = {
   title: "소개 · chorock.page",
-  openGraph: { title: "소개 · chorock.page", description: PROFILE.shortIntro, images: ["/opengraph-image"] },
+  description: PROFILE.shortIntro,
+  alternates: { canonical: "/about" },
+  openGraph: {
+    ...SITE_OG_BASE,
+    type: "profile",
+    url: "/about",
+    title: "소개 · chorock.page",
+    description: PROFILE.shortIntro,
+    images: SITE_OG_IMAGE,
+  },
 };
 
 // Without this, this page has no dynamic data source (no cookies/searchParams), so Next.js

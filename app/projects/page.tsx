@@ -1,11 +1,21 @@
 import type { Metadata } from "next";
+import { SITE_OG_BASE, SITE_OG_IMAGE } from "@/lib/siteMeta";
 import { listProjects } from "@/lib/projects";
 import ProjectCard from "@/components/ProjectCard";
 
-// See app/posts/page.tsx for why openGraph needs its own explicit title/description/images.
+// See app/posts/page.tsx for why every field the root layout sets has to be repeated here.
 export const metadata: Metadata = {
   title: "프로젝트 · chorock.page",
-  openGraph: { title: "프로젝트 · chorock.page", description: "만든 프로젝트 모음", images: ["/opengraph-image"] },
+  description: "만든 프로젝트 모음",
+  alternates: { canonical: "/projects" },
+  openGraph: {
+    ...SITE_OG_BASE,
+    type: "website",
+    url: "/projects",
+    title: "프로젝트 · chorock.page",
+    description: "만든 프로젝트 모음",
+    images: SITE_OG_IMAGE,
+  },
 };
 
 export default async function ProjectsPage() {
