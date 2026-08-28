@@ -252,7 +252,7 @@ export default async function ProjectDetailPage({
         {project.stack.length > 0 && (
           <section style={{ marginBottom: "var(--space-6)" }}>
             <ScrollReveal>
-              <h2 style={{ fontSize: 18, margin: "0 0 var(--space-4)" }}>사용 기술</h2>
+              <h2 style={{ fontSize: 24, margin: "0 0 var(--space-4)" }}>사용 기술</h2>
             </ScrollReveal>
             <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
               {project.stack.map((group, i) => (
@@ -273,7 +273,7 @@ export default async function ProjectDetailPage({
 
         <ScrollReveal>
           <section>
-            <h2 style={{ fontSize: 18, margin: "0 0 var(--space-4)" }}>프로젝트 개요</h2>
+            <h2 style={{ fontSize: 24, margin: "0 0 var(--space-4)" }}>프로젝트 개요</h2>
             <div className="pd-body">{content}</div>
           </section>
         </ScrollReveal>

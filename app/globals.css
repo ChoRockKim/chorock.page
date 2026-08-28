@@ -497,9 +497,15 @@ html.projects-nav-no-stagger .stagger-list > * { animation: none !important; }
   font-size: 12.5px;
 }
 
-.pd-body p { font-size: 16px; line-height: 1.8; opacity: 0.88; margin: 0 0 var(--space-3); }
-.pd-body h2 { font-size: 22px; margin-top: var(--space-8); scroll-margin-top: 90px; }
-.pd-body h3 { font-size: 18px; margin-top: var(--space-6); scroll-margin-top: 90px; }
+/* 문단 사이를 글줄 높이(16px * 1.8 ≈ 29px) 한 줄만큼 벌린다. --space-3(15px)이었을 땐
+   문단 바뀜이 줄바꿈보다 좁아 보였는데, 이 파이프라인은 remark-breaks로 단일 개행을
+   <br>로 바꾸기 때문에 둘의 차이가 오직 이 margin 하나뿐이라 특히 눈에 띄었다. */
+.pd-body p { font-size: 16px; line-height: 1.8; opacity: 0.88; margin: 0 0 var(--space-6); }
+/* 문단 간격이 --space-6(30px)이므로 헤딩 여백도 그 위로 올려야 섹션 경계가 문단 경계와
+   구분된다. 인접 형제 margin은 겹쳐서 큰 쪽만 남으므로, h2가 --space-8(40px)이면 문단
+   사이(30px)와 10px밖에 차이가 안 나 섹션이 시작된 티가 나지 않았다. */
+.pd-body h2 { font-size: 22px; margin-top: calc(var(--space-8) + var(--space-4)); scroll-margin-top: 90px; }
+.pd-body h3 { font-size: 18px; margin-top: var(--space-8); scroll-margin-top: 90px; }
 .pd-body blockquote {
   margin: var(--space-4) 0;
   padding: var(--space-3) var(--space-4);
@@ -533,6 +539,7 @@ html.projects-nav-no-stagger .stagger-list > * { animation: none !important; }
 }
 .pd-body ul,
 .pd-body ol { padding-left: 1.4em; font-size: 16px; line-height: 1.8; opacity: 0.88; }
+.pd-body li + li { margin-top: var(--space-2); }
 .pd-body code:not(pre code) {
   font-family: var(--font-mono);
   font-size: 0.85em;
