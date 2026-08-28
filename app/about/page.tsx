@@ -78,7 +78,7 @@ const CAREER: {
     tags: ["React.js", "Javascript"],
   },
   {
-    period: "2026.01 — 현재",
+    period: "2026.03 — 현재",
     title: "프론트엔드 개발자",
     company: "포에이",
     logo: "/career/forA-logo.png",
