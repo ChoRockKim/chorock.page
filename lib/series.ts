@@ -116,3 +116,30 @@ async function fetchSeriesWithPosts(slug: string): Promise<SeriesWithPosts | nul
  *  same slug during the same request) share one pair of Mongo round-trips instead of two —
  *  same pattern as lib/posts.ts#getPostBySlug / lib/projects.ts#getProjectBySlug. */
 export const getSeriesWithPosts = cache(fetchSeriesWithPosts);
+
+/**
+ * Sitemap rows for every series that has at least one published post.
+ *
+ * `lastModified` is the newest post in the series, not the Series document's own `updatedAt` —
+ * the series page's actual content is its post list, so adding a post to a series changes the
+ * page even though the Series document itself never gets touched.
+ */
+export async function listSeriesSitemapEntries(): Promise<{ slug: string; lastModified: Date }[]> {
+  await connectToDatabase();
+
+  const groups = await PostModel.aggregate<{ _id: unknown; lastModified: Date }>([
+    { $match: { status: "published", seriesId: { $ne: null } } },
+    { $group: { _id: "$seriesId", lastModified: { $max: { $ifNull: ["$updatedAt", "$publishedAt"] } } } },
+  ]);
+  const lastModifiedBySeriesId = new Map(groups.map((g) => [String(g._id), g.lastModified]));
+
+  const docs = await SeriesModel.find(
+    { _id: { $in: groups.map((g) => g._id) } },
+    { slug: 1 }
+  ).lean<{ _id: unknown; slug: string }[]>();
+
+  return docs.map((d) => ({
+    slug: d.slug,
+    lastModified: new Date(lastModifiedBySeriesId.get(String(d._id)) ?? Date.now()),
+  }));
+}

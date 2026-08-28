@@ -114,3 +114,14 @@ export async function listProjectSlugs(): Promise<string[]> {
   const docs = await ProjectModel.find({ status: "published" }, { slug: 1 }).lean<{ slug: string }[]>();
   return docs.map((d) => d.slug);
 }
+
+/** Sitemap rows for every published project — see lib/posts.ts#listPostSitemapEntries for why
+ *  `lastModified` matters here. */
+export async function listProjectSitemapEntries(): Promise<{ slug: string; lastModified: Date }[]> {
+  await connectToDatabase();
+  const docs = await ProjectModel.find(
+    { status: "published" },
+    { slug: 1, updatedAt: 1, publishedAt: 1 }
+  ).lean<{ slug: string; updatedAt?: Date; publishedAt: Date }[]>();
+  return docs.map((d) => ({ slug: d.slug, lastModified: new Date(d.updatedAt ?? d.publishedAt) }));
+}

@@ -4,8 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { PostSummary } from "@/lib/posts";
 import PostCard from "@/components/PostCard";
-
-const PAGE_SIZE = 5;
+import { POSTS_PAGE_SIZE as PAGE_SIZE, postsPageHref } from "@/lib/postsPagination";
 
 /**
  * Reflects filter/page into the URL via the raw History API — deliberately NOT
@@ -22,7 +21,12 @@ function syncUrl(tag: string | null, page: number) {
   window.history.replaceState(null, "", qs ? `/posts?${qs}` : "/posts");
 }
 
-export default function PostsListClient() {
+/**
+ * `initialPage` comes from the crawlable /posts/page/[n] route (app/posts/page/[n]/page.tsx),
+ * which server-renders that page's slice so its five post links exist in the raw HTML. /posts
+ * itself passes nothing and starts at 1, exactly as before.
+ */
+export default function PostsListClient({ initialPage = 1 }: { initialPage?: number }) {
   const { data: posts = [] } = useQuery({
     queryKey: ["posts"],
     queryFn: () =>
@@ -32,7 +36,7 @@ export default function PostsListClient() {
   });
 
   const [activeTag, setActiveTag] = useState<string | null>(null);
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(initialPage);
 
   // Restores state on (re)mount from whatever is actually in the address bar —
   // this is what makes the browser back button work: leaving to /posts/[slug]
@@ -46,7 +50,12 @@ export default function PostsListClient() {
     const urlTag = params.get("tag");
     const urlPage = Number(params.get("page"));
     setActiveTag(urlTag || null);
-    setPage(Number.isFinite(urlPage) && urlPage > 0 ? urlPage : 1);
+    // Only when `?page=` is actually present. syncUrl() is what writes it, so it's what a
+    // back-navigation restores — but it's absent on a direct hit to /posts/page/[n], where the
+    // page number arrived as a prop instead and must not be clobbered back to 1.
+    if (params.get("page") !== null) {
+      setPage(Number.isFinite(urlPage) && urlPage > 0 ? urlPage : 1);
+    }
   }, []);
 
   const tags = useMemo(() => {
@@ -168,25 +177,37 @@ export default function PostsListClient() {
               />
             </svg>
           </button>
+          {/* Real anchors, not <button>s: this is the only crawlable path from /posts to
+              anything past the first five posts (see lib/postsPagination.ts#postsPageHref).
+              The click handler still paginates in place, so a visitor with JS never actually
+              navigates — except on a modifier/middle click, which is left alone so
+              open-in-new-tab keeps working. */}
           {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
-            <button
+            <a
               key={n}
+              href={postsPageHref(n)}
+              aria-current={n === current ? "page" : undefined}
               className={`tag page-num-btn ${n === current ? "tag-accent" : "tag-outline"}`}
               style={{
                 border: n === current ? "none" : "1px solid var(--color-accent)",
                 background: n === current ? "var(--color-accent-100)" : "none",
                 cursor: "pointer",
                 font: "inherit",
+                textDecoration: "none",
                 width: 32,
                 height: 32,
                 display: "inline-flex",
                 alignItems: "center",
                 justifyContent: "center",
               }}
-              onClick={() => goToPage(n)}
+              onClick={(e) => {
+                if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+                e.preventDefault();
+                goToPage(n);
+              }}
             >
               {n}
-            </button>
+            </a>
           ))}
           <button
             className="btn btn-icon btn-secondary"

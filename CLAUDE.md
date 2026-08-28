@@ -439,6 +439,15 @@ Transition's own cross-fade, which caused the original flicker) — that conflic
 where the browser's View Transition animation is actually running, and at this same breakpoint
 it's already force-disabled by the rule above, so there's nothing left to stack with.
 
+**`app/sitemap.ts` emits a real `<lastmod>` per URL**, via
+`lib/posts.ts#listPostSitemapEntries` / `lib/projects.ts#listProjectSitemapEntries` /
+`lib/series.ts#listSeriesSitemapEntries` (each falling back to `publishedAt` for documents that
+predate `{ timestamps: true }`). It used to emit bare `<loc>` entries, which gives Google no
+freshness signal to prioritise crawling with — a contributing cause of the indexing backlog
+0.7.75 fixed. A series' `lastModified` is the `$max` over its *posts*, not the Series document's
+own `updatedAt`: the page's content is its post list, so adding a post changes the page while
+leaving the Series document untouched.
+
 **SEO/share-preview metadata is generated, not static image files.** No favicon/OG image
 assets exist in the repo (no logo was ever made) — `app/icon.tsx`/`app/apple-icon.tsx`/
 `app/opengraph-image.tsx` all use `next/og`'s `ImageResponse` to render the same "초"
@@ -554,6 +563,28 @@ SSR); it's `export const revalidate = 300` (ISR) instead. TanStack Query's `Quer
 lives in `components/QueryProvider.tsx`, mounted once in `app/layout.tsx` so any page can use
 `useQuery`.
 
+**`/posts`' client-side pagination needs a crawlable counterpart, and that's what
+`app/posts/page/[n]/page.tsx` is.** Because `PostsListClient` renders one 5-item slice and the
+page-number controls were plain `<button>`s, the raw HTML of `/posts` only ever contained five
+post links — and a JS-executing Googlebot renders a page but does not *click* buttons, so it
+never reached page 2 either. Measured against the real site: of 19 published posts, only 14 were
+linked from anywhere on the site at all (mostly via `/series/[slug]` and `/about`'s "최근 글"),
+and 5 were pure orphans discoverable only through the sitemap — exactly what Search Console
+reports as "Discovered – currently not indexed" (22 URLs, see CHANGELOG 0.7.75). The fix has two
+halves that must stay together: (1) the page-number controls in `PostsListClient` are now real
+`<a href={postsPageHref(n)}>` anchors whose `onClick` calls `preventDefault()` and paginates in
+local state exactly as before (so nothing changes for a visitor with JS — except a
+modifier/middle click, which is deliberately left alone so open-in-new-tab still works), and
+(2) `/posts/page/[n]` server-renders that slice so those five links actually exist in HTML.
+That route stays **static** (`revalidate = 300` + `generateStaticParams()` for pages 2..N) by
+taking the page number as a **path segment, not a searchParam** — reading `?page=` on `/posts`
+would force the whole route dynamic, the exact thing CHANGELOG 0.5.0 removed. Page 1 lives at
+`/posts` and `/posts/page/1` `permanentRedirect`s there; out-of-range and non-numeric `n`
+`notFound()`. Its canonical is **self**, not `/posts` — these pages hold different posts, so
+canonicalising them to page 1 would declare them duplicates and undo the whole point.
+`POSTS_PAGE_SIZE`/`postsPageHref()` live in `lib/postsPagination.ts` rather than `lib/posts.ts`
+because that module is `"server-only"` and the client component has to import them too.
+
 The current tag/page is still mirrored into `?tag=`/`?page=`, but via a raw
 `window.history.replaceState()` call (see `syncUrl` in `PostsListClient.tsx`), never
 `next/navigation`'s router — going through the router would re-trigger a fetch this whole
@@ -600,7 +631,8 @@ in `app/globals.css`), shaped to match this page's actual list-of-posts layout.
 
 ## What exists vs. doesn't
 
-Implemented: `/posts/[slug]`, `/posts` (list), `/series`, `/series/[slug]`, `/about`,
+Implemented: `/posts/[slug]`, `/posts` (list), `/posts/page/[n]` (crawlable pagination),
+`/series`, `/series/[slug]`, `/about`,
 `/projects`, `/projects/[slug]`, `/api/search`, `/detail/[id]` (old forum URL → 308 redirect),
 Header (nav + Cmd+K search + theme toggle), Footer, PostCard, ProjectCard, TOC (desktop
 scrollspy + mobile accordion), reading progress bar, share button, code-block copy buttons,
@@ -776,9 +808,10 @@ gating to be secure — `middleware.ts` already blocks unauthenticated `/posts/w
 purely so a non-owner visitor doesn't see a write button that would just redirect them to sign-in.
 
 There is no standalone home page, but `/` is not a 404 either — `app/page.tsx` is a bare
-`redirect("/about")`, which Next serves as a **307** (temporary; making it permanent is still
-open). Because `/` never returns content, the JSON-LD breadcrumbs on post/project detail pages
-deliberately start at `/posts`/`/projects` rather than the site root. `app/sitemap.ts` does
-still list `/` among its static routes — submitting a redirecting URL isn't harmful, but it's
-inconsistent with the above and worth revisiting if the sitemap is touched. `/posts/[slug]/edit`
-and delete (the "삭제" button) are both implemented (see above).
+`permanentRedirect("/about")`, i.e. a **308**. It used to be `redirect()` (307), and `/` used to
+be listed in `app/sitemap.ts`; together those put `/` in Search Console's "Page with redirect"
+bucket, since a *temporary* redirect tells Google the destination might change back, so it keeps
+the redirecting URL queued as its own contentless URL. Both were changed in 0.7.75 — don't
+re-add `/` to the sitemap. Because `/` never returns content, the JSON-LD breadcrumbs on
+post/project detail pages deliberately start at `/posts`/`/projects` rather than the site root.
+`/posts/[slug]/edit` and delete (the "삭제" button) are both implemented (see above).

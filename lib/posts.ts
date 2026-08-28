@@ -286,3 +286,20 @@ export async function searchPosts(query: string, limit = 8): Promise<PostSummary
   const { estimateReadTime } = await import("@/lib/markdown");
   return docs.map((doc) => toSummary(doc, estimateReadTime(doc.content)));
 }
+
+/**
+ * Sitemap rows for every published post, carrying a real `lastModified`.
+ *
+ * app/sitemap.ts used to emit bare `<loc>` entries with no `<lastmod>` at all, which gives
+ * Google no freshness signal to prioritise crawling with — one of the contributing causes of
+ * the "Discovered – currently not indexed" backlog in Search Console. Falls back to
+ * `publishedAt` for the (migrated) documents that predate `{ timestamps: true }`.
+ */
+export async function listPostSitemapEntries(): Promise<{ slug: string; lastModified: Date }[]> {
+  await connectToDatabase();
+  const docs = await PostModel.find(
+    { status: "published" },
+    { slug: 1, updatedAt: 1, publishedAt: 1 }
+  ).lean<{ slug: string; updatedAt?: Date; publishedAt: Date }[]>();
+  return docs.map((d) => ({ slug: d.slug, lastModified: new Date(d.updatedAt ?? d.publishedAt) }));
+}

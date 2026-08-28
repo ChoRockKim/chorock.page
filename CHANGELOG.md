@@ -3,6 +3,91 @@
 이 프로젝트의 주요 변경 사항을 버전(작업 단위) 별로 기록합니다. 형식은
 [Keep a Changelog](https://keepachangelog.com/)를 참고합니다.
 
+## [0.7.75] - 2026-08-29
+
+### 이전 상태
+
+Search Console의 "페이지 색인이 생성되지 않는 이유"에 항목이 쌓여 있었음 — **발견됨(색인 생성
+안 됨) 22개**, 크롤링됨(색인 생성 안 됨) 2개, 404 4개, 리디렉션이 포함된 페이지 3개, NOINDEX
+1개, 표준 없는 중복 페이지 1개. 라이브 사이트를 직접 요청해서 원인을 확인했음.
+
+1. **`/posts`의 서버 HTML에 글 링크가 5개밖에 없었음.** `components/PostsListClient.tsx`는
+   `PAGE_SIZE = 5`로 잘라 한 페이지만 렌더하고, 페이지 번호가 `<button>`이라 크롤러가 다음
+   페이지로 넘어갈 방법이 없었음(JS를 실행하는 Googlebot도 버튼을 클릭하지는 않음).
+   렌더된 HTML 전체(`/about`, `/posts`, `/projects`, `/series`, 시리즈 상세 4개)에서 `/posts/`
+   링크를 모아 사이트맵과 대조한 결과 **19개 중 5개는 사이트 어디에서도 링크되지 않는 고아
+   페이지**였음 — `swift-create-update-and-delete-data`,
+   `swift-스위프트에서-데이터를-다루는-방법1`, `swift-swiftdata-기초-사용법`,
+   `0-기술-블로그-시작`, `nodejs-express-를-통해-구현한-블로그-프로젝트입니다`.
+   사이트맵으로만 발견되고 크롤은 안 되는 상태, 즉 "발견됨 - 현재 색인이 생성되지 않음"이
+   보고하던 것이 정확히 이것.
+2. **사이트맵에 `<lastmod>`가 아예 없었음.** `app/sitemap.ts`가 `url`만 넣고 있었는데, 이러면
+   Google이 어느 URL을 먼저 크롤할지 판단할 신선도 신호가 없음.
+3. **`/`가 307(임시) 리디렉션인데 사이트맵에 들어 있었음.** `redirect()`는 307을 내보내므로
+   Google은 `/`를 "언젠가 되돌아올 수 있는" 자체 URL로 계속 색인 대기시킴 —
+   "리디렉션이 포함된 페이지"에 잡히는 원인.
+4. NOINDEX 1개는 Next의 404 페이지(`<meta name="robots" content="noindex">`, 확인함),
+   404 4개는 마이그레이션되지 않은 구 forum URL(`/detail/:id` → `notFound()`)로 정상 동작.
+   중복 페이지 1개는 `www.chorock.page`가 apex로 리디렉트되지 않고 그대로 200을 주는 것 —
+   이건 코드가 아니라 Vercel 도메인 설정이라 아래 "남은 작업"에 적음.
+
+### Added
+
+- **`app/posts/page/[n]/page.tsx`** — `/posts`의 클라이언트 페이지네이션에 대응하는 크롤 가능한
+  정적 라우트. `generateStaticParams()`가 2페이지부터 마지막 페이지까지 미리 생성하고(1페이지는
+  `/posts`이므로 `permanentRedirect("/posts")`), 해당 구간의 글을 서버에서 렌더하므로 그 5개
+  링크가 raw HTML에 존재함. `searchParams`를 읽지 않으므로 `/posts`와 동일하게 ISR
+  (`revalidate = 300`) 유지 — `/posts`에서 `?page=`를 읽는 방식이었다면 라우트 전체가 동적으로
+  바뀌었을 것(CLAUDE.md의 0.5.0 결정 참고).
+  canonical은 `/posts`가 아니라 **self-canonical**. 페이지마다 다른 글이 들어 있으므로
+  `/posts`를 가리키면 "1페이지의 중복"이라고 알려주는 셈이 되어 라우트를 만든 이유가 사라짐.
+- **`lib/postsPagination.ts`** — `POSTS_PAGE_SIZE`와 `postsPageHref()`. 클라이언트 컴포넌트와
+  서버 라우트가 같은 슬라이스 크기를 써야 해서 분리했음. `lib/posts.ts`에 두지 않은 이유는
+  그 모듈이 `"server-only"`라 클라이언트에서 import하면 빌드가 깨지기 때문.
+- `lib/posts.ts#listPostSitemapEntries`, `lib/projects.ts#listProjectSitemapEntries`,
+  `lib/series.ts#listSeriesSitemapEntries` — 사이트맵용 `lastModified`를 함께 돌려줌.
+  시리즈의 `lastModified`는 Series 문서 자신의 `updatedAt`이 아니라 **소속 글 중 가장 최신**
+  (`$max`)임: 시리즈 페이지의 실제 내용은 글 목록이라, 글이 추가되면 Series 문서는 그대로여도
+  페이지는 바뀜.
+
+### Changed
+
+- `components/PostsListClient.tsx`의 페이지 번호가 `<button>` → **`<a href={postsPageHref(n)}>`**.
+  `onClick`에서 `preventDefault()` 후 기존 `goToPage()`를 그대로 부르므로 JS가 있는 방문자
+  입장에서는 동작이 하나도 안 바뀜(실제로 이동하지 않음). 단 `metaKey`/`ctrlKey`/`shiftKey`/
+  `altKey`/가운데 클릭일 때는 `preventDefault()`를 하지 않아 새 탭으로 열기가 계속 동작함.
+  `aria-current="page"`도 붙였음.
+- 같은 파일에 `initialPage` prop 추가(기본값 1). `/posts/page/[n]`이 넘겨주는 값이고,
+  `/posts`는 아무것도 넘기지 않아 기존과 동일. 마운트 시 URL 복원 `useEffect`는 이제
+  **`?page=`가 실제로 있을 때만** 페이지를 덮어씀 — 그러지 않으면 `/posts/page/2`로 직접
+  들어왔을 때 prop으로 받은 2가 1로 초기화됨. `syncUrl()`은 그대로 `?page=`를 쓴다
+  (replaceState로 *경로*를 바꾸면 Next 라우터의 내부 상태와 URL이 어긋나므로, 이미 검증된
+  쿼리스트링 방식을 유지하고 `href`만 크롤용으로 진짜 경로를 가리키게 했음).
+- `app/page.tsx`가 `redirect()` → **`permanentRedirect()`** (307 → 308).
+- `app/sitemap.ts` 전면 수정 — 모든 항목에 `lastModified`/`changeFrequency`/`priority` 추가,
+  **`/` 항목 제거**(리디렉션하는 URL을 사이트맵에 넣는 것이 위 3번의 원인).
+
+### 검증
+
+- `npm run build` 통과. 빌드 출력에 `● /posts/page/[n]` + `/posts/page/2,3,4`가 SSG로 찍힘.
+- **고아 페이지 0개 확인** — 빌드된 `.next/server/app/**/*.html` 전체에서 `/posts/...` href를
+  긁어 프리렌더된 글 19개와 대조: 이전에는 14개만 링크되어 있었고 지금은 19개 전부 링크됨.
+  `.next/server/app/posts/page/2.html`에 2페이지 글 5개의 링크가 실제로 들어 있는 것도 확인.
+- `npx next start`로 실제 응답 확인: `/` → 308 `/about`, `/posts/page/1` → 308 `/posts`,
+  `/posts/page/2`·`/4` → 200, `/posts/page/9`(범위 밖) → 404, `/posts/page/abc` → 404.
+- `/posts/page/2`의 `<title>`이 `글 (2페이지) · chorock.page`, canonical이
+  `https://chorock.page/posts/page/2`(self), `og:image`도 유지되는 것 확인
+  (CLAUDE.md의 openGraph 덮어쓰기 함정 때문에 `SITE_OG_BASE`/`SITE_OG_IMAGE`를 다시 펼쳐 넣었음).
+- 빌드된 `sitemap.xml`에 `<lastmod>`가 들어가고 `/` 항목이 빠진 것 확인.
+
+### 남은 작업 (코드로 못 고치는 것)
+
+- **`www.chorock.page` → `chorock.page` 301 리디렉트**를 Vercel 대시보드에서 설정해야 함
+  (Project → Settings → Domains → `www.chorock.page` → Redirect to `chorock.page`).
+  현재 `https://www.chorock.page/about`이 200을 주고 있음(canonical은 apex를 가리키므로
+  Google이 대체로 알아서 처리하지만 크롤 예산이 낭비되고 "표준 없는 중복 페이지"의 원인).
+- Search Console에서 수정된 사이트맵 재제출 + `/posts/page/2~4`를 URL 검사로 색인 요청.
+
 ## [0.7.74] - 2026-08-29
 
 ### 이전 상태
