@@ -448,6 +448,66 @@ freshness signal to prioritise crawling with — a contributing cause of the ind
 own `updatedAt`: the page's content is its post list, so adding a post changes the page while
 leaving the Series document untouched.
 
+**Both detail pages have a TOC, and it is the same two components.** `components/TableOfContents.tsx`
+(client, scrollspy) and `components/TocMobile.tsx` (a plain `<details>` server component) are used
+by `/posts/[slug]` AND `/projects/[slug]`; neither was modified to be reused. The scrollspy finds
+its targets with `document.getElementById(h.id)` only — no container selector — so it is portable
+anywhere the ids exist. On the project page they live *inside* `.proj-sidebar` rather than in a
+grid column of their own, which needs two scoped CSS overrides (`app/globals.css`): the inline
+`position: sticky` has to be neutralized because `.proj-sidebar` is already sticky at the same
+offset, and the `.toc-desktop`/`.toc-mobile` swap happens at 900px (matching `.pd-grid`) while
+`.proj-grid` collapses at 800px — without an override, 801–900px would show the mobile
+`<details>` beside a still-full-width sidebar. The project TOC is filtered to `h2` only
+(`extractHeadings(...).filter((h) => h.depth === 2)`); including `h3` makes `boo-game` 13 entries
+and overflows the sidebar. **`extractHeadings` must be given the exact same string
+`compileMarkdown` got** — they are independent pipelines that only agree because both bottom out
+in `github-slugger`, so a trimmed variant silently desyncs every anchor.
+
+**A `position: sticky` element taller than the viewport is not merely clipped — its lower part is
+unreachable**, because scrolling moves the page while the pinned box stays put. Adding the TOC
+pushed `.proj-sidebar` to ~688px, and at a 583px viewport the last TOC entry sat 185px below the
+fold with no way to scroll to it. `app/globals.css` caps the sidebar (`max-height: calc(100vh -
+100px)`, flex column) above 800px and gives `overflow-y: auto` to `.proj-toc` **only** — the
+sidebar itself keeps `overflow: visible` so the `<h1>` carrying
+`viewTransitionName: project-title-<slug>` never gains a clipping/scrolling ancestor that could
+crop its morph in from `/projects`.
+
+**A TOC anchor jump does not move the scrollspy's active marker on its own, and that needed an
+explicit fix.** The jump lands a heading at `scroll-margin-top: 90px`, but `TableOfContents`'
+active band is `rootMargin: "-30% 0px -60% 0px"` — the viewport's 30–40% strip, measured at
+262–349px on an 872px viewport. The clicked heading therefore lands ~170px *above* the band and is
+never reported active, so the marker stayed put (this affected `/posts/[slug]` too, for as long as
+the TOC has existed). The link's `onClick` now sets `activeId` directly and stamps a `clickedAt`
+ref that makes the observer ignore entries for 700ms, so the settling scroll can't immediately
+override the click. `clickedAt` starts at 0, so the early-return can't fire before a first click —
+plain scroll behavior is unchanged. The lock is released by `scrollend`, not a fixed timer:
+`app/globals.css` sets `html { scroll-behavior: smooth }` (so TOC links glide rather than
+teleport), and a timed lock that expires mid-flight lets every heading the scroll passes through
+drag the marker along. The 1.2s timer is only a fallback for browsers without `scrollend` and for
+a click that doesn't scroll at all — clicking the section you're already on — where `scrollend`
+never fires.
+
+**`components/RevealBlocks.tsx` exists because a ratio `threshold` is the wrong tool for a tall
+element.** `/projects/[slug]`'s overview used to be one `<ScrollReveal>`, and long projects showed
+"you have to scroll way down before anything appears". `IntersectionObserver`'s
+`intersectionRatio` is intersectionArea/elementArea, so `threshold: 0.1` means *a tenth of the
+element* must be inside the root: measured on `/projects/boo-game` at an 872px viewport, body
+5,139px and root 785px, so ~514px of body had to enter before anything faded. `RevealBlocks`
+passes no `threshold` (default 0, height-independent) and reveals each top-level markdown block
+separately. It deliberately does NOT split and re-compile the markdown per section — a fresh
+`GithubSlugger` per `compileMarkdown` call would change duplicate-heading id suffixes and silently
+break the TOC anchors above. `ScrollReveal` still carries the same `threshold: 0.1`; its other
+uses wrap short elements, so it was left alone.
+
+**`.pd-body p` / `.pd-body ul,ol` set `opacity: var(--pd-text-opacity)` (0.88), and that
+specificity beats a naive reveal rule.** `.pd-body p` is (0,1,1) and outranks `.reveal-blocks > *`
+at (0,1,0) — the first version of the per-block fade left prose and lists permanently visible
+while only headings, figures and tables faded, so half the page popped in. The rules are written
+`.pd-body.reveal-blocks > *` (both classes are on the same element) to reach (0,2,0), and the
+revealed state restores `--pd-text-opacity` for `p`/`ul`/`ol` explicitly rather than forcing
+`opacity: 1`, which would have brightened body text site-wide. The variable exists so that 0.88
+isn't hardcoded in two places.
+
 **SEO/share-preview metadata is generated, not static image files.** No favicon/OG image
 assets exist in the repo (no logo was ever made) — `app/icon.tsx`/`app/apple-icon.tsx`/
 `app/opengraph-image.tsx` all use `next/og`'s `ImageResponse` to render the same "초"

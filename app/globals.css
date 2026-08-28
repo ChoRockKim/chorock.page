@@ -124,6 +124,16 @@ body {
   padding: 0;
 }
 
+/* Makes every in-page `#id` anchor glide instead of teleporting — the TOC links on
+   /posts/[slug] and /projects/[slug] are plain <a href="#...">, so this is all they need.
+   Safe against the existing programmatic scrolls: ScrollToTopButton and PostsListClient both
+   already pass `behavior: "smooth"` themselves, and WritePostForm's editor/preview sync sets
+   .scrollTop on its own panes, which this root-scroller rule doesn't touch. */
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}
+
 body {
   margin: 0;
   background: var(--color-bg);
@@ -332,6 +342,34 @@ html.projects-nav-no-stagger .stagger-list > * { animation: none !important; }
   .scroll-reveal { opacity: 1; transform: none; transition: none; }
 }
 
+/* Same effect as .scroll-reveal, but applied to each top-level block of a compiled markdown
+   body instead of the body as a whole (components/RevealBlocks.tsx). Shorter distance and
+   duration than .scroll-reveal because these fire many times down a long page rather than once
+   per section. Only opacity/transform change — animating height or margin here would move the
+   document flow, and the sidebar TOC's anchor jumps would land in the wrong place. */
+/* Selectors are .pd-body.reveal-blocks (both classes are on the same element, see
+   RevealBlocks.tsx) rather than a bare .reveal-blocks, because `.pd-body p` and
+   `.pd-body ul/ol` set their own opacity and at (0,1,1) would otherwise outrank a
+   (0,1,0) `.reveal-blocks > *` — prose and lists were never hidden and never faded at all,
+   while headings, figures and tables did, which read as half the page popping in. Two classes
+   put these at (0,2,0), which wins. The revealed state then has to restore the softened text
+   opacity explicitly, hence --pd-text-opacity. */
+.pd-body.reveal-blocks > * {
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity 0.5s ease, transform 0.5s ease;
+}
+.pd-body.reveal-blocks > *.is-visible { opacity: 1; transform: none; }
+.pd-body.reveal-blocks > p.is-visible,
+.pd-body.reveal-blocks > ul.is-visible,
+.pd-body.reveal-blocks > ol.is-visible { opacity: var(--pd-text-opacity); }
+@media (prefers-reduced-motion: reduce) {
+  .pd-body.reveal-blocks > * { opacity: 1; transform: none; transition: none; }
+  .pd-body.reveal-blocks > p,
+  .pd-body.reveal-blocks > ul,
+  .pd-body.reveal-blocks > ol { opacity: var(--pd-text-opacity); }
+}
+
 @keyframes copyPopIn {
   0% { transform: scale(0.4); opacity: 0; }
   60% { transform: scale(1.2); }
@@ -415,7 +453,10 @@ html.projects-nav-no-stagger .stagger-list > * { animation: none !important; }
    track) was forcing this whole column, and the mobile single-column layout with it, to stay
    desktop-width. min-width: 0 lets the column actually shrink to the grid track's width, and
    .code-block pre's own overflow-x: auto then correctly scrolls just the code horizontally. */
-.pd-body { min-width: 0; }
+/* --pd-text-opacity: prose and lists render slightly softened. Declared as a variable because
+   components/RevealBlocks.tsx's per-block fade has to restore exactly this value — see the
+   .reveal-blocks rules, which would otherwise have to hardcode the number a second place. */
+.pd-body { min-width: 0; --pd-text-opacity: 0.88; }
 @media (max-width: 900px) {
   .pd-grid { grid-template-columns: 1fr; }
   .toc-desktop { display: none !important; }
@@ -436,6 +477,36 @@ html.projects-nav-no-stagger .stagger-list > * { animation: none !important; }
      flicker in both directions (list -> detail and back). */
 }
 .proj-sidebar { min-width: 0; position: sticky; top: 80px; align-self: start; }
+/* The TOC lives inside .proj-sidebar here, not in a grid column of its own like /posts/[slug],
+   which needs two adjustments to the shared TOC components (they are otherwise reused as-is).
+   (1) TableOfContents carries an inline `position: sticky; top: 80`, but .proj-sidebar above is
+       already sticky at the same offset — beating an inline style needs !important.
+   (2) .toc-desktop/.toc-mobile swap at 900px (matching .pd-grid), but this page's grid only
+       collapses at 800px. Without the first block below, 801–900px would show the mobile
+       <details> while the sidebar is still a real 260px column. The 900px rule uses
+       !important, so overriding it needs !important plus the higher specificity this
+       descendant selector already provides. */
+.proj-sidebar .toc-desktop { position: static !important; }
+/* A sticky element taller than the viewport doesn't just overflow — its lower part is
+   permanently unreachable, because scrolling moves the page, not the pinned box. Adding the TOC
+   pushed the sidebar to ~688px, and at a 583px viewport the last TOC entry sat 185px below the
+   fold with no way to reach it (measured). Capping the sidebar and letting ONLY .proj-toc scroll
+   keeps overflow visible on .proj-sidebar itself, so the <h1> carrying
+   viewTransitionName: project-title-<slug> never gains a clipping/scrolling ancestor that could
+   crop its morph in from /projects. When everything fits, nothing scrolls and nothing changes. */
+@media (min-width: 801px) {
+  .proj-sidebar { display: flex; flex-direction: column; max-height: calc(100vh - 100px); }
+  .proj-toc { min-height: 0; overflow-y: auto; }
+}
+@media (min-width: 801px) and (max-width: 900px) {
+  .proj-sidebar .toc-desktop { display: block !important; }
+  .proj-sidebar .toc-mobile { display: none; }
+}
+@media (max-width: 800px) {
+  .proj-sidebar .toc-desktop { display: none !important; }
+  .proj-sidebar .toc-mobile { display: block; }
+  .proj-toc-skeleton { display: none; }
+}
 @media (max-width: 800px) {
   .proj-grid { grid-template-columns: 1fr; }
   .proj-sidebar { position: static; top: auto; }
@@ -500,7 +571,7 @@ html.projects-nav-no-stagger .stagger-list > * { animation: none !important; }
 /* 문단 사이를 글줄 높이(16px * 1.8 ≈ 29px) 한 줄만큼 벌린다. --space-3(15px)이었을 땐
    문단 바뀜이 줄바꿈보다 좁아 보였는데, 이 파이프라인은 remark-breaks로 단일 개행을
    <br>로 바꾸기 때문에 둘의 차이가 오직 이 margin 하나뿐이라 특히 눈에 띄었다. */
-.pd-body p { font-size: 16px; line-height: 1.8; opacity: 0.88; margin: 0 0 var(--space-6); }
+.pd-body p { font-size: 16px; line-height: 1.8; opacity: var(--pd-text-opacity); margin: 0 0 var(--space-6); }
 /* 문단 간격이 --space-6(30px)이므로 헤딩 여백도 그 위로 올려야 섹션 경계가 문단 경계와
    구분된다. 인접 형제 margin은 겹쳐서 큰 쪽만 남으므로, h2가 --space-8(40px)이면 문단
    사이(30px)와 10px밖에 차이가 안 나 섹션이 시작된 티가 나지 않았다. */
@@ -538,7 +609,7 @@ html.projects-nav-no-stagger .stagger-list > * { animation: none !important; }
   max-width: calc(50% - var(--space-3) / 2);
 }
 .pd-body ul,
-.pd-body ol { padding-left: 1.4em; font-size: 16px; line-height: 1.8; opacity: 0.88; }
+.pd-body ol { padding-left: 1.4em; font-size: 16px; line-height: 1.8; opacity: var(--pd-text-opacity); }
 .pd-body li + li { margin-top: var(--space-2); }
 .pd-body code:not(pre code) {
   font-family: var(--font-mono);

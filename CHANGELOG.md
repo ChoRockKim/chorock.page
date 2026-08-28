@@ -3,6 +3,100 @@
 이 프로젝트의 주요 변경 사항을 버전(작업 단위) 별로 기록합니다. 형식은
 [Keep a Changelog](https://keepachangelog.com/)를 참고합니다.
 
+## [0.7.77] - 2026-08-29
+
+### 이전 상태
+
+`/projects/[slug]` 본문이 길어지면서 두 가지 문제가 겹쳤음.
+
+1. **목차가 없어 계속 스크롤해야 했음.** 글 상세에는 목차가 있는데 프로젝트 상세에는 없었고,
+   `boo-game`(6,425자)·`chrono-derm`(5,243자)은 「문제 해결」 아래 `###`만 7개였음.
+2. **페이드가 통째로 걸려 있었음.** `app/projects/[slug]/page.tsx`가 `프로젝트 개요` 섹션 전체를
+   `<ScrollReveal>` 하나로 감싸서, "글이 길면 아래로 쭉 내려야 나타난다"는 보고가 있었음.
+3. **목차에서 항목을 눌러도 활성 표시가 따라오지 않았음** (글 상세도 동일). 작업 중 사용자가 보고.
+
+### Fixed
+
+- **긴 본문에서 페이드가 늦게 뜨던 원인.** `components/ScrollReveal.tsx`의 `threshold: 0.1` 때문.
+  `intersectionRatio`는 `교차면적/요소면적`이라, 비율 임계값은 곧 "요소 높이의 일정 비율이 루트
+  안에 들어와야 한다"는 뜻이 됨. `/projects/boo-game`을 872px 뷰포트에서 직접 측정: 본문 5,139px,
+  `rootMargin: -10%` 적용 후 루트 785px → 비율 상한 0.153. 0.1을 넘기긴 하지만 **본문이 514px
+  (0.1 × 5,139) 들어온 뒤에야** 발동함. 짧은 프로젝트는 한 화면에 그 정도가 들어와서 정상으로
+  보였고, 그래서 긴 것에서만 재현됐음.
+  → 신규 `components/RevealBlocks.tsx`는 `threshold`를 쓰지 않음(기본 0). 요소 높이와 무관하게
+  1px만 걸치면 발동하므로, 개별 블록이 뷰포트보다 커도(긴 코드 블록, 16:9 이미지) 안전함.
+- **목차 클릭 시 활성 표시가 안 움직이던 문제** (`components/TableOfContents.tsx`, 글 상세에도
+  적용됨). 앵커 점프는 heading을 `scroll-margin-top: 90px` 위치에 착지시키는데, 스크롤스파이의
+  활성 밴드는 `rootMargin: "-30% 0px -60% 0px"` 즉 뷰포트 30~40% 구간임. 872px 뷰포트에서 밴드는
+  262~349px이라 **클릭한 heading이 밴드보다 170px 위에 떨어져** 활성으로 보고되지 않았음(측정).
+  → 클릭 시 `setActiveId`를 직접 호출하고, 이동이 끝날 때까지 옵저버 갱신을 무시함.
+  **잠금을 고정 타이머로 두면 안 됨** — 위의 부드러운 스크롤은 거리에 비례해 시간이 걸리므로,
+  타이머가 먼저 풀리면 지나쳐 가는 heading들이 차례로 활성 밴드를 통과하며 표시를 끌고 다니다
+  엉뚱한 곳에 멈춤. 이동 종료의 정확한 신호인 `scrollend`로 풀고, 타이머(1.2초)는 두 경우의
+  안전망으로만 둠: `scrollend` 미지원 브라우저, 그리고 이미 보고 있는 절을 눌러 스크롤이 아예
+  일어나지 않는 경우(이때 `scrollend`는 영영 오지 않음). `scrollLocked`는 `false`로 시작하므로
+  클릭 전에는 조기 반환이 발동하지 않아 기존 스크롤 추적 동작은 그대로임.
+  (`"onscrollend" in window`로 분기하면 TypeScript가 `window`를 `never`로 좁혀 `else`가 컴파일
+  에러가 남. 미지원 이벤트는 리스너를 걸어도 발동만 안 할 뿐이라 분기 없이 항상 등록함.)
+- **페이드가 본문 문단·목록에는 아예 적용되지 않던 문제.** `.pd-body p`와 `.pd-body ul/ol`이
+  `opacity: 0.88`을 갖는데 그 명시도(0,1,1)가 처음 작성한 `.reveal-blocks > *`(0,1,0)를 이김.
+  제목·이미지·표만 페이드되고 산문은 항상 떠 있는 반쪽 상태였음(브라우저에서 확인).
+  → 선택자를 `.pd-body.reveal-blocks > *`(0,2,0)로 올리고, 노출 상태에서 산문의 흐린 톤을 다시
+  복원. 0.88을 두 곳에 하드코딩하지 않도록 `.pd-body`에 `--pd-text-opacity` 변수를 도입했음.
+- **목차를 넣자 sticky 사이드바가 뷰포트보다 길어지는 문제.** sticky는 넘친 부분이 잘리는 게
+  아니라 **영영 도달 불가**가 됨(스크롤해도 고정된 박스는 안 움직임). 583px 뷰포트에서 마지막
+  목차 항목이 화면 아래 185px에 있는 것을 측정으로 확인.
+  → 801px 이상에서 `.proj-sidebar`를 flex column + `max-height: calc(100vh - 100px)`로 두고
+  `.proj-toc`만 `overflow-y: auto`. 사이드바 자체는 `overflow: visible`을 유지하므로
+  `viewTransitionName: project-title-<slug>`을 가진 `<h1>`이 클리핑/스크롤 조상을 얻지 않음.
+
+### Added
+
+- `components/RevealBlocks.tsx` — 컴파일된 마크다운 본문의 최상위 블록을 각각 페이드인.
+  마크다운을 `##` 단위로 잘라 재컴파일하는 방식은 쓰지 않았음. 호출마다 `GithubSlugger`가 새로
+  시작해 중복 제목의 `-1` 접미사가 달라지고, 목차 앵커가 조용히 깨지기 때문.
+- `/projects/[slug]` 사이드바에 목차. `components/TableOfContents.tsx`/`TocMobile.tsx`를 **수정
+  없이** 재사용하고 표시 여부는 CSS가 정함. 깊이는 `##`만(`extractHeadings(...).filter(h => h.depth === 2)`).
+  h3까지 넣으면 `boo-game`이 13항목이 되어 사이드바가 뷰포트를 넘김.
+- `app/projects/[slug]/loading.tsx`에 목차 스켈레톤(800px 이하에서는 숨김).
+- **`html { scroll-behavior: smooth }`** — 목차에서 항목을 누르면 순간이동 대신 스르륵 이동함.
+  목차 링크가 평범한 `<a href="#...">`라 이 한 줄로 데스크톱 목차·모바일 `<details>` 목차·앞으로
+  생길 인페이지 앵커가 모두 적용됨. `preventDefault` + `scrollIntoView`로 가로채면 URL의 `#해시`를
+  직접 `pushState`로 넣어야 해서 택하지 않았음. `prefers-reduced-motion: reduce`에서는 `auto`로
+  되돌림. 기존 프로그램 스크롤과 충돌하지 않음 — `ScrollToTopButton`/`PostsListClient`의
+  `scrollTo`는 이미 `behavior: "smooth"`를 직접 넘기고, `WritePostForm`의 에디터↔미리보기 동기화는
+  자기 패널의 `.scrollTop`을 만지는 것이라 루트 스크롤러 규칙과 무관함.
+
+### Changed
+
+- `.toc-desktop`/`.toc-mobile` 전환은 900px 기준인데 `.proj-grid`는 800px에서 무너짐. 그대로 두면
+  801~900px에서 사이드바가 아직 260px 컬럼인데 목차만 모바일 `<details>`로 바뀜.
+  `.proj-sidebar` 스코프 오버라이드로 그 구간을 되돌림. 글 상세는 건드리지 않음.
+- `.proj-sidebar .toc-desktop { position: static !important }` — `TableOfContents`의 인라인
+  sticky를 무력화. 부모 `.proj-sidebar`가 이미 sticky임.
+
+### 검증
+
+- `npm run build` 통과.
+- 빌드 산출물에서 프로젝트 6개의 목차 앵커(5~6개)가 전부 실제 heading id에 대응함을 대조 —
+  깨진 앵커 0건. 본문이 `scroll-reveal` 래퍼 밖으로 나온 것도 확인.
+- 브라우저에서 목차 클릭 3회(검증 / 성과와 한계 / 주요 기능) — 활성 표시가 모두 따라오고
+  heading이 매번 정확히 90px에 착지.
+- 트랜지션을 끄고 캐스케이드만 측정: `P` 0 → 0.88, `H2` 0 → 1, `UL` 0 → 0.88. 산문 톤이 1로
+  튀지 않고 유지됨.
+- 브레이크포인트 3구간: 1280px(2단 `260px 600px`, 데스크톱 목차) / **850px**(2단 `260px 490px`,
+  데스크톱 목차 유지 — 이번에 고친 구간) / 700px(1단 `640px`, `<details>`, 사이드바 static).
+- 짧은 뷰포트(583px): 사이드바 688px → 483px로 줄고 목차만 스크롤. `h1` 잘림 없음,
+  사이드바 `overflow: visible` 유지. 823px에서는 스크롤이 아예 발생하지 않고 6항목 전부 보임.
+
+### 측정 환경 메모
+
+검증에 쓴 브라우저 창이 **600ms에 1프레임만 그리는 상태**였음(정상 ~36). `IntersectionObserver`
+전달과 CSS 트랜지션이 모두 프레임에 의존하므로, 초기에 "옵저버가 아예 안 돈다"·"opacity가 0에서
+안 움직인다"로 보였던 관측은 전부 이 때문이었음. 프레임에 의존하지 않는 방식(트랜지션을 끄고
+캐스케이드만 읽기, `getComputedStyle` 비교)으로 다시 측정해 확정했음. 같은 창에서 DOM이 두 벌로
+보이는 현상도 있었는데, 변경이 없는 프로덕션에서도 동일해 확장 프로그램 아티팩트로 확인됨.
+
 ## [0.7.76] - 2026-08-29
 
 ### Added

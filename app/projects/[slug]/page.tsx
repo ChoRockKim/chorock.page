@@ -2,9 +2,12 @@ import Image from "next/image";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { getProjectBySlug, listProjectSlugs } from "@/lib/projects";
-import { compileMarkdown } from "@/lib/markdown";
+import { compileMarkdown, extractHeadings } from "@/lib/markdown";
 import SkillTag from "@/components/SkillTag";
 import ScrollReveal from "@/components/ScrollReveal";
+import RevealBlocks from "@/components/RevealBlocks";
+import TableOfContents from "@/components/TableOfContents";
+import TocMobile from "@/components/TocMobile";
 import ProjectsBackLink from "@/components/ProjectsBackLink";
 import JsonLd from "@/components/JsonLd";
 import { SITE_URL, SITE_OG_BASE, PERSON_ID, canonicalPath } from "@/lib/siteMeta";
@@ -51,6 +54,12 @@ export default async function ProjectDetailPage({
   if (!project) notFound();
 
   const { content } = await compileMarkdown(project.overviewMd);
+  // Must be the exact same source string compileMarkdown got: extractHeadings and rehypeSlug
+  // are independent pipelines that only agree because both bottom out in github-slugger, so a
+  // trimmed or prefixed variant here would silently desync the ids the TOC links to.
+  // h2 only — 「문제 해결」 alone carries up to seven h3s (boo-game), which would push the
+  // sidebar past the viewport.
+  const headings = extractHeadings(project.overviewMd).filter((h) => h.depth === 2);
 
   const projectUrl = `${SITE_URL}${canonicalPath("projects", project.slug)}`;
   // CreativeWork rather than SoftwareApplication: these entries describe the work itself and
@@ -205,6 +214,23 @@ export default async function ProjectDetailPage({
             </a>
           )}
         </div>
+
+        {/* Both TOC components render; CSS picks one (see globals.css's .proj-sidebar overrides).
+            They live inside the already-sticky .proj-sidebar rather than in a third grid column,
+            so .proj-grid's column setup is untouched. */}
+        {headings.length > 0 && (
+          <div
+            className="proj-toc"
+            style={{
+              borderTop: "1px solid var(--color-divider)",
+              marginTop: "var(--space-4)",
+              paddingTop: "var(--space-4)",
+            }}
+          >
+            <TableOfContents headings={headings} />
+            <TocMobile headings={headings} />
+          </div>
+        )}
       </aside>
 
       <div style={{ minWidth: 0 }}>
@@ -271,12 +297,13 @@ export default async function ProjectDetailPage({
           </section>
         )}
 
-        <ScrollReveal>
-          <section>
-            <h2 style={{ fontSize: 24, margin: "0 0 var(--space-4)" }}>프로젝트 개요</h2>
-            <div className="pd-body">{content}</div>
-          </section>
-        </ScrollReveal>
+        {/* Not a <ScrollReveal> around the whole section (see components/RevealBlocks.tsx for
+            why that was broken, not merely coarse, on the longest projects) — RevealBlocks
+            reveals each top-level markdown block on its own and keeps the .pd-body class. */}
+        <section>
+          <h2 style={{ fontSize: 24, margin: "0 0 var(--space-4)" }}>프로젝트 개요</h2>
+          <RevealBlocks>{content}</RevealBlocks>
+        </section>
       </div>
     </div>
   );
