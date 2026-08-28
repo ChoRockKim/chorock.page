@@ -82,7 +82,8 @@ const CAREER: {
     title: "프론트엔드 개발자",
     company: "포에이",
     logo: "/career/forA-logo.png",
-    description: "forA 어플리케이션 개발 및 유지보수",
+    description:
+      "ADHD 커뮤니티 앱 forA의 프론트엔드 개발·유지보수를 맡고 있습니다. 창업팀의 기획자·디자이너·백엔드 개발자와 한 팀으로 기능 기획부터 스토어 릴리즈까지 함께 만들어가고 있습니다.",
     tags: ["React Native", "Expo"],
   },
 ];

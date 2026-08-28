@@ -3,6 +3,50 @@
 이 프로젝트의 주요 변경 사항을 버전(작업 단위) 별로 기록합니다. 형식은
 [Keep a Changelog](https://keepachangelog.com/)를 참고합니다.
 
+## [0.7.64] - 2026-08-28
+
+### 이전 상태
+
+`/about` 경력 카드의 포에이 항목 `description`이 `"forA 어플리케이션 개발 및 유지보수"`
+한 줄이라, 실제 근무 형태(창업팀 안에서 기획자·디자이너·백엔드와 함께 일하는 구조)가
+전혀 드러나지 않았음.
+
+### Changed
+
+- `app/about/page.tsx`의 `CAREER` 포에이 항목 `description`을 협업 구조가 보이도록 확장:
+  "ADHD 커뮤니티 앱 forA의 프론트엔드 개발·유지보수를 맡고 있습니다. 창업팀의 기획자·디자이너·
+  백엔드 개발자와 한 팀으로 기능 기획부터 스토어 릴리즈까지 함께 만들어가고 있습니다."
+  경력 카드의 `description`은 단일 문자열을 `<p>` 하나로 렌더하는 구조(`maxWidth: 56ch`)라
+  마크업 변경 없이 문자열만 늘리면 두 줄로 자연스럽게 감김.
+- `scripts/seed-projects.ts`의 `fora` 항목도 같은 톤으로 맞춤: `role`을
+  `"프론트엔드 개발 및 유지보수"`로, `team`을 `"포에이 창업팀 (기획·디자인·백엔드·프론트엔드)"`로,
+  `overviewMd`의 `"약 6개월 동안 앱의 유지/보수 및 기능개발을 맡았습니다."`(종료된 일처럼 읽히고
+  `period: "2026.01 — 현재"`와도 어긋났음)를 현재진행형 협업 문장으로 교체. 시드 배열이 `Project`
+  컬렉션의 단일 소스라 `npm run seed:projects` 재실행으로 DB 반영(3개 upsert, 삭제 0) 후
+  `fora` 문서를 직접 조회해 확인.
+
+### 참고
+
+- 계약 형태(외주/프리랜스)는 노출 문구에 넣지 않고 "프론트엔드 개발자"로 유지. 필요하면
+  `title`이나 `description`에 명시하는 선택지가 있음.
+
+### 환경 (코드 변경 아님)
+
+- **프로젝트를 `/Users/chorock/Desktop/coding/next-blog` → `/Users/chorock/dev/next-blog`로 이동.**
+  `npm run seed:projects`가 세 번 연속, 매번 **다른** 패키지에서 실패했음: tsx의
+  `register-*.cjs` 청크가 아무것도 export하지 않아 `TypeError: r.register is not a function`
+  → tsx 재설치 후엔 `import { transformSync as Be } from "esbuild"`의 `Be`가 undefined
+  (`TypeError [TransformError]: Be is not a function`) → 그 다음엔 mongodb의
+  `error_1.MongoServerError`가 undefined(`Class extends value undefined`). 세 개가 서로 무관한
+  패키지라 코드 문제일 수 없었고, 실제 원인은 `~/Desktop`이 iCloud "데스크탑 및 문서" 동기화
+  대상이라 iCloud가 `node_modules` 파일들의 실체를 제거(dematerialize)해 껍데기만 남긴 것.
+  결정적 증거: `npm install` 직후인데도 리포 전체 `du -sh`가 **15M**이었고, iCloud 밖으로 옮겨
+  재설치하니 `node_modules`만 **512M**. 이동 시 손상된 `node_modules`/`.next`는 지우고 옮긴 뒤
+  새로 설치했으며, `.git`/`.env.local`/`.claude`/`.codex` 포함 나머지는 그대로 유지(커밋 이력과
+  미커밋 변경분 확인 완료). 0.7.62의 "`npm run dev`가 안 먹는다"도 같은 계열의 로컬 환경 문제로
+  기록돼 있었음 — 그쪽은 원인을 중복 dev 프로세스로 봤지만, 이 디렉터리가 iCloud에 있었다는 점을
+  함께 감안할 것.
+
 ## [0.7.63] - 2026-08-23
 
 ### 이전 상태
