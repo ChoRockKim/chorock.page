@@ -135,9 +135,12 @@ it via `components/useTheme.ts`, which watches the `data-theme` attribute with a
 `MutationObserver` instead of prop-drilling.
 
 **Styling has no Tailwind / CSS-in-JS.** Everything is CSS custom properties + plain classes
-in `app/globals.css`, ported from a Claude Design system ("Broadsheet") but trimmed to only
-what chorock.page actually uses — the design system's CMYK print-separation effect and
-Source Serif headline treatment were demo-only and are intentionally not ported.
+in `app/globals.css`. The design system it implements ("Broadsheet") is **the site owner's own** —
+they authored it in Claude Design, referencing various examples, and then ported it here; it is
+not a third-party or off-the-shelf system, so treat its conventions as deliberate authorship
+rather than someone else's constraints. Only the part chorock.page actually uses was ported —
+the CMYK print-separation effect and Source Serif headline treatment were demo-only and are
+intentionally left out.
 
 **Pretendard is loaded asynchronously, not via a plain CSS `@import`.** A CDN `@import` at the
 top of `globals.css` used to render-block every single page load (confirmed by Lighthouse —

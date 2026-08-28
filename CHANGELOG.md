@@ -42,8 +42,11 @@
 
 ### 참고
 
-- `CLAUDE.md`의 "Styling has no Tailwind / CSS-in-JS" 문단은 아직 디자인 시스템을 "ported from
-  a Claude Design system(Broadsheet)"라고 서술함. 위 정정과 어긋나므로 확인 후 갱신 필요.
+- `CLAUDE.md`의 "Styling has no Tailwind / CSS-in-JS" 문단이 디자인 시스템을 "ported from a
+  Claude Design system(Broadsheet)"라고 서술해, **남의 시스템을 가져다 쓴 것처럼 읽히고 있었음.**
+  실제로는 사이트 소유자가 Claude Design에서 여러 예시를 참고해 직접 만든 시스템을 이 저장소로
+  옮긴 것이라는 확인을 받아 문단을 고쳤음. 앞으로 이 디자인 규칙들을 "외부 제약"이 아니라
+  "의도된 저작"으로 다뤄야 한다는 점까지 명시.
 
 ## [0.7.65] - 2026-08-29
 
