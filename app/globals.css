@@ -317,12 +317,21 @@ html.theme-transition::view-transition-new(root) { animation: theme-reveal 0.6s 
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
 }
-.stagger-list > * { animation: cardIn 0.45s ease both; }
+/* The `animation` shorthand resets animation-delay to 0s, so any child past the explicit
+   nth-child list below used to fan in BEFORE child 1 (0.02s) — the stagger visibly started
+   from the END of the grid. That is exactly what happened when /projects grew to a 6th card
+   in 0.7.76 and only 1–5 had delays. The fallback is now LATER than every listed one, so an
+   unlisted child can only ever arrive last, never first. */
+.stagger-list > * { animation: cardIn 0.45s ease both; animation-delay: 0.56s; }
 .stagger-list > *:nth-child(1) { animation-delay: 0.02s; }
 .stagger-list > *:nth-child(2) { animation-delay: 0.08s; }
 .stagger-list > *:nth-child(3) { animation-delay: 0.14s; }
 .stagger-list > *:nth-child(4) { animation-delay: 0.2s; }
 .stagger-list > *:nth-child(5) { animation-delay: 0.26s; }
+.stagger-list > *:nth-child(6) { animation-delay: 0.32s; }
+.stagger-list > *:nth-child(7) { animation-delay: 0.38s; }
+.stagger-list > *:nth-child(8) { animation-delay: 0.44s; }
+.stagger-list > *:nth-child(9) { animation-delay: 0.5s; }
 /* components/ProjectsBackLink.tsx adds this to <html> right before navigating "back to list"
    from a project detail page (and on popstate, for the browser back button), then removes it
    once the stagger's own timeline has run out. Keeps /projects/page.tsx's .stagger-list

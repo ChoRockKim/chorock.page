@@ -7,12 +7,13 @@ import type { CSSProperties, ReactNode } from "react";
 const SUPPRESS_CLASS = "projects-nav-no-stagger";
 /**
  * Must outlast the stagger's FULL timeline measured from when the grid mounts — cardIn is 0.45s
- * and the last card's animation-delay is 0.26s (app/globals.css), so 0.71s, plus however long
- * the navigation itself took before those elements existed. 1.2s clears that with room. The
+ * and the largest animation-delay in app/globals.css is 0.56s (the fallback for children past
+ * the explicit nth-child list), so 1.01s, plus however long the navigation itself took before
+ * those elements existed. 1.6s clears that with room. Raise it if those delays grow again. The
  * suppression must not lift early: see the globals.css comment on why the override shortens the
  * animation rather than removing it, and why lifting it too soon would replay the whole stagger.
  */
-const SUPPRESS_MS = 1200;
+const SUPPRESS_MS = 1600;
 
 function suppressStagger() {
   const html = document.documentElement;
