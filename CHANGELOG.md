@@ -3,6 +3,63 @@
 이 프로젝트의 주요 변경 사항을 버전(작업 단위) 별로 기록합니다. 형식은
 [Keep a Changelog](https://keepachangelog.com/)를 참고합니다.
 
+## [0.7.65] - 2026-08-29
+
+### 이전 상태
+
+`/projects/[slug]`는 사실상 이력서로 쓰이는 페이지인데, 세 항목의 `overviewMd`가 형식도 깊이도
+제각각이었고 공통적으로 "주요 기능 나열 + 스크린샷"에서 멈춰 있었음(`hufs-clock` 559자,
+`fora` 580자, `node-blog` 1293자). 무엇을 구현했는지는 있지만 왜 그렇게 만들었는지, 무엇을
+저울질했는지, 결과가 어땠는지가 없어 지원자를 변별할 정보가 빠져 있었음.
+
+또 `node-blog` 항목이 사실상 두 프로젝트를 겸하고 있었음 — `repoUrl`이 `chorock.page`
+저장소, `demoUrl`이 `https://chorock.page`였고 본문에 `## Next.js로 재구축` 섹션이 들어 있어서,
+Express 원본과 현재 사이트가 한 항목에 섞여 있었음.
+
+### Added
+
+- `docs/project-entry-template.md` — 프로젝트 항목 작성 형식을 저장소에 명문화. 고정 헤딩
+  순서(리드 문단 → 맡은 일 → 주요 기능 → 설계 판단 → 문제 해결 → 성과와 한계 → 스크린샷),
+  대표/압축 2단 티어, 섹션별 좋은 예·나쁜 예, 근거 수집 절차(git 이력·저장소 문서·AI 대화 로그)
+  와 인터뷰 원칙까지 포함. 사이드바(기간·팀·역할·링크)와 `## 사용 기술` 섹션이 이미 담당하는
+  내용은 본문에서 반복하지 않는다는 전제를 명시.
+- `scripts/seed-projects.ts`에 `chorock-page` 항목 신설(대표 티어, 새 형식의 첫 적용 사례).
+  CHANGELOG 76개 항목에서 소재를 뽑고 기억이 필요한 부분은 사용자 인터뷰 2라운드로 채움.
+  `설계 판단` 2건(목록 필터링을 서버 왕복에서 클라이언트로, 인증 확인을 클라이언트로 내려
+  정적 렌더링 보존), `문제 해결` 2건(OG 이미지 500으로 프로필 사진이 새던 건, 상세 페이지
+  진입 지연) 수록.
+
+### Changed
+
+- `node-blog`를 Express 원본만 담도록 정리. `## Next.js로 재구축` 섹션(711자)을 `chorock-page`로
+  이관하고, `repoUrl`을 옛 `Node-blog` 저장소로, `demoUrl`을 `null`로 교체(더 이상 운영하지 않음).
+  리드 문단에 후속 프로젝트로 넘어가는 링크 한 줄 추가.
+  **슬러그는 그대로 뒀음** — `seed-projects.ts`가 `deleteMany({ slug: { $nin: currentSlugs } })`로
+  배열에 없는 슬러그를 지우므로, 이름을 바꿨다면 기존 문서가 삭제되고 URL이 죽었을 것. 기존
+  슬러그를 유지한 채 새 슬러그를 추가하는 방식이라 안전.
+
+### 검증
+
+- `npm run seed:projects` — 4개 upsert, **삭제 0개**(의도대로 기존 문서 보존).
+- `npm run build` — 통과. `/projects/chorock-page`가 `generateStaticParams()`에 잡혀
+  프리렌더되는 것을 라우트 표에서 확인.
+- `npm run dev` + 브라우저로 `/projects/chorock-page`와 `/projects/node-blog` 실제 렌더 확인.
+  본문이 기존의 5배 길이가 됐어도 레이아웃이 깨지지 않고, 사이드바·`## 사용 기술`·본문 섹션이
+  의도한 순서로 나오는 것 확인. `node-blog`의 데모 버튼이 사라지고 GitHub만 남은 것도 확인.
+
+### 참고 (코드 변경 아님)
+
+- 이 작업 중 프로덕션에서 0.7.63의 OG 이미지 수정이 실제로 적용된 것을 확인했음 —
+  글 OG 이미지가 200/`image/png`로 응답하고, 내려받아 열어보니 한글 제목이 정상 렌더됨.
+- `chorock-page`의 `coverImage`는 아직 `null`이라 상세 페이지와 목록 카드에 플레이스홀더가
+  나옴. `public/projects/chorock-page/`에 커버 이미지와 스크린샷을 넣어야 완성됨.
+- 개발 중 하이드레이션 불일치 경고를 발견했으나 **이번 변경과 무관한 기존 문제**임.
+  `app/layout.tsx`의 `PRETENDARD_ASYNC_LOAD_SCRIPT`가 `<link media="print">`를 하이드레이션
+  전에 `"all"`로 바꿔서 서버/클라이언트 HTML이 어긋남. 별건이라 손대지 않았음.
+- `public/projects/react-shopping-mall/`, `rn-toy-blog/`에 시드 배열에 없는 고아 이미지가
+  남아 있음. 정리 대상이지만 이번 범위 밖.
+- 남은 작업: `fora`(대표 티어), `hufs-clock`(압축), `node-blog`(압축)를 같은 형식으로 재작성.
+
 ## [0.7.64] - 2026-08-28
 
 ### 이전 상태
