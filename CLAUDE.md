@@ -416,13 +416,27 @@ one link into a client component whose `onClick` adds `projects-nav-no-stagger` 
 `components/Header.tsx`'s theme toggle already uses to scope an animation override to one
 specific transition) and removes it via `setTimeout` ~700ms later (comfortably longer than both
 the View Transition's default duration and `cardIn`'s own 0.45s). `app/globals.css`'s
-`html.projects-nav-no-stagger .stagger-list > * { animation: none !important; }` is the only
-thing that reads this class — `app/projects/page.tsx` itself stays a plain Server Component with
+`html.projects-nav-no-stagger .stagger-list > *` rule is the only thing that reads this class — `app/projects/page.tsx` itself stays a plain Server Component with
 `.stagger-list` unconditionally in its markup, no awareness of "how did the visitor arrive"
 needed. Verified with a `MutationObserver` on `<html>`'s `class` attribute (screenshot polling is
 too slow for a sub-second class add/remove) that the class is added synchronously on click and
 cleared ~700ms later, and separately confirmed the CSS rule itself flips `getComputedStyle(...)
 .animationName` between `"cardIn"` and `"none"` as expected.
+
+**That suppression rule must shorten the animation, never remove it — and this bit an already-
+shipped "fix".** `animation: none` clears `animation-name`, which *cancels* the animation; putting
+the name back when the class is removed starts a BRAND NEW animation from zero. So the original
+rule didn't suppress the stagger at all, it postponed it: the cards fanned in ~700ms after the
+cover image had already morphed back into place, which reads as two animations in a row and was
+reported as exactly that. The rule now overrides `animation-duration: 1ms` / `animation-delay: 0s`
+instead, keeping `animation-name` intact — the same animation keeps running, finishes in a
+millisecond, and by the time the override lifts its elapsed time is past the full 0.71s timeline
+(`cardIn` 0.45s + the last child's 0.26s delay), so it stays finished. `SUPPRESS_MS` is 1200, not
+700: it has to outlast that 0.71s measured from when the grid *mounts*, i.e. after the navigation
+itself. Verified by sampling `<html>`'s class, the last card's computed opacity and
+`animation-duration` every 50ms across a real back-navigation from three different projects.
+`ProjectsBackLink` also registers a `popstate` listener, because the browser back button and the
+swipe-back gesture reach `/projects` without ever touching that `Link`.
 
 **View Transitions are disabled below 800px** (`app/globals.css`, same `@media (max-width: ...)`
 breakpoint `.proj-grid` itself uses to collapse to one column) — the morph reads as janky rather

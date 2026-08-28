@@ -324,12 +324,24 @@ html.theme-transition::view-transition-new(root) { animation: theme-reveal 0.6s 
 .stagger-list > *:nth-child(4) { animation-delay: 0.2s; }
 .stagger-list > *:nth-child(5) { animation-delay: 0.26s; }
 /* components/ProjectsBackLink.tsx adds this to <html> right before navigating "back to list"
-   from a project detail page, and removes it ~700ms later — same html.theme-transition
-   technique components/Header.tsx's theme toggle already uses to suppress one specific
-   animation only during one specific transition. Keeps /projects/page.tsx's .stagger-list
-   unconditional (safe for every OTHER arrival path, which never goes through a View
-   Transition) while still avoiding the flicker that made 0.7.53 remove it entirely. */
-html.projects-nav-no-stagger .stagger-list > * { animation: none !important; }
+   from a project detail page (and on popstate, for the browser back button), then removes it
+   once the stagger's own timeline has run out. Keeps /projects/page.tsx's .stagger-list
+   unconditional — safe for every OTHER arrival path, which never goes through a View
+   Transition — while avoiding the flicker that made 0.7.53 remove it entirely.
+
+   It shortens the animation instead of using `animation: none`, and that difference is the
+   whole point. `animation: none` clears animation-name, which CANCELS the animation; putting
+   the name back when the class is removed starts a BRAND NEW animation from zero. So the old
+   rule didn't suppress the stagger at all — it postponed it, and the cards fanned in ~700ms
+   after the cover image had already morphed back into place. Two animations in a row, which is
+   exactly what got reported. Keeping animation-name and only overriding duration/delay means
+   the same animation keeps running: it finishes within a millisecond, and when the override
+   lifts its elapsed time is already past the full 0.71s timeline, so it stays finished
+   instead of replaying. */
+html.projects-nav-no-stagger .stagger-list > * {
+  animation-duration: 1ms !important;
+  animation-delay: 0s !important;
+}
 
 /* — scroll-triggered reveal (ScrollReveal component) — */
 .scroll-reveal {
