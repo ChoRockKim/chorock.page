@@ -33,6 +33,9 @@ export const SKILL_ICON_SLUGS: Record<string, string> = {
   "tailwind css": "tailwindcss",
   tailwindcss: "tailwindcss",
   sass: "sass",
+  // "SCSS"라는 이름으로 쓰고 있어 별칭이 필요하다. Simple Icons에는 scss 아이콘이 없고
+  // sass 하나만 있으므로 같은 슬러그를 가리킨다 — 이게 없으면 SCSS 태그만 텍스트로 렌더된다.
+  scss: "sass",
   graphql: "graphql",
 
   docker: "docker",

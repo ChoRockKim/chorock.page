@@ -1,4 +1,5 @@
 import FooterAuthLink from "@/components/FooterAuthLink";
+import { CONTACT } from "@/lib/profile";
 
 export default function Footer() {
   return (
@@ -27,7 +28,7 @@ export default function Footer() {
         style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}
       >
         <a
-          href="https://github.com/ChoRockKim"
+          href={CONTACT.github}
           style={{ color: "var(--color-text)", opacity: 0.6, display: "flex" }}
           aria-label="GitHub"
           title="GitHub"

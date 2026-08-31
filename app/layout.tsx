@@ -11,7 +11,7 @@ import VisitTracker from "@/components/VisitTracker";
 import ScrollToTopButton from "@/components/ScrollToTopButton";
 import PhotoViewProvider from "@/components/PhotoViewProvider";
 import JsonLd from "@/components/JsonLd";
-import { PROFILE } from "@/lib/profile";
+import { PROFILE, CONTACT } from "@/lib/profile";
 import { SITE_TITLE, SITE_DESCRIPTION, SITE_URL, SITE_OG_BASE, PERSON_ID } from "@/lib/siteMeta";
 
 export const metadata: Metadata = {
@@ -102,6 +102,13 @@ const SITE_JSON_LD = {
       image: `${SITE_URL}${PROFILE.avatar}`,
       description: PROFILE.shortIntro,
       jobTitle: PROFILE.role,
+      // The node used to stop at jobTitle. These four are the standard fields a search engine
+      // reads when someone looks the person up by name, and every value here is already
+      // published on /about — this only makes it machine-readable.
+      email: `mailto:${CONTACT.email}`,
+      sameAs: [CONTACT.github],
+      knowsAbout: ["React Native", "React", "Next.js", "TypeScript"],
+      worksFor: { "@type": "Organization", name: "포에이" },
     },
   ],
 };

@@ -3,7 +3,7 @@ import Image from "next/image";
 import type { Metadata } from "next";
 import { getCachedPosts } from "@/lib/posts";
 import { listProjects } from "@/lib/projects";
-import { PROFILE } from "@/lib/profile";
+import { PROFILE, CONTACT } from "@/lib/profile";
 import { SITE_OG_BASE, SITE_OG_IMAGE } from "@/lib/siteMeta";
 import PostCard from "@/components/PostCard";
 import ProjectCard from "@/components/ProjectCard";
@@ -33,33 +33,30 @@ export const metadata: Metadata = {
 // already used on /posts, /posts/[slug], /projects/[slug].
 export const revalidate = 300;
 
-const SKILLS: { category: string; items: string[] }[] = [
+// Grouped by how much the skill has actually been used, not by Frontend/Backend/DevOps. The
+// old split put Docker and React at the same weight, which tells a reader nothing. `note` is
+// what keeps each level from reading as a bare self-rating — it states the bar being claimed.
+const SKILLS: { level: string; note?: string; items: string[] }[] = [
   {
-    category: "Frontend",
-    items: [
-      "Javascript",
-      "TypeScript",
-      "React",
-      "Next.js",
-      "React Native",
-      "Tailwind CSS",
-      "SCSS",
-      "TanStack Query",
-    ],
+    level: "주력",
+    note: "실무와 개인 프로젝트에서 반복해서 씁니다",
+    items: ["TypeScript", "JavaScript", "React", "Next.js", "React Native", "Expo"],
   },
-  { category: "Backend", items: ["Node.js", "Supabase", "MongoDB"] },
   {
-    category: "DevOps & Tools",
-    items: [
-      "Git",
-      "GitHub",
-      "Docker",
-      "GitHub Actions",
-    ],
+    level: "실무에서 사용",
+    note: "실제 서비스에 붙여봤습니다",
+    items: ["TanStack Query", "Tailwind CSS", "SCSS", "Node.js", "MongoDB"],
   },
+  {
+    level: "경험 있음",
+    note: "필요할 때 찾아 쓰는 수준입니다",
+    items: ["Supabase", "Docker", "GitHub Actions"],
+  },
+  { level: "도구", items: ["Git", "GitHub"] },
 ];
 
-// TODO: 실제 경력으로 교체하세요. location/logo는 선택 항목(logo 없으면 회사명 첫 글자 placeholder).
+// location/logo는 선택 항목(logo가 없으면 회사명 첫 글자 placeholder가 렌더된다).
+// 최신이 위로 오도록 기간 역순으로 유지할 것 — 페이지는 배열 순서를 그대로 렌더한다.
 const CAREER: {
   period: string;
   title: string;
@@ -70,14 +67,6 @@ const CAREER: {
   tags: string[];
 }[] = [
   {
-    period: "2026.02 — 2027.02",
-    title: "프론트엔드 운영진",
-    company: "멋쟁이사자처럼 한국외대",
-    logo: "/career/likelion-hufs.jpeg",
-    description: "HTML, CSS, JS, REACT 교육 및 프로젝트 개발",
-    tags: ["React.js", "Javascript"],
-  },
-  {
     period: "2026.03 — 현재",
     title: "프론트엔드 개발자",
     company: "포에이",
@@ -86,10 +75,15 @@ const CAREER: {
       "ADHD 커뮤니티 앱 forA의 프론트엔드 개발·유지보수를 맡고 있습니다. 창업팀의 기획자·디자이너·백엔드 개발자와 한 팀으로 기능 기획부터 스토어 릴리즈까지 함께 만들어가고 있습니다.",
     tags: ["React Native", "Expo"],
   },
+  {
+    period: "2026.02 — 2027.02",
+    title: "프론트엔드 운영진",
+    company: "멋쟁이사자처럼 한국외대",
+    logo: "/career/likelion-hufs.jpeg",
+    description: "HTML, CSS, JS, REACT 교육 및 프로젝트 개발",
+    tags: ["React.js", "Javascript"],
+  },
 ];
-
-const CONTACT_GITHUB_URL = "https://github.com/ChoRockKim";
-const CONTACT_EMAIL = "daejincnc2@gmail.com";
 
 export default async function AboutPage() {
   const recentPosts = (await getCachedPosts()).slice(0, 3);
@@ -186,6 +180,66 @@ export default async function AboutPage() {
         <p style={{ fontSize: 15, opacity: 0.75, maxWidth: "54ch", margin: 0 }}>
           {PROFILE.intro}
         </p>
+
+        {/* A real <ul> rather than styled divs — a screen reader should announce it as the
+            three-item list it is. The label half of each entry (before the em dash) is bolded
+            so the three lines stay scannable at a glance; see PROFILE.highlights for why the
+            " — " separator has to survive editing. */}
+        <ul
+          style={{
+            listStyle: "none",
+            padding: 0,
+            margin: "var(--space-4) 0 0",
+            maxWidth: "54ch",
+            display: "flex",
+            flexDirection: "column",
+            gap: "var(--space-2)",
+          }}
+        >
+          {PROFILE.highlights.map((line) => {
+            const [label, ...rest] = line.split(" — ");
+            return (
+              <li key={line} style={{ fontSize: 14.5, lineHeight: 1.6, display: "flex", gap: 8 }}>
+                <span aria-hidden style={{ color: "var(--color-accent)", flexShrink: 0 }}>
+                  —
+                </span>
+                <span>
+                  <strong style={{ fontWeight: 600 }}>{label}</strong>
+                  {rest.length > 0 && <span style={{ opacity: 0.75 }}> — {rest.join(" — ")}</span>}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+
+        {PROFILE.lookingFor && (
+          <p
+            style={{
+              margin: "var(--space-4) 0 0",
+              fontSize: 13.5,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 7,
+              padding: "6px 12px",
+              borderRadius: 999,
+              border: "1px solid var(--color-accent)",
+              background: "var(--color-accent-100)",
+              color: "var(--color-accent-800)",
+            }}
+          >
+            <span
+              aria-hidden
+              style={{
+                width: 7,
+                height: 7,
+                borderRadius: "50%",
+                background: "var(--color-accent)",
+                flexShrink: 0,
+              }}
+            />
+            {PROFILE.lookingFor}
+          </p>
+        )}
       </ScrollReveal>
 
       <div style={{ marginBottom: "var(--space-8)" }}>
@@ -202,17 +256,24 @@ export default async function AboutPage() {
           }}
         >
           {SKILLS.map((group, i) => (
-            <ScrollReveal key={group.category} delay={i * 0.06}>
+            <ScrollReveal key={group.level} delay={i * 0.06}>
               <p
-                className="text-muted"
                 style={{
-                  fontSize: 12,
-                  letterSpacing: "0.06em",
-                  textTransform: "uppercase",
+                  fontSize: 12.5,
                   margin: "0 0 var(--space-1)",
+                  display: "flex",
+                  alignItems: "baseline",
+                  flexWrap: "wrap",
+                  gap: 6,
                 }}
               >
-                {group.category}
+                {/* No uppercase transform here, unlike the old Frontend/Backend labels — these
+                    are Korean and text-transform does nothing to them but the letter-spacing
+                    made them look spaced out for no reason. */}
+                <span style={{ fontWeight: 600 }}>{group.level}</span>
+                {group.note && (
+                  <span className="text-muted" style={{ fontSize: 11.5 }}>{group.note}</span>
+                )}
               </p>
               <div
                 style={{
@@ -446,7 +507,7 @@ export default async function AboutPage() {
         >
           <a
             target="_blank"
-            href={CONTACT_GITHUB_URL}
+            href={CONTACT.github}
             className="btn"
             style={{
               background: "#E8F5E9",
@@ -463,7 +524,7 @@ export default async function AboutPage() {
             GitHub
           </a>
           <a
-            href={`mailto:${CONTACT_EMAIL}`}
+            href={`mailto:${CONTACT.email}`}
             className="btn"
             style={{
               border: "1px solid #E8F5E9",

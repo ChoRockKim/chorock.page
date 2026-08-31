@@ -713,12 +713,22 @@ scrollspy + mobile accordion), reading progress bar, share button, code-block co
 giscus comments, `scripts/migrate-from-forum.ts` (real forum post data migration, already run
 once).
 
-`/about` is real code, mostly real content now (`CAREER`, `CONTACT_GITHUB_URL` edited by the
-user; "최근 프로젝트"/"최근 글" pull live from MongoDB via `listProjects()`/`getCachedPosts()`) —
-`PROFILE` (`lib/profile.ts`, shared with `components/PostAuthorCard.tsx` — see below) and
-`SKILLS` (local to `app/about/page.tsx`) are **no longer placeholders** — `SKILLS` was replaced
-with real data migrated from the user's previous portfolio (CHANGELOG 0.7.9), and `PROFILE`'s
-copy was rewritten to the owner's own words (0.7.74). Treat both as factual about the site owner.
+`/about` is real code, mostly real content now (`CAREER` edited by the user; "최근 프로젝트"/
+"최근 글" pull live from MongoDB via `listProjects()`/`getCachedPosts()`) — `PROFILE`
+(`lib/profile.ts`, shared with `components/PostAuthorCard.tsx` — see below) and `SKILLS` (local
+to `app/about/page.tsx`) are **no longer placeholders** — `SKILLS` holds real data (CHANGELOG
+0.7.9), regrouped in 0.7.82 by proficiency (`{ level, note?, items }`, 주력/실무에서 사용/경험
+있음/도구) instead of Frontend/Backend/DevOps. Treat both as factual about the site owner.
+0.7.82 also reworked the hero for a job-hunting audience: `PROFILE.intro` is deliberately
+number-free (identity + the verification habit) while the NEW `PROFILE.highlights` (three
+scannable `label — detail` lines; the page splits on the spaced em dash, keep it intact) carries
+the figures, and `PROFILE.lookingFor` renders as a status pill only while non-empty — clear that
+one string when the job hunt ends. Contact values live in `lib/profile.ts#CONTACT`
+(github/email), consumed by the /about contact card, `components/Footer.tsx`, and the JSON-LD
+`Person` in `app/layout.tsx` (which since 0.7.82 also declares email/sameAs/knowsAbout/worksFor)
+— the old page-local `CONTACT_GITHUB_URL`/`CONTACT_EMAIL` constants are gone. `PROFILE.shortIntro`
+feeds four consumers (/about metadata + og description, author card, JSON-LD Person.description);
+keep it short and don't churn it.
 
 **Post detail's bottom section order is body → author card → comments → related posts**
 (`app/posts/[slug]/page.tsx`) — `components/PostAuthorCard.tsx` renders `lib/profile.ts`'s
