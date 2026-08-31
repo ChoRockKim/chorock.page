@@ -85,6 +85,12 @@ const CAREER: {
   },
 ];
 
+// 이름·발급 기관·취득 연월만 공개한다 — 자격번호·유효기간·생년월일 같은 증서 속 정보는
+// 공개 페이지에 싣지 않는다.
+const CERTIFICATES: { name: string; issuer: string; date: string }[] = [
+  { name: "SQLD (SQL 개발자)", issuer: "한국데이터산업진흥원", date: "2026.03" },
+];
+
 export default async function AboutPage() {
   const recentPosts = (await getCachedPosts()).slice(0, 3);
   const recentProjects = (await listProjects()).slice(0, 2);
@@ -396,6 +402,31 @@ export default async function AboutPage() {
             </ScrollReveal>
           ))}
         </div>
+      </div>
+
+      <div style={{ marginBottom: "var(--space-8)" }}>
+        <ScrollReveal>
+          <h2 style={{ fontSize: 20, margin: "0 0 var(--space-4)" }}>자격증</h2>
+          <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
+            {CERTIFICATES.map((cert) => (
+              <p
+                key={cert.name}
+                style={{
+                  margin: 0,
+                  display: "flex",
+                  alignItems: "baseline",
+                  flexWrap: "wrap",
+                  gap: "var(--space-2)",
+                }}
+              >
+                <span style={{ fontSize: 14.5, fontWeight: 600 }}>{cert.name}</span>
+                <span className="text-muted" style={{ fontSize: 12.5 }}>
+                  {cert.issuer} · {cert.date}
+                </span>
+              </p>
+            ))}
+          </div>
+        </ScrollReveal>
       </div>
 
       {recentProjects.length > 0 && (
