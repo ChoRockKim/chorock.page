@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -14,6 +15,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { previewMarkdown, saveDraft, publishPost, uploadImage, type SavePostInput } from "@/app/posts/write/actions";
 import DraftsPopup from "@/components/DraftsPopup";
+import LeaveConfirmDialog from "@/components/LeaveConfirmDialog";
 
 type SeriesOption = { id: string; title: string };
 
@@ -25,9 +27,6 @@ type InitialPost = {
   tags: string[];
   seriesId: string | null;
 };
-
-const LEAVE_CONFIRM =
-  "작성 중인 내용이 아직 저장되지 않았습니다.\n이 페이지를 벗어나면 변경 사항이 사라집니다. 나가시겠습니까?";
 
 function syncSlugToUrl(slug: string) {
   window.history.replaceState(null, "", `/posts/write?slug=${encodeURIComponent(slug)}`);
@@ -88,6 +87,13 @@ export default function WritePostForm({
   useEffect(() => {
     pageUrlRef.current = window.location.href;
   });
+  // 모달 표시 여부. 어떤 경로로 나가려 했는지는 ref에 둔다 — 상태로 두면 onStay/onLeave의
+  // 함수 정체성이 매 렌더 바뀌어 모달 쪽 effect(포커스·Escape 등록)가 계속 다시 돈다.
+  const [leavePrompt, setLeavePrompt] = useState(false);
+  const leaveKindRef = useRef<"popstate" | "link">("popstate");
+  // "계속 작성"을 골랐을 때 되돌려 놓을 주소. 모달을 여는 것 자체가 리렌더라
+  // pageUrlRef가 (이미 되돌아간) 현재 주소로 덮이기 때문에, 열기 직전 값을 따로 잡아둔다.
+  const restoreUrlRef = useRef("");
 
   useEffect(() => {
     dirtyRef.current = dirty;
@@ -127,12 +133,11 @@ export default function WritePostForm({
         window.history.back();
         return;
       }
-      if (window.confirm(LEAVE_CONFIRM)) {
-        leavingRef.current = true;
-        window.history.back();
-      } else {
-        window.history.pushState(null, "", pageUrlRef.current || window.location.href);
-      }
+      // 네이티브 confirm은 떠 있는 동안 메인 스레드를 막아 화면이 멈춘다. 히스토리 위치는
+      // 되돌아간 그대로 두고(이전과 같은 계산을 유지) 비동기 모달로 묻는다.
+      restoreUrlRef.current = pageUrlRef.current || window.location.href;
+      leaveKindRef.current = "popstate";
+      setLeavePrompt(true);
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
@@ -445,8 +450,25 @@ export default function WritePostForm({
     </button>
   );
 
+  const handleStay = useCallback(() => {
+    // 뒤로가기를 막아세운 경우에만 히스토리를 원위치시킨다. "← 나가기"는 아직 아무것도
+    // 이동하지 않았으므로 되돌릴 것이 없다.
+    if (leaveKindRef.current === "popstate") {
+      window.history.pushState(null, "", restoreUrlRef.current || window.location.href);
+    }
+    setLeavePrompt(false);
+  }, []);
+
+  const handleLeave = useCallback(() => {
+    leavingRef.current = true;
+    setLeavePrompt(false);
+    if (leaveKindRef.current === "popstate") window.history.back();
+    else router.push("/posts");
+  }, [router]);
+
   return (
     <>
+      <LeaveConfirmDialog open={leavePrompt} onStay={handleStay} onLeave={handleLeave} />
       <div style={{ position: "sticky", top: 0, zIndex: 30 }}>
         <div
           style={{
@@ -464,8 +486,9 @@ export default function WritePostForm({
             style={{ fontSize: 13 }}
             onClick={(e) => {
               if (!dirty) return;
-              if (window.confirm(LEAVE_CONFIRM)) leavingRef.current = true;
-              else e.preventDefault();
+              e.preventDefault();
+              leaveKindRef.current = "link";
+              setLeavePrompt(true);
             }}
           >
             ← 나가기
@@ -518,7 +541,9 @@ export default function WritePostForm({
         </div>
       </div>
 
-      <main style={{ maxWidth: 960, margin: "0 auto", padding: "var(--space-6)", animation: "pageFadeIn .5s ease both" }}>
+      {/* 작성 화면은 읽기용 본문이 아니라 도구다 — 가독폭(960)에 맞출 이유가 없고, 2단으로
+          쪼개면 한 칸이 440px밖에 안 돼 좁다는 지적을 받았다. 화면 폭을 최대한 쓴다. */}
+      <main style={{ maxWidth: 1680, margin: "0 auto", padding: "var(--space-6)", animation: "pageFadeIn .5s ease both" }}>
         <textarea
           ref={titleRef}
           className="wp-title"
@@ -717,8 +742,8 @@ export default function WritePostForm({
           <span style={{ fontSize: 12, opacity: 0.55, marginLeft: "auto" }}>예상 읽는 시간 {readTime}분</span>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-6)", alignItems: "start" }}>
-          <div style={{ minWidth: 0 }}>
+        <div className="wp-split">
+          <div>
             <input
               ref={fileInputRef}
               type="file"
@@ -836,7 +861,7 @@ export default function WritePostForm({
               onScroll={() => syncScroll("body")}
             />
           </div>
-          <div style={{ minWidth: 0 }}>
+          <div>
             <p className="text-muted" style={{ fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", margin: "0 0 var(--space-2)" }}>
               미리보기
             </p>

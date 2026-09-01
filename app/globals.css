@@ -740,3 +740,16 @@ html.projects-nav-no-stagger .stagger-list > * {
 }
 .wp-toolbar-btn:hover { opacity: 1; background: color-mix(in srgb, var(--color-text) 8%, transparent); }
 .wp-toolbar-divider { width: 1px; height: 16px; background: var(--color-divider); margin: 0 4px; }
+/* 편집기 | 미리보기 2단. 두 칸 모두 min-width: 0 이어야 한다 — 넓은 코드 블록이 그리드
+   트랙을 제 콘텐츠 너비만큼 밀어내서 반대쪽 칸을 잡아먹는다(0.7.33 참고). 좁은 화면에서는
+   2단을 유지할 이유가 없어 세로로 쌓는다: 900px에서 한 칸이 300px대라 편집이 불가능했다. */
+.wp-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-6);
+  align-items: start;
+}
+.wp-split > * { min-width: 0; }
+@media (max-width: 900px) {
+  .wp-split { grid-template-columns: 1fr; gap: var(--space-5); }
+}
