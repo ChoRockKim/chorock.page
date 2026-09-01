@@ -3,6 +3,15 @@
 이 프로젝트의 주요 변경 사항을 버전(작업 단위) 별로 기록합니다. 형식은
 [Keep a Changelog](https://keepachangelog.com/)를 참고합니다.
 
+## [0.7.89] - 2026-09-01
+
+### Added
+
+- 네이버 서치어드바이저 소유 확인 메타태그(`naver-site-verification`) —
+  `app/layout.tsx`의 `metadata.verification.other`로 전 페이지에 렌더(Next metadata에 naver
+  전용 키가 없어 `other` 사용). 등록 완료되면 서치어드바이저에 sitemap.xml 제출 →
+  0.7.88의 IndexNow 핑과 함께 네이버 색인 경로가 완성됨.
+
 ## [0.7.88] - 2026-09-01
 
 ### Added

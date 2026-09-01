@@ -37,6 +37,8 @@ export const metadata: Metadata = {
   },
   verification: {
     google: "B5tyxUOq9dIjYVK8Sr33euBMxjZ1sPJ-j30BPRob-nw",
+    // 네이버 서치어드바이저 소유 확인 — Next metadata에 naver 전용 키는 없어서 `other`로 넣는다.
+    other: { "naver-site-verification": "5f1be0089864ecb5a2b788d04e917186b6fcb583" },
   },
 };
 
