@@ -542,8 +542,9 @@ export default function WritePostForm({
       </div>
 
       {/* 작성 화면은 읽기용 본문이 아니라 도구다 — 가독폭(960)에 맞출 이유가 없고, 2단으로
-          쪼개면 한 칸이 440px밖에 안 돼 좁다는 지적을 받았다. 화면 폭을 최대한 쓴다. */}
-      <main style={{ maxWidth: 1680, margin: "0 auto", padding: "var(--space-6)", animation: "pageFadeIn .5s ease both" }}>
+          쪼개면 한 칸이 440px밖에 안 돼 좁다는 지적을 받았다. 다만 화면 폭을 다 쓰는 1680은
+          이번엔 너무 넓다는 판단이라, 둘의 중간인 1320으로 맞췄다(한 칸 약 620px). */}
+      <main style={{ maxWidth: 1320, margin: "0 auto", padding: "var(--space-6)", animation: "pageFadeIn .5s ease both" }}>
         <textarea
           ref={titleRef}
           className="wp-title"

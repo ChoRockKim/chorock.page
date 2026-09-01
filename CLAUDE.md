@@ -904,7 +904,7 @@ the draft.
 
 **The write screen is a tool, not an article — don't cap it at the reading width.** `<main>` in
 `WritePostForm` used `maxWidth: 960` (the same measure the post body uses), which left each half
-of the editor/preview split at ~440px. It's `1680` now. The split itself is `.wp-split`
+of the editor/preview split at ~440px. It's `1320` now (1680 was tried first and read as too wide). The split itself is `.wp-split`
 (`app/globals.css`), not an inline style, because it needs a media query: below 900px it stacks
 to one column — `1fr 1fr` used to apply unconditionally, so a phone got two ~160px columns.
 `min-width: 0` lives on `.wp-split > *` so both halves are covered (see the grid/flex + code-block
