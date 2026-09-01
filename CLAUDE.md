@@ -522,6 +522,18 @@ revealed state restores `--pd-text-opacity` for `p`/`ul`/`ol` explicitly rather 
 `opacity: 1`, which would have brightened body text site-wide. The variable exists so that 0.88
 isn't hardcoded in two places.
 
+**IndexNow pings fire on every publish/delete/seed** (`lib/indexnow.ts`) — Naver and Bing get
+told about changed URLs immediately; Google does not participate in IndexNow, so its discovery
+path is the sitemap `lastmod` (0.7.75). The module deliberately does NOT import `"server-only"`:
+`scripts/seed-projects.ts` runs under plain tsx where that package throws at import time, and the
+key is not a secret anyway — IndexNow verifies ownership by serving the same value publicly at
+`/<key>.txt` (the file in `public/`), so hiding it in an env var buys nothing. The key constant in
+`lib/indexnow.ts` and the `public/<key>.txt` filename must always change together. Pings swallow
+every failure with a 4s timeout — a dead ping must never break publishing (same spirit as the
+`return { error }` rule). Hooked in `upsertPost` (published status only — drafts have no public
+URL), `deletePost` (submitting deleted URLs is spec-sanctioned: engines recrawl and drop them),
+and `seed-projects.ts` (published entries only).
+
 **SEO/share-preview metadata is generated, not static image files.** No favicon/OG image
 assets exist in the repo (no logo was ever made) — `app/icon.tsx`/`app/apple-icon.tsx`/
 `app/opengraph-image.tsx` all use `next/og`'s `ImageResponse` to render the same "초"

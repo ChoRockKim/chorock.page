@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { revalidatePath, revalidateTag } from "next/cache";
+import { pingIndexNow } from "@/lib/indexnow";
 import { auth } from "@/auth";
 import { connectToDatabase } from "@/lib/mongodb";
 import { compileMarkdown, estimateReadTime } from "@/lib/markdown";
@@ -167,6 +168,8 @@ async function upsertPost(input: SavePostInput, status: "draft" | "published"): 
       existing.status = status;
       await existing.save();
       revalidatePosts(existing.slug);
+      // 발행(또는 발행 글 수정)일 때만 검색엔진에 알린다 — 임시 저장은 공개 URL 변화가 없다.
+      if (status === "published") await pingIndexNow([`/posts/${encodeURIComponent(existing.slug)}`]);
       return { slug: existing.slug };
     }
   }
@@ -183,6 +186,7 @@ async function upsertPost(input: SavePostInput, status: "draft" | "published"): 
     publishedAt: new Date(),
   });
   revalidatePosts(slug);
+  if (status === "published") await pingIndexNow([`/posts/${encodeURIComponent(slug)}`]);
   return { slug };
 }
 

@@ -3,6 +3,7 @@ import path from "node:path";
 import process from "node:process";
 import mongoose from "mongoose";
 import { ProjectModel } from "../models/Project";
+import { pingIndexNow } from "../lib/indexnow";
 
 const envPath = path.resolve(process.cwd(), ".env.local");
 if (existsSync(envPath)) process.loadEnvFile(envPath);
@@ -772,6 +773,13 @@ async function main() {
     slug: { $nin: currentSlugs },
   });
   console.log(`배열에 없는 프로젝트 ${deletedCount}개 삭제.`);
+
+  // 시드가 곧 발행이다 — 목록과 각 상세를 IndexNow 참여 엔진(네이버·Bing)에 알린다.
+  // published 항목만: draft는 사이트에 노출되지 않는 URL이라 제출하면 안 된다.
+  await pingIndexNow([
+    "/projects",
+    ...projects.filter((p) => p.status === "published").map((p) => `/projects/${encodeURIComponent(p.slug)}`),
+  ]);
 
   await mongoose.disconnect();
 }

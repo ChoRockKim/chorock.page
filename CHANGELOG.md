@@ -3,6 +3,30 @@
 이 프로젝트의 주요 변경 사항을 버전(작업 단위) 별로 기록합니다. 형식은
 [Keep a Changelog](https://keepachangelog.com/)를 참고합니다.
 
+## [0.7.88] - 2026-09-01
+
+### Added
+
+- **IndexNow 자동 핑** (`lib/indexnow.ts`) — 글 발행·발행 글 수정(`upsertPost`의 published
+  분기), 글 삭제(`deletePost`), 프로젝트 시드(`seed-projects.ts`) 시점에 바뀐 URL을
+  api.indexnow.org로 제출. 참여 엔진(네이버·Bing 등) 전체에 공유되며, 구글은 IndexNow에
+  참여하지 않으므로 구글 쪽 발견 경로는 기존 sitemap `lastmod`(0.7.75)가 담당.
+  - 키는 비밀이 아님 — 프로토콜이 `/<key>.txt` 공개 서빙으로 소유를 검증하므로
+    (`public/98bc…cd44.txt`) env로 숨길 이유가 없음. 키 상수와 파일명은 항상 함께 변경.
+  - `"server-only"`를 일부러 import하지 않음 — tsx로 도는 시드 스크립트에서 그 패키지는
+    import 시점에 throw함.
+  - 핑은 실패를 전부 삼키고 4초 타임아웃 — 발행 액션의 부수 작업이라 핑이 죽어도 발행은
+    성공해야 함(`return { error }` 원칙과 같은 정신). 임시 저장·draft 프로젝트는 공개 URL이
+    없으므로 제출하지 않음. 삭제 URL 제출은 스펙이 권장하는 사용법(재크롤 후 색인 제거).
+
+### 배경
+
+색인 요청 수동 반복에 대한 자동화 문의. 구글은 일반 페이지용 색인 요청 API가 없고(URL
+Inspection API는 읽기 전용, Indexing API는 구인공고·라이브 방송 전용, sitemap ping은 폐지)
+sitemap lastmod가 사실상의 자동화임을 확인. 자동화가 실제로 가능한 IndexNow(네이버·Bing)를
+붙이기로 결정. 네이버 서치어드바이저 사이트 등록은 별도 진행(소유 확인 메타태그는 사용자가
+값을 받아오면 `app/layout.tsx` metadata.verification에 추가 예정).
+
 ## [0.7.87] - 2026-09-01
 
 ### Added

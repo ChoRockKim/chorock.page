@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath, revalidateTag } from "next/cache";
+import { pingIndexNow } from "@/lib/indexnow";
 import { auth } from "@/auth";
 import { connectToDatabase } from "@/lib/mongodb";
 import { PostModel } from "@/models/Post";
@@ -32,4 +33,6 @@ export async function deletePost(slug: string): Promise<{ error: string } | void
   revalidatePath(`/posts/${encodeURIComponent(slug)}`);
   revalidatePath("/about");
   revalidatePath("/series");
+  // 삭제된 URL도 제출한다 — IndexNow 스펙상 검색엔진이 재크롤해 404를 보고 색인에서 내린다.
+  await pingIndexNow([`/posts/${encodeURIComponent(slug)}`]);
 }
