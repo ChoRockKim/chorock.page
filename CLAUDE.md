@@ -862,6 +862,51 @@ re-render the same `WritePostForm` instance with a new `initial` prop instead of
 leaving the form showing whatever was being edited before instead of the picked draft — a real
 navigation sidesteps this entirely by forcing everything to load fresh from scratch.
 
+**`beforeunload` does NOT fire on browser back within the app** — it only fires when the
+document actually unloads (refresh, tab close, address-bar navigation, a real `<a href>`).
+App Router back/forward is a client-side navigation with no unload, so an unsaved-changes guard
+built on `beforeunload` alone silently misses the single most common way to lose work (this was
+the actual reported loss: "실수로 뒤로가기 눌러서 날려먹은 데이터가 한 두개가 아냐").
+`components/WritePostForm.tsx` covers all three exits separately: `beforeunload` for real
+unloads (this also catches `DraftsPopup`'s draft picker, which is a full `<a href>` navigation
+by design), a **history sentinel** for back/forward, and an `onClick` guard on the "← 나가기"
+`next/link` (a client navigation, so neither of the other two sees it). The sentinel: push one
+dummy `history.pushState(null, "", location.href)` entry the moment the form first becomes
+dirty, then intercept `popstate` when back consumes it — `confirm()` → yes sets a `leavingRef`
+and calls `history.back()` (the resulting second `popstate` is ignored via that flag, which is
+what stops the recursion), no re-pushes the dummy so the user stays put. **The non-obvious part
+is the not-dirty branch**: once the form is saved there's nothing to guard, but the dummy entry
+is still sitting in history, so a plain early-return would eat the user's first back press and
+require a second one. It has to `back()` again to pass the navigation through. The dirty
+baseline is a snapshot of title/summary/body/tags/series taken at the last *successful* save,
+and it's set to **the value that was sent, not the current value** — text typed while the save
+round-trip was in flight must stay marked unsaved.
+
+**A `catch {}` on a clipboard write is not just missing feedback — with optional chaining it
+reports success.** `components/CodeBlock.tsx`/`components/ShareButton.tsx` both had
+`await navigator.clipboard?.writeText(text)` inside a `try` with an empty `catch`. Where
+`navigator.clipboard` is undefined (non-secure context, older browsers) the optional chain
+short-circuits to `undefined` instead of throwing, so the `await` resolves, the `catch` never
+runs, and the button cheerfully renders "링크 복사됨" having copied nothing. Both now throw
+explicitly on a missing `clipboard` and surface a "복사 실패" state. Treat `?.` on a
+side-effecting async API as a correctness bug, not a convenience.
+
+**Any route behind `middleware.ts`'s auth gate needs its own `loading.tsx`** — `/posts/write`
+and `/posts/[slug]/edit` are `ƒ` (dynamic, cookie-reading) and had none, so clicking
+"새 글 작성"/"수정" left the screen completely unchanged until the new page painted. The three
+`[slug]` detail routes already had skeletons; these two were the gap. Same `.skeleton`
+convention (`app/globals.css`), shaped to the editor's own layout.
+
+**`app/globals.css`'s `.spinner` is the shared "this is actually running" indicator.**
+`.btn:disabled`'s `opacity: 0.45` alone can't distinguish "locked" from "working". It
+deliberately keeps animating under `prefers-reduced-motion: reduce` (slowed to 1.8s rather than
+`animation: none`) — unlike every other motion override in this file, the rotation *is* the
+information, so removing it removes the feedback. When a component has two async buttons, track
+*which* one is running (`WritePostForm`'s `savingKind`), not just a shared boolean — otherwise
+both dim identically and the user still can't tell what they pressed. On a success path that
+navigates away, do **not** re-enable the button in a `finally` (`handlePublish` used to): the
+button stays live during `router.push` and can be pressed again, double-publishing.
+
 **Server Actions must `return { error }`, never `throw`, for any message meant to reach the
 user.** Next.js redacts every thrown Server Action error into a generic "An error occurred in
 the Server Components render..." message in production, *regardless of whether the throw was a
