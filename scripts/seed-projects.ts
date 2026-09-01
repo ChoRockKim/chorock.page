@@ -98,11 +98,33 @@ const projects = [
 
 ## 발표 슬라이드
 
-해커톤 제출 자료 중 일부입니다. 기획 슬라이드는 Insight 팀원들이 만들었습니다.
+해커톤 제출 자료입니다. 기획·시장 조사 슬라이드는 Insight 팀원들이 만들었고, 저는 Builder로 제품 화면 쪽을 맡았습니다.
 
-![표지 — 취업의 문턱을 간단한 클릭으로 넘다](/projects/folio-ai/04-deck-cover.webp)
+![표지 — 취업의 문턱을 간단한 클릭으로 넘다](/projects/folio-ai/deck-01.webp)
 
-![Problem & Solution — 저장소 선택 · 커밋/PR 분석 · 템플릿 제공](/projects/folio-ai/05-deck-problem.webp)
+![Vision & Mission — 증가하는 구직자 수, 줄어드는 신입채용](/projects/folio-ai/deck-02.webp)
+
+![Vision & Mission — 자료는 남아있지만 포트폴리오에는 담기지 않는 경험](/projects/folio-ai/deck-03.webp)
+
+![Persona — 프로젝트는 했는데 포트폴리오 작성이 막막한 개발자](/projects/folio-ai/deck-04.webp)
+
+![Problem & Solution — 저장소 선택 · 커밋/PR 분석 · 템플릿 제공](/projects/folio-ai/deck-05.webp)
+
+![Product/Service — 레포지토리만 선택하세요, 경험은 저희가 정리할게요](/projects/folio-ai/deck-06.webp)
+
+![1. 선택해요 — 연동된 GitHub 저장소에서 원하는 것만 고르기](/projects/folio-ai/deck-07.webp)
+
+![2. 보충해요 — 지원 직무와 강조하고 싶은 경험을 프롬프트로](/projects/folio-ai/deck-08.webp)
+
+![3. 만들어요 — 저장소 분석부터 화면 완성까지 진행 단계 표시](/projects/folio-ai/deck-09.webp)
+
+![4. 확인해요 — 완성된 포트폴리오와 PDF 이력서 내려받기](/projects/folio-ai/deck-10.webp)
+
+![시연 영상 안내](/projects/folio-ai/deck-11.webp)
+
+![Competitive Landscape — 국내 IT 기업 맞춤형 포트폴리오 생성](/projects/folio-ai/deck-12.webp)
+
+![Market Size — 국내 IT 개발자를 시작으로 세계 시장까지](/projects/folio-ai/deck-13.webp)
 `,
     demoUrl: "https://folio.klr.kr",
     repoUrl: "https://github.com/codex-hackathon-12/team12",
