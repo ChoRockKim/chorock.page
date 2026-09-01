@@ -26,6 +26,9 @@ type InitialPost = {
   seriesId: string | null;
 };
 
+const LEAVE_CONFIRM =
+  "작성 중인 내용이 아직 저장되지 않았습니다.\n이 페이지를 벗어나면 변경 사항이 사라집니다. 나가시겠습니까?";
+
 function syncSlugToUrl(slug: string) {
   window.history.replaceState(null, "", `/posts/write?slug=${encodeURIComponent(slug)}`);
 }
@@ -61,8 +64,69 @@ export default function WritePostForm({
   const [body, setBody] = useState(initial?.content ?? "");
   const [statusLabel, setStatusLabel] = useState(mode === "edit" ? "수정 중" : "작성 중");
   const [saving, setSaving] = useState(false);
+  // 어느 버튼이 돌고 있는지. saving 하나만으로는 두 버튼이 똑같이 흐려지기만 해서
+  // 무엇을 눌렀는지 구분되지 않았다.
+  const [savingKind, setSavingKind] = useState<"draft" | "publish" | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [imageError, setImageError] = useState<string | null>(null);
+
+  // ── 작성 중인 내용 유실 방지 ──────────────────────────────────────────────
+  // 마지막으로 저장에 성공한 시점의 스냅샷과 현재 값을 비교해 "변경됨"을 판단한다.
+  const snapshot = JSON.stringify([title, summary, body, tags, seriesTitle]);
+  const savedRef = useRef(snapshot);
+  const dirty = snapshot !== savedRef.current;
+  const dirtyRef = useRef(dirty);
+  // 의도한 이탈(발행 후 이동, 경고에서 "확인")에서는 다시 묻지 않기 위한 플래그.
+  const leavingRef = useRef(false);
+  const sentinelRef = useRef(false);
+
+  useEffect(() => {
+    dirtyRef.current = dirty;
+  }, [dirty]);
+
+  // 새로고침·탭 닫기·주소창 이동. 임시글 목록에서 다른 글을 고르는 것도 실제 페이지
+  // 이동(<a href>)이라 여기서 함께 걸린다.
+  useEffect(() => {
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!dirtyRef.current || leavingRef.current) return;
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, []);
+
+  // 브라우저 뒤로가기는 beforeunload가 잡지 못한다 — 같은 앱 안의 클라이언트 이동이라
+  // 문서가 언로드되지 않기 때문. 대신 내용이 생긴 시점에 히스토리에 더미 항목을 하나
+  // 쌓아두고, 뒤로가기가 그 항목을 소비할 때 popstate로 가로채 확인을 받는다.
+  useEffect(() => {
+    if (!dirty || sentinelRef.current) return;
+    sentinelRef.current = true;
+    window.history.pushState(null, "", window.location.href);
+  }, [dirty]);
+
+  useEffect(() => {
+    const onPopState = () => {
+      if (leavingRef.current) return;
+      if (!dirtyRef.current) {
+        // 저장을 마쳐 지킬 내용이 없는데 더미 항목만 소비된 경우 — 사용자가 원래 가려던
+        // 곳으로 그대로 보낸다. 그러지 않으면 뒤로가기를 두 번 눌러야 나가진다.
+        if (!sentinelRef.current) return;
+        sentinelRef.current = false;
+        leavingRef.current = true;
+        window.history.back();
+        return;
+      }
+      if (window.confirm(LEAVE_CONFIRM)) {
+        leavingRef.current = true;
+        window.history.back();
+      } else {
+        window.history.pushState(null, "", window.location.href);
+      }
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
 
   const [previewContent, setPreviewContent] = useState<ReactNode>(null);
   const [readTime, setReadTime] = useState(1);
@@ -312,7 +376,9 @@ export default function WritePostForm({
 
   const handleSaveDraft = async () => {
     setSaving(true);
+    setSavingKind("draft");
     setSaveError(null);
+    const attempted = snapshot;
     try {
       const result = await saveDraft(buildInput());
       if ("error" in result) {
@@ -321,28 +387,40 @@ export default function WritePostForm({
         setSlug(result.slug);
         syncSlugToUrl(result.slug);
         setStatusLabel("임시 저장됨");
+        // 기준선은 "현재 값"이 아니라 "방금 보낸 값"으로 갱신한다 — 저장을 누른 뒤
+        // 응답을 기다리는 동안 이어서 타이핑한 부분은 그대로 미저장으로 남아야 한다.
+        savedRef.current = attempted;
       }
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : "저장에 실패했습니다.");
     } finally {
       setSaving(false);
+      setSavingKind(null);
     }
   };
 
   const handlePublish = async () => {
     setSaving(true);
+    setSavingKind("publish");
     setSaveError(null);
+    const attempted = snapshot;
     try {
       const result = await publishPost(buildInput());
       if ("error" in result) {
         setSaveError(result.error);
-      } else {
-        router.push(`/posts/${encodeURIComponent(result.slug)}`);
+        setSaving(false);
+        setSavingKind(null);
+        return;
       }
+      savedRef.current = attempted;
+      leavingRef.current = true;
+      // 이동이 끝날 때까지 버튼을 잠근 채로 둔다(saving을 되돌리지 않는다). 되돌리면
+      // router.push가 진행되는 동안 한 번 더 눌려 중복 발행될 수 있다.
+      router.push(`/posts/${encodeURIComponent(result.slug)}`);
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : "발행에 실패했습니다.");
-    } finally {
       setSaving(false);
+      setSavingKind(null);
     }
   };
 
@@ -370,7 +448,16 @@ export default function WritePostForm({
             borderBottom: "1px solid var(--color-divider)",
           }}
         >
-          <Link href="/posts" className="btn btn-ghost" style={{ fontSize: 13 }}>
+          <Link
+            href="/posts"
+            className="btn btn-ghost"
+            style={{ fontSize: 13 }}
+            onClick={(e) => {
+              if (!dirty) return;
+              if (window.confirm(LEAVE_CONFIRM)) leavingRef.current = true;
+              else e.preventDefault();
+            }}
+          >
             ← 나가기
           </Link>
           {saveError && (
@@ -382,13 +469,41 @@ export default function WritePostForm({
           {mode === "write" && (
             <>
               <DraftsPopup currentSlug={slug} />
-              <button type="button" className="btn btn-secondary" disabled={saving} onClick={handleSaveDraft}>
-                임시 저장
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={saving}
+                aria-busy={savingKind === "draft"}
+                onClick={handleSaveDraft}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+              >
+                {savingKind === "draft" ? (
+                  <>
+                    <span className="spinner" aria-hidden="true" /> 저장 중…
+                  </>
+                ) : (
+                  "임시 저장"
+                )}
               </button>
             </>
           )}
-          <button type="button" className="btn btn-primary" disabled={saving} onClick={handlePublish}>
-            {mode === "edit" ? "저장" : "발행하기"}
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={saving}
+            aria-busy={savingKind === "publish"}
+            onClick={handlePublish}
+            style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+          >
+            {savingKind === "publish" ? (
+              <>
+                <span className="spinner" aria-hidden="true" /> {mode === "edit" ? "저장 중…" : "발행 중…"}
+              </>
+            ) : mode === "edit" ? (
+              "저장"
+            ) : (
+              "발행하기"
+            )}
           </button>
         </div>
       </div>

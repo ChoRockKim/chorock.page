@@ -204,6 +204,24 @@ figcaption {
 }
 .btn svg { display: block; }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+/* 비동기 동작이 "실제로 돌고 있음"을 보여주는 링. disabled로 흐려지기만 하면 눌린 건지 만
+   건지 구분이 안 된다는 보고가 있어 추가했다. prefers-reduced-motion에서도 멈추지 않는다 —
+   이 회전이 곧 피드백 자체라, 멈추면 없는 것과 같아진다. 대신 느리게 돌린다. */
+.spinner {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  vertical-align: -0.15em;
+  flex: none;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation-duration: 1.8s; }
+}
 .btn-primary { background: var(--color-accent); color: var(--color-bg); }
 .btn-primary:hover { background: var(--color-accent-600); }
 .btn-primary:active { background: var(--color-accent-700); }

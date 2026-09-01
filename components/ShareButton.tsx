@@ -4,6 +4,7 @@ import { useState } from "react";
 
 export default function ShareButton({ title }: { title: string }) {
   const [shared, setShared] = useState(false);
+  const [failed, setFailed] = useState(false);
 
   const onShare = async () => {
     const url = window.location.href;
@@ -16,11 +17,15 @@ export default function ShareButton({ title }: { title: string }) {
       return;
     }
     try {
-      await navigator.clipboard?.writeText(url);
+      // navigator.clipboard가 없는 환경에서 옵셔널 체이닝만 쓰면 undefined가 반환되어
+      // 실패가 성공처럼 지나간다. 명시적으로 실패로 만든다.
+      if (!navigator.clipboard) throw new Error("clipboard unavailable");
+      await navigator.clipboard.writeText(url);
       setShared(true);
       setTimeout(() => setShared(false), 1500);
     } catch {
-      // clipboard permission denied/unavailable — silently ignore, no feedback to show
+      setFailed(true);
+      setTimeout(() => setFailed(false), 1800);
     }
   };
 
@@ -74,7 +79,7 @@ export default function ShareButton({ title }: { title: string }) {
           />
         </svg>
       )}
-      {shared ? "링크 복사됨" : "공유하기"}
+      {failed ? "복사 실패" : shared ? "링크 복사됨" : "공유하기"}
     </button>
   );
 }

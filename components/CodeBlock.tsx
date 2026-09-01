@@ -12,6 +12,7 @@ export default function CodeBlock(props: ComponentPropsWithoutRef<"pre">) {
   const { children, ...rest } = props;
   const preRef = useRef<HTMLPreElement>(null);
   const [copied, setCopied] = useState(false);
+  const [failed, setFailed] = useState(false);
   const [lang, setLang] = useState<string | null>(null);
 
   useEffect(() => {
@@ -21,11 +22,17 @@ export default function CodeBlock(props: ComponentPropsWithoutRef<"pre">) {
   const onCopy = async () => {
     const text = preRef.current?.textContent ?? "";
     try {
-      await navigator.clipboard?.writeText(text);
+      // 클립보드 API 자체가 없는 환경(구형/비보안 컨텍스트)도 실패로 처리해야 한다.
+      // 옵셔널 체이닝만 쓰면 undefined가 반환되며 조용히 성공한 척 넘어간다.
+      if (!navigator.clipboard) throw new Error("clipboard unavailable");
+      await navigator.clipboard.writeText(text);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
-      // clipboard permission denied/unavailable — silently ignore, no feedback to show
+      // 권한 거부·비보안 컨텍스트 등. 아무 반응이 없으면 눌린 건지 알 수 없으므로
+      // 실패도 눈에 보이게 알린다.
+      setFailed(true);
+      setTimeout(() => setFailed(false), 1800);
     }
   };
 
@@ -44,8 +51,11 @@ export default function CodeBlock(props: ComponentPropsWithoutRef<"pre">) {
           className={`code-block-copy${copied ? " copied" : ""}`}
           onClick={onCopy}
           aria-label="코드 복사"
+          title={failed ? "복사에 실패했습니다" : "코드 복사"}
         >
-          {copied ? (
+          {failed ? (
+            <span style={{ fontSize: 11 }}>복사 실패</span>
+          ) : copied ? (
             <svg
               width="14"
               height="14"
