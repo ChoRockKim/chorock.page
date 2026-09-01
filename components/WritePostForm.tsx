@@ -79,6 +79,15 @@ export default function WritePostForm({
   // 의도한 이탈(발행 후 이동, 경고에서 "확인")에서는 다시 묻지 않기 위한 플래그.
   const leavingRef = useRef(false);
   const sentinelRef = useRef(false);
+  // popstate가 실행될 시점엔 브라우저가 이미 주소를 이전 항목으로 되돌려 놓은 뒤다. 그래서
+  // "취소"에서 location.href를 다시 쌓으면 되돌아간 주소가 박제되어, 임시저장으로 붙었던
+  // ?slug=가 사라진다(그 상태로 새로고침하면 빈 새 글이 열린다). 커밋 때마다 갱신되는 이
+  // ref가 "되돌아가기 직전의 주소"를 들고 있다 — popstate와 우리 핸들러 사이에는 렌더가
+  // 끼어들지 않으므로 값이 오염되지 않는다.
+  const pageUrlRef = useRef("");
+  useEffect(() => {
+    pageUrlRef.current = window.location.href;
+  });
 
   useEffect(() => {
     dirtyRef.current = dirty;
@@ -102,6 +111,7 @@ export default function WritePostForm({
   useEffect(() => {
     if (!dirty || sentinelRef.current) return;
     sentinelRef.current = true;
+    pageUrlRef.current = window.location.href;
     window.history.pushState(null, "", window.location.href);
   }, [dirty]);
 
@@ -121,7 +131,7 @@ export default function WritePostForm({
         leavingRef.current = true;
         window.history.back();
       } else {
-        window.history.pushState(null, "", window.location.href);
+        window.history.pushState(null, "", pageUrlRef.current || window.location.href);
       }
     };
     window.addEventListener("popstate", onPopState);
