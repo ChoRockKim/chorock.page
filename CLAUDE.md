@@ -872,15 +872,43 @@ unloads (this also catches `DraftsPopup`'s draft picker, which is a full `<a hre
 by design), a **history sentinel** for back/forward, and an `onClick` guard on the "← 나가기"
 `next/link` (a client navigation, so neither of the other two sees it). The sentinel: push one
 dummy `history.pushState(null, "", location.href)` entry the moment the form first becomes
-dirty, then intercept `popstate` when back consumes it — `confirm()` → yes sets a `leavingRef`
+dirty, then intercept `popstate` when back consumes it — leave → sets a `leavingRef`
 and calls `history.back()` (the resulting second `popstate` is ignored via that flag, which is
-what stops the recursion), no re-pushes the dummy so the user stays put. **The non-obvious part
+what stops the recursion), stay → re-pushes the dummy so the user stays put. **The non-obvious part
 is the not-dirty branch**: once the form is saved there's nothing to guard, but the dummy entry
 is still sitting in history, so a plain early-return would eat the user's first back press and
 require a second one. It has to `back()` again to pass the navigation through. The dirty
 baseline is a snapshot of title/summary/body/tags/series taken at the last *successful* save,
 and it's set to **the value that was sent, not the current value** — text typed while the save
 round-trip was in flight must stay marked unsaved.
+
+**The prompt is `components/LeaveConfirmDialog.tsx`, not `window.confirm` — and that swap is
+why the guard stopped "freezing" the page.** A native `confirm()` blocks the main thread for as
+long as it is open: the page cannot paint or respond, and everything queued behind it flushes at
+once on dismissal (on `/posts/write` the heaviest item is the ~400ms-debounced `previewMarkdown`
+Server Action plus a re-render of the Shiki-highlighted preview, so the stall scales with body
+length). This was reported as "취소를 누르면 화면이 잠깐 멈췄다 정상화된다" and was measured, not
+guessed: a production-built throwaway route carrying the identical guard logic showed the whole
+`popstate` → prompt → stay → re-push path completing in ~5ms with **zero** remounts, zero
+`loading.tsx` fallbacks, zero RSC/network requests and zero long tasks — even when the main thread
+was deliberately blocked for 2s to imitate the dialog, nothing extra happened after it returned.
+So the guard never risked losing the draft; the freeze was purely the dialog. Two things that
+must not regress: (1) **the URL to restore comes from `restoreUrlRef`, captured at the moment the
+modal opens, not from `pageUrlRef`** — `pageUrlRef` is refreshed on every commit and opening the
+modal *is* a commit, so it would be overwritten with the already-reverted URL and silently undo
+the 0.7.95 fix (`popstate` runs after the browser has already reverted the address, so
+`location.href` is the wrong answer there too — restoring it drops the `?slug=` a draft save had
+added, and a refresh then opens a blank new post). (2) The dialog's default focus is the *safe*
+button ("계속 작성"), and Escape/backdrop click both mean stay — a stray Enter must never discard
+the draft.
+
+**The write screen is a tool, not an article — don't cap it at the reading width.** `<main>` in
+`WritePostForm` used `maxWidth: 960` (the same measure the post body uses), which left each half
+of the editor/preview split at ~440px. It's `1680` now. The split itself is `.wp-split`
+(`app/globals.css`), not an inline style, because it needs a media query: below 900px it stacks
+to one column — `1fr 1fr` used to apply unconditionally, so a phone got two ~160px columns.
+`min-width: 0` lives on `.wp-split > *` so both halves are covered (see the grid/flex + code-block
+rule above for why it's mandatory).
 
 **A `catch {}` on a clipboard write is not just missing feedback — with optional chaining it
 reports success.** `components/CodeBlock.tsx`/`components/ShareButton.tsx` both had
