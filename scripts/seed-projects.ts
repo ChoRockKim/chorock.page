@@ -90,6 +90,14 @@ const projects = [
 ![포트폴리오 예시 갤러리](/projects/folio-ai/02-gallery.webp)
 
 ![생성 결과 — 저장소 근거 기반 케이스 스터디](/projects/folio-ai/03-result.webp)
+
+## 발표 슬라이드
+
+해커톤 제출 자료 중 일부입니다. 기획 슬라이드는 Insight 팀원들이 만들었습니다.
+
+![표지 — 취업의 문턱을 간단한 클릭으로 넘다](/projects/folio-ai/04-deck-cover.webp)
+
+![Problem & Solution — 저장소 선택 · 커밋/PR 분석 · 템플릿 제공](/projects/folio-ai/05-deck-problem.webp)
 `,
     demoUrl: "https://folio.klr.kr",
     repoUrl: "https://github.com/codex-hackathon-12/team12",
