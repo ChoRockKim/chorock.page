@@ -80,8 +80,9 @@ const CAREER: {
     title: "프론트엔드 운영진",
     company: "멋쟁이사자처럼 한국외대",
     logo: "/career/likelion-hufs.jpeg",
-    description: "HTML, CSS, JS, REACT 교육 및 프로젝트 개발",
-    tags: ["React.js", "Javascript"],
+    description:
+      "14기 프론트엔드 운영진으로 HTML·CSS·JavaScript·React 세션을 맡아 아기사자들의 학습과 프로젝트 개발을 돕고 있습니다. 애니멀리그 중앙해커톤에는 개발새발코딩단으로 참가해 프론트엔드를 전담했고, 그 결과물이 Chrono-Derm입니다.",
+    tags: ["React.js", "Javascript", "React Native"],
   },
 ];
 

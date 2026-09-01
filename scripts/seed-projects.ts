@@ -40,7 +40,7 @@ const projects = [
         items: ["OpenAI Responses API", "strict JSON schema"],
       },
     ],
-    coverImage: "/projects/folio-ai/01-dashboard.webp",
+    coverImage: "/projects/folio-ai/00-landing.webp",
     coverImageFit: "cover",
     overviewMd: `GitHub 저장소의 코드와 활동 기록을 분석해 취업용 포트폴리오와 이력서 초안을 만들어주는 AI 서비스입니다. GitHub로 로그인해 저장소와 강조할 경험을 고르면, 저장소 분석과 AI 생성을 거쳐 케이스 스터디 형식의 포트폴리오 웹페이지가 나옵니다.
 
