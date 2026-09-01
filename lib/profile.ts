@@ -31,7 +31,7 @@ export const PROFILE = {
   ],
   /** Rendered only when non-empty — clear this one string when the job hunt ends and the line
    *  disappears from /about with no other edit. */
-  lookingFor: "프론트엔드·모바일 신입·주니어 포지션을 찾고 있습니다.",
+  lookingFor: "",
   // Post detail's author card is much narrower than /about's hero, so it gets its own
   // one-line version instead of truncating `intro` at render time. Also feeds /about's
   // metadata.description, its openGraph.description and the JSON-LD Person.description in
