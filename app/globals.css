@@ -502,6 +502,7 @@ html.projects-nav-no-stagger .stagger-list > * {
 }
 .site-bar {
   pointer-events: auto;
+  position: relative;
   display: flex;
   align-items: center;
   /* 줄바꿈은 허용하지 않는다. 폭이 애니메이션 도중 잠깐이라도 내용 폭 아래로 내려가면
@@ -547,12 +548,45 @@ html.projects-nav-no-stagger .stagger-list > * {
   box-shadow: inset 0 0 0 1px var(--glass-rim), inset 0 1px 0 var(--glass-edge),
     var(--shadow-lg);
 }
+/* 각도에 따라 밝기가 도는 테두리. 균일한 1px 링만으로는 "빛을 받는 물체"로 보이지 않는데,
+   원뿔 그라디언트를 테두리 폭만큼만 남기면 캡슐을 돌아가며 반사광이 강해졌다 약해진다.
+   순수 CSS라 사파리·파이어폭스에서도 그대로 보인다 — 굴절과 달리 여기엔 브라우저 제약이 없다.
+   두 겹 마스크의 xor/exclude는 "테두리 두께만 남기고 안쪽을 도려내는" 표준 기법이다. */
+.site-bar::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: conic-gradient(
+    from 200deg,
+    transparent 0deg,
+    var(--glass-edge) 55deg,
+    transparent 130deg,
+    transparent 200deg,
+    var(--glass-edge) 290deg,
+    transparent 350deg
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  pointer-events: none;
+}
+.site-header.is-condensed .site-bar::before { opacity: 1; }
+
 /* 진짜 굴절. 크로뮴에서만, 그리고 수축이 끝난 뒤에만 붙는다(Header.tsx의 hasLens/settled).
    앞선 선언의 blur/saturate를 그대로 다시 적어야 한다 — backdrop-filter는 필터 목록 전체를
    교체하므로, url()만 쓰면 흐림이 사라진다. */
 .site-header.is-condensed.has-lens .site-bar {
-  backdrop-filter: url(#liquid-glass-lens) blur(20px) saturate(180%);
-  -webkit-backdrop-filter: url(#liquid-glass-lens) blur(20px) saturate(180%);
+  /* 순서가 중요하다. url()을 blur() 앞에 두면 서리 효과가 사실상 사라져서 뒤 내용이 그대로
+     비친다(고대비 줄무늬를 캡슐 뒤에 깔고 A/B로 확인했다) — 글 상세의 본문 위를 지나가는
+     헤더에서는 그대로 가독성 문제가 된다. 흐린 뒤에 휘게 해야 서리를 유지한 채 가장자리에서만
+     색이 갈라진다. */
+  backdrop-filter: blur(20px) saturate(180%) url(#liquid-glass-lens);
+  -webkit-backdrop-filter: blur(20px) saturate(180%) url(#liquid-glass-lens);
 }
 
 .nav-desktop { display: flex; }
@@ -586,6 +620,7 @@ html.projects-nav-no-stagger .stagger-list > * {
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
   }
+  .site-header.is-condensed .site-bar::before { opacity: 0; }
 }
 
 .toc-mobile { display: none; }

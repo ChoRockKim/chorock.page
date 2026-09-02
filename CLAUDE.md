@@ -176,11 +176,22 @@ which dark mode had no way to adjust.
   frames). Size properties use `--bar-ease-size` (no overshoot); only `border-radius` and
   `transform` get `--bar-ease-spring`. `.site-bar` is also `flex-wrap: nowrap` so a fold is
   impossible regardless.
-- Real refraction (`components/LiquidGlassFilter.tsx`, `feImage` + `feDisplacementMap` fed to
-  `backdrop-filter`) is **Chromium-only** — Safari and Firefox accept the property and silently drop
-  the SVG part, so the iPhone this imitates never shows it. It is gated on a Houdini Paint API check
-  rather than on graceful degradation, and only applied once the width transition has ended, because
-  every size change forces the displacement map to be rebuilt.
+- Real refraction (`components/LiquidGlassFilter.tsx`) is **Chromium-only** — Safari and Firefox
+  accept `backdrop-filter` and silently drop the SVG part, so the iPhone this imitates never shows
+  it. It is gated on a Houdini Paint API check rather than on graceful degradation, and only applied
+  once the width transition has ended. The filter splits the backdrop into R/G/B with `feColorMatrix`,
+  displaces each at a *different* `scale` (0.085/0.06/0.035) and adds them back with
+  `feComposite(arithmetic, k2=k3=1)` — that per-channel difference is the chromatic aberration, and
+  it is what separates "glass" from "a blurred rectangle". `primitiveUnits="objectBoundingBox"` makes
+  `scale` a fraction of the element, so the lens tracks the capsule's animated width instead of
+  needing a rebuilt displacement map at every size.
+- **Order matters in that `backdrop-filter`: `blur()` must come before `url()`.** With `url()` first
+  the frosting effectively disappears and high-contrast content behind shows straight through
+  (verified by laying a black/white stripe pattern behind the capsule and diffing with the lens on
+  and off). The header passes over post body content, so this is a legibility bug, not a cosmetic
+  one. Blur first, then bend.
+- The angular rim highlight (`.site-bar::before`, a conic gradient masked to the border width) is the
+  one part of the glass that is **pure CSS and therefore works everywhere**, Safari included.
 - The mobile nav panel lives inside `<header>` at `top: 100%`; reusing the measured `spacerH` (as it
   once did) misaligns it against the floated capsule.
 
