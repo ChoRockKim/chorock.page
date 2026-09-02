@@ -25,7 +25,7 @@ const NAV_ITEMS: { key: NavKey; label: string; href: string }[] = [
 export default function Header() {
   const pathname = usePathname();
   const active = NAV_ITEMS.find((item) => pathname?.startsWith(item.href))?.key;
-  const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [theme, setTheme] = useState<"light" | "dark">("dark");
   const [scrolled, setScrolled] = useState(false);
   const [spacerH, setSpacerH] = useState(66);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -39,6 +39,14 @@ export default function Header() {
   // 모인 상태의 폭(px). CSS만으로는 전 구간에 걸쳐 폭을 움직일 수 없어 직접 잰다
   // (globals.css의 .site-bar 주석 참고).
   const [barW, setBarW] = useState<number | null>(null);
+  // 변위 맵은 캡슐 크기에 맞춰 만들어야 해서 높이도 함께 잰다.
+  const [barH, setBarH] = useState(0);
+  // 모바일 메뉴도 같은 유리로 보이려면 자기 크기에 맞는 변위 맵이 따로 필요하다.
+  const panelRef = useRef<HTMLElement>(null);
+  const [panelSize, setPanelSize] = useState<{ w: number; h: number } | null>(null);
+  // 물방울 키프레임은 첫 상태 전환 이후에만 건다. 그러지 않으면 페이지가 로드되는 순간
+  // "펼침" 쪽 애니메이션이 한 번 재생돼, 아무것도 안 했는데 헤더가 출렁인다.
+  const [hasMotion, setHasMotion] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<PostSummary[]>([]);
@@ -50,7 +58,8 @@ export default function Header() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const saved = (localStorage.getItem("chorock-theme") as "light" | "dark" | null) || "light";
+    // 기본값은 다크. layout.tsx의 하이드레이션 전 스크립트와 반드시 같은 값이어야 한다.
+    const saved = (localStorage.getItem("chorock-theme") as "light" | "dark" | null) || "dark";
     setTheme(saved);
     document.documentElement.setAttribute("data-theme", saved);
   }, []);
@@ -97,6 +106,8 @@ export default function Header() {
       const sum = kids.reduce((acc, el) => acc + el.getBoundingClientRect().width, 0);
       const w = Math.ceil(sum + gap * (kids.length - 1) + padX * 2);
       setBarW((prev) => (prev === w ? prev : w));
+      const bh = Math.round(bar.getBoundingClientRect().height);
+      setBarH((prev) => (prev === bh ? prev : bh));
     };
     measure();
     // 폰트가 늦게 오면 글자 폭이 달라진다(Pretendard는 비동기 로드).
@@ -124,6 +135,36 @@ export default function Header() {
       window.clearTimeout(timer);
     };
   }, [scrolled]);
+
+  // 마운트 직후 한 번은 건너뛰고, 그 뒤 scrolled가 실제로 바뀌는 시점부터 모션을 허용한다.
+  // (상태 업데이터 안에서 다른 setState를 부르면 StrictMode에서 두 번 실행될 수 있어 피한다.)
+  const firstStateSync = useRef(true);
+  useEffect(() => {
+    if (firstStateSync.current) {
+      firstStateSync.current = false;
+      return;
+    }
+    setHasMotion(true);
+  }, [scrolled]);
+
+  useEffect(() => {
+    if (!mobileMenuOpen) {
+      setPanelSize(null);
+      return;
+    }
+    const el = panelRef.current;
+    if (!el) return;
+    const measure = () => {
+      const r = el.getBoundingClientRect();
+      const w = Math.round(r.width);
+      const h = Math.round(r.height);
+      setPanelSize((prev) => (prev && prev.w === w && prev.h === h ? prev : { w, h }));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [mobileMenuOpen]);
 
   // Close the mobile nav whenever the route actually changes (link click already
   // closes it directly, but this also covers back/forward navigation).
@@ -231,10 +272,17 @@ export default function Header() {
         ref={headerRef}
         className={`site-header${scrolled ? " is-condensed" : ""}${
           hasLens && settled ? " has-lens" : ""
-        }`}
+        }${hasMotion ? " has-motion" : ""}`}
         style={barW ? ({ "--bar-w": `${barW}px` } as CSSProperties) : undefined}
       >
-        {hasLens && <LiquidGlassFilter />}
+        {hasLens && barW ? <LiquidGlassFilter width={barW} height={barH} /> : null}
+        {hasLens && panelSize ? (
+          <LiquidGlassFilter
+            id="liquid-glass-lens-menu"
+            width={panelSize.w}
+            height={panelSize.h}
+          />
+        ) : null}
         <div className="site-bar" ref={barRef}>
         <Link
           href="/about"
@@ -318,36 +366,18 @@ export default function Header() {
           </div>
         </div>
         {mobileMenuOpen && (
+          // 위치·재질은 globals.css의 .nav-mobile-panel에 있다. 헤더의 자식이라 top: 100%만으로
+          // 캡슐 아래에 붙는다 — 예전처럼 spacerH(=펼침 높이)를 쓰면 떠오른 캡슐과 어긋난다.
           <nav
-            className="nav-mobile-panel"
-            style={{
-              // 헤더의 자식으로 두면 top: 100%만으로 캡슐 아래에 정확히 붙는다. 예전처럼
-              // spacerH(=펼침 높이)를 쓰면 축소돼 떠오른 캡슐과 어긋난다.
-              position: "absolute",
-              top: "100%",
-              pointerEvents: "auto",
-              left: 0,
-              right: 0,
-              zIndex: 150,
-              background: "var(--color-bg)",
-              borderBottom: "1px solid var(--color-divider)",
-              display: "flex",
-              flexDirection: "column",
-              padding: "var(--space-2) var(--space-6) var(--space-3)",
-              animation: "navPanelIn .18s ease both",
-            }}
+            ref={panelRef}
+            className={`nav-mobile-panel${hasLens && panelSize ? " has-lens" : ""}`}
           >
             {NAV_ITEMS.map((item) => (
               <Link
                 key={item.key}
                 href={item.href}
                 onClick={() => setMobileMenuOpen(false)}
-                style={{
-                  ...linkStyle(item.key),
-                  fontSize: 15,
-                  padding: "var(--space-3) 0",
-                  borderBottom: "1px solid var(--color-divider)",
-                }}
+                className={`nav-link-mobile${active === item.key ? " is-active" : ""}`}
               >
                 {item.label}
               </Link>

@@ -55,7 +55,9 @@ export const viewport: Viewport = {
 const THEME_INIT_SCRIPT = `
 (function () {
   try {
-    var theme = localStorage.getItem("chorock-theme") || "light";
+    // 저장된 값이 없으면 다크가 기본이다(사용자 지정). 이 스크립트는 하이드레이션 전에
+    // 돌아야 잘못된 테마가 한 프레임 보이지 않는다.
+    var theme = localStorage.getItem("chorock-theme") || "dark";
     document.documentElement.setAttribute("data-theme", theme);
   } catch (e) {}
 })();
