@@ -155,6 +155,30 @@ attribute is simply absent, no warning, no error). Use a real `<script>` with
 `link.addEventListener("load", ...)` instead (see `PRETENDARD_ASYNC_LOAD_SCRIPT`
 in `layout.tsx`) — this is the one thing in the file that can't just be a JSX prop.
 
+**The header condenses on scroll, and three of its rules are load-bearing.** `components/Header.tsx`
+renders a two-row masthead at the top (logo 26px + icons, nav on its own row, 112px) that collapses
+to a one-row glass bar (logo 15px, 57px) once scrolled. Layout and every state transition live in
+`app/globals.css` (`.site-header`, `.site-nav`, `.nav-link`), *not* inline — the component styles
+inline, and an inline style can carry neither `:hover` nor a media query, which is exactly why the
+nav links had no hover state at all and why the active item was marked with `fontWeight: 600`
+(which changes glyph width, so every route change nudged the neighbouring items sideways; it's
+colour + a 2px `::after` underline now, with weight held constant).
+- **The scroll threshold needs hysteresis.** `scrollY > 8` was fine while only the background
+  changed, but a 2-row↔1-row layout flip flaps at a single threshold. It condenses above 48px and
+  expands below 12px.
+- **The spacer must stay at the *expanded* height.** Letting it follow the condensed height removes
+  55px from the very top of the document, so everything jumps up mid-scroll — Chromium's scroll
+  anchoring hides this, Safari has no such feature. The `ResizeObserver` callback therefore returns
+  early when `is-condensed` is present. It still measures correctly on mount because that effect is
+  declared *before* the scroll effect, so the class isn't applied yet.
+- **The mobile nav panel lives inside `<header>`** (`position: absolute; top: 100%`), not as a fixed
+  sibling offset by the measured height. It used to reuse `spacerH`, which broke the moment that
+  value was frozen at the expanded height. The header is `position: fixed`, so it is its own
+  containing block and the panel tracks its height for free.
+- The 2-row→1-row move has no interpolable midpoint, so `transition` can't cover it. Each state
+  gets a *different* `animation-name` (`navSettleDown`/`navSettleUp`) — a shared name would not
+  replay when only an ancestor's class changes.
+
 **Any grid/flex container whose item can render a `.code-block` needs `min-width: 0` on that
 item.** Grid/flex items default to `min-width: auto`, which refuses to shrink below their
 content's intrinsic width — a wide code block (`.code-block pre` has `overflow-x: auto`, but

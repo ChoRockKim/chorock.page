@@ -5,7 +5,6 @@ import {
   useEffect,
   useRef,
   useState,
-  type CSSProperties,
   type MouseEvent as ReactMouseEvent,
 } from "react";
 import Link from "next/link";
@@ -46,14 +45,29 @@ export default function Header() {
   useEffect(() => {
     const el = headerRef.current;
     if (!el) return;
-    setSpacerH(el.offsetHeight);
-    const ro = new ResizeObserver(() => setSpacerH(el.offsetHeight));
+    // 스페이서는 축소 높이를 따라가면 안 된다. 헤더가 112 → 57로 줄 때 스페이서까지 줄이면
+    // 문서 맨 앞의 높이가 55px 사라져 본문 전체가 위로 튄다(크로뮴은 스크롤 앵커링이 이를
+    // 가려주지만 사파리는 아니다). 정작 스페이서가 필요한 지점은 스크롤 0, 즉 펼침 상태뿐이므로
+    // 펼침 높이로 고정한다. 이 이펙트는 스크롤 이펙트보다 먼저 실행되므로 마운트 시점의
+    // 측정값은 항상 펼침 높이다(아직 is-condensed가 붙기 전).
+    const measureExpanded = () => {
+      if (el.classList.contains("is-condensed")) return;
+      const h = Math.round(el.offsetHeight);
+      setSpacerH((prev) => (prev === h ? prev : h));
+    };
+    measureExpanded();
+    const ro = new ResizeObserver(measureExpanded);
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 8);
+    // 임계값이 하나면 2행↔1행 전환이 경계에서 떨린다 — 스크롤을 조금만 움직여도 레이아웃이
+    // 왕복한다. 펼침→축소는 48px, 축소→펼침은 12px로 이력을 둔다. (배경만 바뀌던 예전에는
+    // 단일 임계값으로도 티가 나지 않았다.)
+    const onScroll = () => {
+      setScrolled((prev) => (prev ? window.scrollY > 12 : window.scrollY > 48));
+    };
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
@@ -152,67 +166,25 @@ export default function Header() {
     }
   };
 
-  const linkStyle = (key: NavKey): CSSProperties => ({
-    fontSize: 14,
-    textDecoration: "none",
-    color: active === key ? "var(--color-accent)" : "var(--color-text)",
-    fontWeight: active === key ? 600 : 400,
-  });
-
   return (
     <>
-      <header
-        ref={headerRef}
-        style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          right: 0,
-          zIndex: 40,
-          display: "flex",
-          alignItems: "center",
-          gap: "var(--space-4)",
-          padding: "var(--space-3) var(--space-6)",
-          flexWrap: "wrap",
-          transition: "background .3s ease,backdrop-filter .3s ease,box-shadow .3s ease,border-color .3s ease",
-          ...(scrolled
-            ? {
-                background:
-                  "linear-gradient(to bottom, color-mix(in srgb, white 10%, transparent) 0%, transparent 65%), radial-gradient(120% 80% at 12% 0%, color-mix(in srgb, white 14%, transparent) 0%, transparent 55%), color-mix(in srgb, var(--color-bg) 58%, transparent)",
-                backdropFilter: "blur(20px) saturate(180%)",
-                WebkitBackdropFilter: "blur(20px) saturate(180%)",
-                boxShadow:
-                  "inset 0 1px 0 color-mix(in srgb, white 22%, transparent), inset 0 -1px 0 color-mix(in srgb, black 6%, transparent)",
-                borderBottom: "1px solid color-mix(in srgb, var(--color-text) 7%, transparent)",
-              }
-            : {
-                background: "var(--color-bg)",
-                borderBottom: "1px solid var(--color-divider)",
-              }),
-        }}
-      >
-        <Link
-          href="/about"
-          style={{
-            fontFamily: "var(--font-heading)",
-            fontWeight: "var(--font-heading-weight)" as CSSProperties["fontWeight"],
-            fontSize: 19,
-            color: "var(--color-text)",
-            textDecoration: "none",
-            marginRight: "auto",
-            letterSpacing: "-0.01em",
-          }}
-        >
+      <header ref={headerRef} className={`site-header${scrolled ? " is-condensed" : ""}`}>
+        <div className="site-header-inner">
+        <Link href="/about" className="site-logo">
           chorock.page
         </Link>
-        <nav className="nav-desktop" style={{ alignItems: "center", gap: "var(--space-4)" }}>
+        <nav className="site-nav">
           {NAV_ITEMS.map((item) => (
-            <Link key={item.key} href={item.href} style={linkStyle(item.key)}>
+            <Link
+              key={item.key}
+              href={item.href}
+              className={`nav-link${active === item.key ? " is-active" : ""}`}
+            >
               {item.label}
             </Link>
           ))}
         </nav>
-        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
+        <div className="header-actions">
           <button
             className="btn btn-icon btn-secondary"
             aria-label="검색"
@@ -270,44 +242,42 @@ export default function Header() {
               </svg>
             )}
           </button>
+          </div>
         </div>
+        {mobileMenuOpen && (
+          <nav
+            className="nav-mobile-panel"
+            style={{
+              // 헤더 안에 두면 top: 100%만으로 헤더 높이를 따라간다 — 축소/펼침에 따라
+              // 오프셋을 JS로 계산해 넘길 필요가 없다(예전에는 spacerH를 여기에 재사용했는데,
+              // 그 값이 펼침 높이로 고정되면서 축소 상태에서 어긋나게 됐다).
+              position: "absolute",
+              top: "100%",
+              left: 0,
+              right: 0,
+              zIndex: 150,
+              background: "var(--color-bg)",
+              borderBottom: "1px solid var(--color-divider)",
+              display: "flex",
+              flexDirection: "column",
+              padding: "var(--space-2) var(--space-6) var(--space-3)",
+              animation: "navPanelIn .18s ease both",
+            }}
+          >
+            {NAV_ITEMS.map((item) => (
+              <Link
+                key={item.key}
+                href={item.href}
+                onClick={() => setMobileMenuOpen(false)}
+                className={`nav-link-mobile${active === item.key ? " is-active" : ""}`}
+              >
+                {item.label}
+              </Link>
+            ))}
+          </nav>
+        )}
       </header>
       <div style={{ height: spacerH }} />
-
-      {mobileMenuOpen && (
-        <nav
-          className="nav-mobile-panel"
-          style={{
-            position: "fixed",
-            top: spacerH,
-            left: 0,
-            right: 0,
-            zIndex: 150,
-            background: "var(--color-bg)",
-            borderBottom: "1px solid var(--color-divider)",
-            display: "flex",
-            flexDirection: "column",
-            padding: "var(--space-2) var(--space-6) var(--space-3)",
-            animation: "navPanelIn .18s ease both",
-          }}
-        >
-          {NAV_ITEMS.map((item) => (
-            <Link
-              key={item.key}
-              href={item.href}
-              onClick={() => setMobileMenuOpen(false)}
-              style={{
-                ...linkStyle(item.key),
-                fontSize: 15,
-                padding: "var(--space-3) 0",
-                borderBottom: "1px solid var(--color-divider)",
-              }}
-            >
-              {item.label}
-            </Link>
-          ))}
-        </nav>
-      )}
 
       {searchOpen && (
         <div

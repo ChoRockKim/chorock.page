@@ -465,15 +465,151 @@ html.projects-nav-no-stagger .stagger-list > * {
 }
 
 /* — Header nav — */
-.nav-desktop { display: flex; }
+/* 스크롤 축소형 헤더. 최상단에서는 로고가 큰 2행 표제부(로고+아이콘 / 내비), 스크롤하면
+   1행 글래스 바로 압축된다. 높이·패딩·로고 크기는 연속 전이되지만 내비가 2행에서 1행으로
+   옮겨가는 것은 flex 배치 변경이라 본질적으로 연속 애니메이션이 아니다 — 짧은 페이드를
+   얹어 "의도된 전환"으로 읽히게 했다.
+   레이아웃과 상태 전이가 전부 여기 있는 이유: Header.tsx는 인라인 스타일을 쓰는데
+   인라인으로는 :hover도 미디어쿼리도 걸 수 없다(그래서 내비 링크에 호버가 아예 없었다). */
+.site-header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 40;
+  padding: var(--space-3) var(--space-6);
+  background: var(--color-bg);
+  border-bottom: 1px solid var(--color-divider);
+  transition: padding 0.28s cubic-bezier(0.4, 0, 0.2, 1), background 0.3s ease,
+    backdrop-filter 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+}
+.site-header.is-condensed {
+  padding: var(--space-2) var(--space-6);
+  background: linear-gradient(to bottom, color-mix(in srgb, white 10%, transparent) 0%, transparent 65%),
+    radial-gradient(120% 80% at 12% 0%, color-mix(in srgb, white 14%, transparent) 0%, transparent 55%),
+    color-mix(in srgb, var(--color-bg) 58%, transparent);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 22%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, black 6%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-text) 7%, transparent);
+}
+.site-header-inner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-4);
+}
+.site-logo {
+  order: 1;
+  margin-right: auto;
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: 26px;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--color-text);
+  text-decoration: none;
+  transition: font-size 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.site-header.is-condensed .site-logo { font-size: 15px; }
+/* flex: 0 0 100% 가 내비를 통째로 다음 줄로 밀어낸다(=표제부의 둘째 행).
+   축소되면 0 0 auto 로 돌아와 로고와 같은 줄에 붙는다. */
+.site-nav {
+  order: 3;
+  flex: 0 0 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  /* 행이 바뀌는 순간을 짧은 페이드+슬라이드로 덮는다. 두 상태에 서로 다른 animation-name을
+     주는 게 핵심 — 이름이 바뀌어야 클래스 토글마다 애니메이션이 다시 시작한다(같은 이름이면
+     조상 클래스만 바뀌어서는 재생되지 않는다). transition으로는 불가능한데, 2행↔1행은
+     보간할 중간값이 없는 불연속 변화이기 때문이다. */
+  animation: navSettleDown 0.22s ease both;
+}
+.site-header.is-condensed .site-nav { animation: navSettleUp 0.22s ease both; }
+@keyframes navSettleDown {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes navSettleUp {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+.site-header.is-condensed .site-nav { order: 2; flex: 0 0 auto; }
+.header-actions {
+  order: 2;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.site-header.is-condensed .header-actions { order: 3; }
+
+/* 활성 표시에 font-weight를 쓰지 않는다 — 굵어지면 글자 폭이 변해 옆 항목이 밀리고,
+   라우트를 옮길 때마다 내비 전체가 미세하게 흔들렸다. 색 + 밑줄로만 구분한다. */
+.nav-link {
+  position: relative;
+  padding: 4px 2px;
+  font-size: 14px;
+  color: var(--color-text);
+  text-decoration: none;
+  opacity: 0.72;
+  transition: opacity 0.18s ease, color 0.18s ease;
+}
+.nav-link:hover { opacity: 1; }
+.nav-link.is-active { color: var(--color-accent); opacity: 1; }
+.nav-link::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -2px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--color-accent);
+  opacity: 0;
+  transform: scaleX(0.4);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+.nav-link:hover::after { opacity: 0.35; transform: scaleX(1); }
+.nav-link.is-active::after { opacity: 1; transform: scaleX(1); }
+
+/* 모바일 패널 링크는 크기·구분선이 달라 별도 클래스로 둔다. 예전에는 데스크톱 내비와
+   linkStyle() 하나를 공유해서, 한쪽을 손대면 다른 쪽이 같이 바뀌었다. */
+.nav-link-mobile {
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--color-divider);
+  font-size: 15px;
+  color: var(--color-text);
+  text-decoration: none;
+  transition: color 0.18s ease;
+}
+.nav-link-mobile:hover,
+.nav-link-mobile.is-active { color: var(--color-accent); }
+
 .nav-mobile-toggle { display: none; }
 @keyframes navPanelIn {
   from { opacity: 0; transform: translateY(-6px); }
   to { opacity: 1; transform: translateY(0); }
 }
 @media (max-width: 640px) {
-  .nav-desktop { display: none; }
+  /* 이 폭에서는 내비가 햄버거로 들어가므로 양쪽 상태 모두 1행이다 —
+     패딩과 로고 크기만 줄어드는 단순 축소가 된다. */
+  .site-nav { display: none; }
   .nav-mobile-toggle { display: inline-flex; }
+  .site-header { padding: var(--space-3) var(--space-4); }
+  .site-header.is-condensed { padding: var(--space-2) var(--space-4); }
+  .site-logo { font-size: 22px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* 크기·위치 전이는 장식이라 꺼도 잃는 정보가 없다(.spinner의 회전과 다른 경우). */
+  .site-header,
+  .site-logo,
+  .site-nav,
+  .nav-link,
+  .nav-link::after { transition: none; }
+  .site-nav,
+  .site-header.is-condensed .site-nav { animation: none; }
 }
 
 .toc-mobile { display: none; }
