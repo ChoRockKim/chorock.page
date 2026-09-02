@@ -155,6 +155,35 @@ attribute is simply absent, no warning, no error). Use a real `<script>` with
 `link.addEventListener("load", ...)` instead (see `PRETENDARD_ASYNC_LOAD_SCRIPT`
 in `layout.tsx`) — this is the one thing in the file that can't just be a JSX prop.
 
+**The header collapses into a floating glass capsule on scroll, and three rules keep it from
+breaking things.** `<header>` (`.site-header`) is a transparent positioning shell; `.site-bar`
+carries the visible surface and animates from full-bleed to a right-aligned ~462px capsule
+(`border-radius: 999px`, glass, `--shadow-lg`). Glass values live in `--glass-bg`/`--glass-sheen`/
+`--glass-edge`/`--glass-rim` per theme — they used to be `white` mixes hardcoded in an inline style,
+which dark mode had no way to adjust.
+- **Nothing may change the header's height.** If it shrinks, the spacer shrinks with it, 55px
+  vanishes from the top of the document and the body jumps up — Chromium's scroll anchoring hides
+  this, Safari has none (hit for real in 0.7.98). So the float offset is `transform: translateY()`,
+  never `margin`, and the block padding is fixed while only the inline padding animates. Header and
+  spacer measure 67px in both states.
+- **The gathered width is measured in JS (`--bar-w`), not expressed in CSS.** The pure-CSS version
+  (`min-width: 100% → 0` against `width: max-content`) resolves to `max(min-width, content width)`,
+  so the shrink finishes early in the timeline; with a slow easing the bar sat still while the
+  corners were still rounding. `Header.tsx` sums the children's widths and re-measures on
+  `document.fonts.ready` (Pretendard loads async, so glyph widths change late).
+- **Two easings, deliberately.** An overshoot curve on `width` drives it *below* the content width
+  for a few frames, and the nav visibly folds to two lines and back (reproduced by sampling 40 rAF
+  frames). Size properties use `--bar-ease-size` (no overshoot); only `border-radius` and
+  `transform` get `--bar-ease-spring`. `.site-bar` is also `flex-wrap: nowrap` so a fold is
+  impossible regardless.
+- Real refraction (`components/LiquidGlassFilter.tsx`, `feImage` + `feDisplacementMap` fed to
+  `backdrop-filter`) is **Chromium-only** — Safari and Firefox accept the property and silently drop
+  the SVG part, so the iPhone this imitates never shows it. It is gated on a Houdini Paint API check
+  rather than on graceful degradation, and only applied once the width transition has ended, because
+  every size change forces the displacement map to be rebuilt.
+- The mobile nav panel lives inside `<header>` at `top: 100%`; reusing the measured `spacerH` (as it
+  once did) misaligns it against the floated capsule.
+
 **Any grid/flex container whose item can render a `.code-block` needs `min-width: 0` on that
 item.** Grid/flex items default to `min-width: auto`, which refuses to shrink below their
 content's intrinsic width — a wide code block (`.code-block pre` has `overflow-x: auto`, but

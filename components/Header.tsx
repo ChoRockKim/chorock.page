@@ -11,6 +11,7 @@ import {
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { PostSummary } from "@/lib/posts";
+import LiquidGlassFilter from "@/components/LiquidGlassFilter";
 
 type NavKey = "about" | "posts" | "series" | "projects";
 
@@ -28,12 +29,23 @@ export default function Header() {
   const [scrolled, setScrolled] = useState(false);
   const [spacerH, setSpacerH] = useState(66);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  // 굴절은 수축이 "끝난 뒤"에만 켠다 — 크기가 바뀔 때마다 변위 맵을 다시 만들어야 해서
+  // 애니메이션 중에 켜 두면 비싸다.
+  const [settled, setSettled] = useState(false);
+  // 그리고 크로뮴에서만 켠다. backdrop-filter에 물린 SVG 필터는 사파리·파이어폭스에서
+  // 동작하지 않는데, 이 환경에는 크롬밖에 없어 그쪽 강등 동작을 직접 확인할 수 없다.
+  // Houdini Paint API는 현재 크로뮴 전용이라 확실한 판별자로 쓴다.
+  const [hasLens, setHasLens] = useState(false);
+  // 모인 상태의 폭(px). CSS만으로는 전 구간에 걸쳐 폭을 움직일 수 없어 직접 잰다
+  // (globals.css의 .site-bar 주석 참고).
+  const [barW, setBarW] = useState<number | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<PostSummary[]>([]);
   const [searching, setSearching] = useState(false);
 
   const headerRef = useRef<HTMLElement>(null);
+  const barRef = useRef<HTMLDivElement>(null);
   const themeBtnRef = useRef<HTMLButtonElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -53,11 +65,65 @@ export default function Header() {
   }, []);
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 8);
+    // 단일 임계값이면 모양이 바뀌는 전환이 경계에서 떨린다 — 스크롤을 조금만 움직여도
+    // 캡슐이 왕복한다. 펼침→축소 48px, 축소→펼침 12px로 이력을 둔다.
+    const onScroll = () => {
+      setScrolled((prev) => (prev ? window.scrollY > 12 : window.scrollY > 48));
+    };
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
+
+  useEffect(() => {
+    setHasLens(typeof CSS !== "undefined" && CSS.supports("background", "paint(x)"));
+  }, []);
+
+  // 모인 폭 = 자식들의 실제 폭 합 + 간격 + 축소 상태의 가로 패딩. 요소의 min-width를 잠시
+  // 풀었다 되돌리는 식으로 재면 전이가 걸려 있어 값이 튀므로, 자식들을 직접 더한다.
+  useEffect(() => {
+    const bar = barRef.current;
+    if (!bar) return;
+    const measure = () => {
+      const rootStyle = getComputedStyle(document.documentElement);
+      const px = (name: string) => parseFloat(rootStyle.getPropertyValue(name)) || 0;
+      const gap = px("--space-4");
+      // 축소 시 padding-inline은 --space-4 (모바일 포함, globals.css와 같은 값)
+      const padX = px("--space-4");
+      const kids = Array.from(bar.children).filter(
+        (el) => getComputedStyle(el).display !== "none"
+      );
+      if (kids.length === 0) return;
+      const sum = kids.reduce((acc, el) => acc + el.getBoundingClientRect().width, 0);
+      const w = Math.ceil(sum + gap * (kids.length - 1) + padX * 2);
+      setBarW((prev) => (prev === w ? prev : w));
+    };
+    measure();
+    // 폰트가 늦게 오면 글자 폭이 달라진다(Pretendard는 비동기 로드).
+    document.fonts?.ready.then(measure).catch(() => {});
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
+
+  useEffect(() => {
+    if (!scrolled) {
+      setSettled(false);
+      return;
+    }
+    const bar = barRef.current;
+    // 폭 전환(min-width)이 끝나면 정착으로 본다. transitionend를 놓치는 경우(탭 비활성 등)를
+    // 대비해 전환 길이보다 넉넉한 타이머를 함께 둔다.
+    const done = () => setSettled(true);
+    const onEnd = (e: TransitionEvent) => {
+      if (e.propertyName === "min-width") done();
+    };
+    bar?.addEventListener("transitionend", onEnd);
+    const timer = window.setTimeout(done, 600);
+    return () => {
+      bar?.removeEventListener("transitionend", onEnd);
+      window.clearTimeout(timer);
+    };
+  }, [scrolled]);
 
   // Close the mobile nav whenever the route actually changes (link click already
   // closes it directly, but this also covers back/forward navigation).
@@ -163,34 +229,13 @@ export default function Header() {
     <>
       <header
         ref={headerRef}
-        style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          right: 0,
-          zIndex: 40,
-          display: "flex",
-          alignItems: "center",
-          gap: "var(--space-4)",
-          padding: "var(--space-3) var(--space-6)",
-          flexWrap: "wrap",
-          transition: "background .3s ease,backdrop-filter .3s ease,box-shadow .3s ease,border-color .3s ease",
-          ...(scrolled
-            ? {
-                background:
-                  "linear-gradient(to bottom, color-mix(in srgb, white 10%, transparent) 0%, transparent 65%), radial-gradient(120% 80% at 12% 0%, color-mix(in srgb, white 14%, transparent) 0%, transparent 55%), color-mix(in srgb, var(--color-bg) 58%, transparent)",
-                backdropFilter: "blur(20px) saturate(180%)",
-                WebkitBackdropFilter: "blur(20px) saturate(180%)",
-                boxShadow:
-                  "inset 0 1px 0 color-mix(in srgb, white 22%, transparent), inset 0 -1px 0 color-mix(in srgb, black 6%, transparent)",
-                borderBottom: "1px solid color-mix(in srgb, var(--color-text) 7%, transparent)",
-              }
-            : {
-                background: "var(--color-bg)",
-                borderBottom: "1px solid var(--color-divider)",
-              }),
-        }}
+        className={`site-header${scrolled ? " is-condensed" : ""}${
+          hasLens && settled ? " has-lens" : ""
+        }`}
+        style={barW ? ({ "--bar-w": `${barW}px` } as CSSProperties) : undefined}
       >
+        {hasLens && <LiquidGlassFilter />}
+        <div className="site-bar" ref={barRef}>
         <Link
           href="/about"
           style={{
@@ -270,44 +315,48 @@ export default function Header() {
               </svg>
             )}
           </button>
+          </div>
         </div>
+        {mobileMenuOpen && (
+          <nav
+            className="nav-mobile-panel"
+            style={{
+              // 헤더의 자식으로 두면 top: 100%만으로 캡슐 아래에 정확히 붙는다. 예전처럼
+              // spacerH(=펼침 높이)를 쓰면 축소돼 떠오른 캡슐과 어긋난다.
+              position: "absolute",
+              top: "100%",
+              pointerEvents: "auto",
+              left: 0,
+              right: 0,
+              zIndex: 150,
+              background: "var(--color-bg)",
+              borderBottom: "1px solid var(--color-divider)",
+              display: "flex",
+              flexDirection: "column",
+              padding: "var(--space-2) var(--space-6) var(--space-3)",
+              animation: "navPanelIn .18s ease both",
+            }}
+          >
+            {NAV_ITEMS.map((item) => (
+              <Link
+                key={item.key}
+                href={item.href}
+                onClick={() => setMobileMenuOpen(false)}
+                style={{
+                  ...linkStyle(item.key),
+                  fontSize: 15,
+                  padding: "var(--space-3) 0",
+                  borderBottom: "1px solid var(--color-divider)",
+                }}
+              >
+                {item.label}
+              </Link>
+            ))}
+          </nav>
+        )}
       </header>
       <div style={{ height: spacerH }} />
 
-      {mobileMenuOpen && (
-        <nav
-          className="nav-mobile-panel"
-          style={{
-            position: "fixed",
-            top: spacerH,
-            left: 0,
-            right: 0,
-            zIndex: 150,
-            background: "var(--color-bg)",
-            borderBottom: "1px solid var(--color-divider)",
-            display: "flex",
-            flexDirection: "column",
-            padding: "var(--space-2) var(--space-6) var(--space-3)",
-            animation: "navPanelIn .18s ease both",
-          }}
-        >
-          {NAV_ITEMS.map((item) => (
-            <Link
-              key={item.key}
-              href={item.href}
-              onClick={() => setMobileMenuOpen(false)}
-              style={{
-                ...linkStyle(item.key),
-                fontSize: 15,
-                padding: "var(--space-3) 0",
-                borderBottom: "1px solid var(--color-divider)",
-              }}
-            >
-              {item.label}
-            </Link>
-          ))}
-        </nav>
-      )}
 
       {searchOpen && (
         <div

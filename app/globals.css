@@ -65,6 +65,20 @@
   --radius-md: 2px;
   --radius-lg: 4px;
 
+  /* 리퀴드 글래스 캡슐용. 예전에는 헤더 인라인 스타일에 white 혼합이 하드코딩돼 있어
+     다크 모드에서 값을 조정할 방법이 없었다. */
+  /* 캡슐이 모이는 움직임. 이징이 둘로 나뉘어 있는 건 취향이 아니라 필요다 —
+     오버슈트(제어점 y > 1)는 목표를 지나쳤다 돌아오는데, 그걸 width에 걸면 폭이 내용 폭보다
+     더 좁아지는 구간이 생겨 그 몇 프레임 동안 내비가 두 줄로 접혔다 펴진다(실제로 발생했다).
+     그래서 크기를 결정하는 속성은 오버슈트 없는 곡선으로 천천히 보내고, 튕겨도 레이아웃에
+     영향이 없는 속성(떠오르는 높이, 모서리)에만 쫀득한 곡선을 준다. */
+  --bar-ease-size: cubic-bezier(0.16, 1, 0.3, 1);
+  --bar-ease-spring: cubic-bezier(0.34, 1.32, 0.44, 1);
+  --bar-ease-dur: 0.72s;
+  --glass-bg: color-mix(in srgb, var(--color-bg) 68%, transparent);
+  --glass-sheen: color-mix(in srgb, white 42%, transparent);
+  --glass-edge: color-mix(in srgb, white 60%, transparent);
+  --glass-rim: color-mix(in srgb, #201e1d 10%, transparent);
   --shadow-sm: 0 1px 2px color-mix(in srgb, #2d2b2b 14%, transparent);
   --shadow-md: 0 3px 10px color-mix(in srgb, #2d2b2b 16%, transparent);
   --shadow-lg: 0 12px 32px color-mix(in srgb, #2d2b2b 22%, transparent);
@@ -108,6 +122,10 @@ html[data-theme="dark"] {
   --color-neutral-800: #d6d6d8;
   --color-neutral-900: #f0f0f1;
 
+  --glass-bg: color-mix(in srgb, var(--color-bg) 66%, transparent);
+  --glass-sheen: color-mix(in srgb, white 10%, transparent);
+  --glass-edge: color-mix(in srgb, white 18%, transparent);
+  --glass-rim: color-mix(in srgb, white 10%, transparent);
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
   --shadow-md: 0 3px 10px rgba(0, 0, 0, 0.55);
   --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.6);
@@ -465,6 +483,78 @@ html.projects-nav-no-stagger .stagger-list > * {
 }
 
 /* — Header nav — */
+/* 스크롤을 내리면 전폭 바가 둥근 캡슐로 모인다(리퀴드 글래스). 구조를 두 겹으로 나눈 이유:
+   <header>는 위치만 잡는 투명 껍데기고, 보이는 표면은 .site-bar가 전담한다. 그래야 표면이
+   가운데로 좁아지는 동안 헤더 자체의 박스는 움직이지 않는다.
+
+   **세로 크기는 어느 상태에서도 변하지 않는다.** 헤더 높이가 변하면 스페이서가 따라 줄고,
+   그러면 문서 맨 앞에서 그만큼이 사라져 본문이 위로 튄다(크로뮴은 스크롤 앵커링이 가려주지만
+   사파리에는 그 기능이 없다 — 0.7.98에서 실제로 겪은 문제다). 그래서 떠오르는 오프셋은
+   margin이 아니라 transform이고, 세로 패딩은 고정한 채 가로 패딩만 줄인다. */
+.site-header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 40;
+  /* 축소되면 캡슐 양옆이 투명해지는데, 그 영역이 아래 본문의 클릭을 먹으면 안 된다. */
+  pointer-events: none;
+}
+.site-bar {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  /* 줄바꿈은 허용하지 않는다. 폭이 애니메이션 도중 잠깐이라도 내용 폭 아래로 내려가면
+     그 프레임에 두 줄로 접혔다 펴져서 심하게 튄다. 내비는 640px 이하에서 햄버거로 들어가므로
+     한 줄에 안 들어갈 만큼 좁아질 일도 없다. */
+  flex-wrap: nowrap;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-6);
+  background: var(--color-bg);
+  border-bottom: 1px solid var(--color-divider);
+  /* 폭은 Header.tsx가 실측해 --bar-w로 넘긴다. 처음에는 측정 없이 min-width: 100% → 0 으로
+     줄이는 방법을 썼는데, 사용 폭이 max(min-width, 내용 폭)이라 min-width가 내용 폭 아래로
+     내려가는 순간부터 더 줄지 않는다 — 즉 폭 수축이 타임라인 앞부분에서 끝나버려서, 느리고
+     쫀득한 곡선을 주면 "바는 이미 좁아졌는데 모서리만 천천히 둥글어지는" 어긋난 움직임이 된다.
+     실측값을 쓰면 전 구간에 걸쳐 폭이 움직인다. 측정 전이거나 실패하면 max-content로 떨어진다. */
+  width: 100%;
+  max-width: 100%;
+  /* 오른쪽 정렬: 오른쪽 여백만 지정하고 왼쪽을 auto로 둔다. 그래야 수축하는 동안 오른쪽 끝은
+     제자리에 있고 왼쪽 끝만 쓸려 들어온다. */
+  margin-left: auto;
+  margin-right: 0;
+  border-radius: 0;
+  transition: width var(--bar-ease-dur) var(--bar-ease-size),
+    margin-right var(--bar-ease-dur) var(--bar-ease-size),
+    padding var(--bar-ease-dur) var(--bar-ease-size),
+    border-radius var(--bar-ease-dur) var(--bar-ease-spring),
+    transform var(--bar-ease-dur) var(--bar-ease-spring), background 0.4s ease,
+    box-shadow 0.4s ease, border-color 0.4s ease, backdrop-filter 0.4s ease;
+}
+.site-header.is-condensed .site-bar {
+  width: var(--bar-w, max-content);
+  margin-right: var(--space-6);
+  padding-inline: var(--space-4);
+  border-radius: 999px;
+  /* margin이 아니라 transform이라야 헤더 높이가 그대로다(위 주석 참조). */
+  transform: translateY(10px);
+  border-bottom-color: transparent;
+  background: linear-gradient(to bottom, var(--glass-sheen) 0%, transparent 62%), var(--glass-bg);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  /* 안쪽 링이 캡슐 윤곽, 위쪽 1px이 가장자리 반사광, 바깥은 떠 있는 그림자. 윤곽선을 남기는
+     건 취향이 아니라 가독성 문제다 — 이 헤더는 글 상세의 본문 이미지 위를 지나간다. */
+  box-shadow: inset 0 0 0 1px var(--glass-rim), inset 0 1px 0 var(--glass-edge),
+    var(--shadow-lg);
+}
+/* 진짜 굴절. 크로뮴에서만, 그리고 수축이 끝난 뒤에만 붙는다(Header.tsx의 hasLens/settled).
+   앞선 선언의 blur/saturate를 그대로 다시 적어야 한다 — backdrop-filter는 필터 목록 전체를
+   교체하므로, url()만 쓰면 흐림이 사라진다. */
+.site-header.is-condensed.has-lens .site-bar {
+  backdrop-filter: url(#liquid-glass-lens) blur(20px) saturate(180%);
+  -webkit-backdrop-filter: url(#liquid-glass-lens) blur(20px) saturate(180%);
+}
+
 .nav-desktop { display: flex; }
 .nav-mobile-toggle { display: none; }
 @keyframes navPanelIn {
@@ -474,6 +564,28 @@ html.projects-nav-no-stagger .stagger-list > * {
 @media (max-width: 640px) {
   .nav-desktop { display: none; }
   .nav-mobile-toggle { display: inline-flex; }
+  /* 이 폭에서는 내용이 로고+아이콘뿐이라 내용 폭까지 모으면 작고 어색하다.
+     좌우로 조금 들어간 둥근 바 정도로만 둔다. */
+  .site-bar { padding-inline: var(--space-4); }
+  .site-header.is-condensed .site-bar {
+    /* 좁은 화면에서는 내용 폭이 너무 작아 오른쪽으로 몰면 어색하다. 좌우 12px씩만 들어간다. */
+    width: calc(100% - 24px);
+    margin-right: 12px;
+    border-radius: 22px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* 모양이 바뀌는 연출은 장식이라 꺼도 잃는 정보가 없다(.spinner의 회전과 다른 경우). */
+  .site-bar { transition: none; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  /* 아직 Baseline이 아니라 지원하는 브라우저에서만 걸리는 점진적 강화다. */
+  .site-header.is-condensed .site-bar,
+  .site-header.is-condensed.has-lens .site-bar {
+    background: var(--color-bg);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
 }
 
 .toc-mobile { display: none; }
