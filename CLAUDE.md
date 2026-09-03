@@ -241,6 +241,28 @@ be reproduced/verified there — see CHANGELOG 0.7.39). If another element devel
 "looks fine on desktop, mysteriously bigger on a real phone" symptom, check for this class of
 narrow+scrollable+monospace container before assuming it's a font-size or media-query bug.
 
+**Four elements carry a lens, each with its own displacement map** — the header capsule, the mobile
+nav popover, the search modal and the scroll-to-top button. `LiquidGlassFilter` takes an `id` and a
+size; a map is generated for one element's dimensions, so sharing a map across differently-sized
+elements warps them wrongly. `components/useLiquidLens.ts` holds the Chromium check they all share.
+Sizes that change (the search modal grows with results) are tracked with a `ResizeObserver`; fixed
+ones (the 44px button) pass literals. `--bar-w` — the measured capsule width — lives on `:root`, not
+on the header element, because the search modal matches that width and is not a descendant of the
+header.
+
+**An ancestor that animates `opacity` silently kills a descendant's `backdrop-filter`.** The
+animating element becomes a *backdrop root*, so the descendant samples only what is painted inside
+that group — which for a transparent overlay is nothing. The search modal had its lens filter
+correctly declared and computed (`backdrop-filter: url(#…) …` was right there in
+`getComputedStyle`) yet showed zero refraction, because `.dialog-backdrop` runs `backdropIn`
+(opacity 0→1). Removing that one animation makes the distortion and chromatic fringing appear
+instantly — verified by laying a black/white stripe pattern behind the modal and diffing. Hence
+`.search-backdrop` carries `animation: none` in both states; the overlay is fully transparent there
+so it had nothing to fade anyway, and the modal's own entrance/exit still run on `.dialog`. An
+element's *own* opacity animation is fine (`.dialog` runs `modalPop` and refracts normally) — the
+problem is strictly an ancestor's. This is the same family of constraint as the goo-filter one
+above: `filter`, `opacity` and friends on an ancestor all form backdrop roots.
+
 **Modal entrance/exit animations must live in `app/globals.css`, never in a component's inline
 `style`.** `.dialog`/`.dialog-backdrop` are shared by the header search, `DraftsPopup` and
 `LeaveConfirmDialog`, and all three used to declare `animation: "modalPop …"` inline. Inline style

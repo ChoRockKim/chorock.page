@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import LiquidGlassFilter from "@/components/LiquidGlassFilter";
+import useLiquidLens from "@/components/useLiquidLens";
 
 const SHOW_AFTER_PX = 400;
 const LEAVE_ANIMATION_MS = 200;
@@ -15,6 +17,8 @@ const BOUNCE_ANIMATION_MS = 400;
  */
 export default function ScrollToTopButton() {
   const [mounted, setMounted] = useState(false);
+  // 헤더 캡슐과 같은 유리. 굴절은 크로뮴에서만 걸린다.
+  const hasLens = useLiquidLens();
   const [leaving, setLeaving] = useState(false);
   const [bouncing, setBouncing] = useState(false);
   const wasVisibleRef = useRef(false);
@@ -56,8 +60,11 @@ export default function ScrollToTopButton() {
       type="button"
       onClick={handleClick}
       aria-label="맨 위로 이동"
-      className={`scroll-top-btn${leaving ? " is-leaving" : ""}${bouncing ? " is-bouncing" : ""}`}
+      className={`scroll-top-btn${leaving ? " is-leaving" : ""}${bouncing ? " is-bouncing" : ""}${
+        hasLens ? " has-lens" : ""
+      }`}
     >
+      {hasLens && <LiquidGlassFilter id="liquid-glass-lens-fab" width={44} height={44} />}
       <svg width="18" height="18" viewBox="0 0 256 256" fill="none">
         <path
           d="M64 112l64-64 64 64M128 56v152"

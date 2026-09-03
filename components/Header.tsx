@@ -12,6 +12,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { PostSummary } from "@/lib/posts";
 import LiquidGlassFilter from "@/components/LiquidGlassFilter";
+import useLiquidLens from "@/components/useLiquidLens";
 
 type NavKey = "about" | "posts" | "series" | "projects";
 
@@ -19,6 +20,8 @@ type NavKey = "about" | "posts" | "series" | "projects";
 const MENU_EXIT_MS = 320;
 /** 검색 모달이 사라지는 시간(ms). globals.css의 modalPopOut/backdropOut과 함께 바꿔야 한다. */
 const SEARCH_EXIT_MS = 280;
+/** 하이라이트가 누른 항목으로 미끄러지는 시간(ms). 이게 끝난 뒤에 메뉴가 닫힌다. */
+const HIGHLIGHT_MOVE_MS = 300;
 
 const NAV_ITEMS: { key: NavKey; label: string; href: string }[] = [
   { key: "about", label: "소개", href: "/about" },
@@ -37,10 +40,8 @@ export default function Header() {
   // 굴절은 수축이 "끝난 뒤"에만 켠다 — 크기가 바뀔 때마다 변위 맵을 다시 만들어야 해서
   // 애니메이션 중에 켜 두면 비싸다.
   const [settled, setSettled] = useState(false);
-  // 그리고 크로뮴에서만 켠다. backdrop-filter에 물린 SVG 필터는 사파리·파이어폭스에서
-  // 동작하지 않는데, 이 환경에는 크롬밖에 없어 그쪽 강등 동작을 직접 확인할 수 없다.
-  // Houdini Paint API는 현재 크로뮴 전용이라 확실한 판별자로 쓴다.
-  const [hasLens, setHasLens] = useState(false);
+  // 크로뮴에서만 켠다(판별 근거는 useLiquidLens 참고).
+  const hasLens = useLiquidLens();
   // 모인 상태의 폭(px). CSS만으로는 전 구간에 걸쳐 폭을 움직일 수 없어 직접 잰다
   // (globals.css의 .site-bar 주석 참고).
   const [barW, setBarW] = useState<number | null>(null);
@@ -52,6 +53,14 @@ export default function Header() {
   // 사라지는 애니메이션을 보여주려면 열림 상태가 false가 된 뒤에도 잠깐 더 붙어 있어야 한다.
   // (ScrollToTopButton이 쓰는 것과 같은 "퇴장까지 마운트 유지" 패턴)
   const [menuMounted, setMenuMounted] = useState(false);
+  // 누른 항목. 라우트가 바뀌기 전에도 하이라이트를 먼저 옮기기 위해 따로 둔다.
+  const [pendingKey, setPendingKey] = useState<NavKey | null>(null);
+  const pendingRef = useRef(false);
+  const navItemRefs = useRef(new Map<NavKey, HTMLAnchorElement | null>());
+  const [highlight, setHighlight] = useState<{ top: number; height: number } | null>(null);
+  // 검색 모달도 캡슐과 같은 유리로 보이려면 자기 크기의 변위 맵이 필요하다.
+  const searchDialogRef = useRef<HTMLDivElement>(null);
+  const [searchSize, setSearchSize] = useState<{ w: number; h: number } | null>(null);
   // 물방울 키프레임은 첫 상태 전환 이후에만 건다. 그러지 않으면 페이지가 로드되는 순간
   // "펼침" 쪽 애니메이션이 한 번 재생돼, 아무것도 안 했는데 헤더가 출렁인다.
   const [hasMotion, setHasMotion] = useState(false);
@@ -94,10 +103,6 @@ export default function Header() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  useEffect(() => {
-    setHasLens(typeof CSS !== "undefined" && CSS.supports("background", "paint(x)"));
-  }, []);
-
   // 모인 폭 = 자식들의 실제 폭 합 + 간격 + 축소 상태의 가로 패딩. 요소의 min-width를 잠시
   // 풀었다 되돌리는 식으로 재면 전이가 걸려 있어 값이 튀므로, 자식들을 직접 더한다.
   useEffect(() => {
@@ -116,6 +121,9 @@ export default function Header() {
       const sum = kids.reduce((acc, el) => acc + el.getBoundingClientRect().width, 0);
       const w = Math.ceil(sum + gap * (kids.length - 1) + padX * 2);
       setBarW((prev) => (prev === w ? prev : w));
+      // 헤더 엘리먼트가 아니라 루트에 둔다 — 검색 모달은 헤더의 자손이 아니라서
+      // 헤더에만 걸어두면 이 값을 읽을 수 없다(모달 폭을 캡슐과 맞추는 데 쓴다).
+      document.documentElement.style.setProperty("--bar-w", `${w}px`);
       const bh = Math.round(bar.getBoundingClientRect().height);
       setBarH((prev) => (prev === bh ? prev : bh));
     };
@@ -186,15 +194,76 @@ export default function Header() {
     return () => ro.disconnect();
   }, [menuMounted]);
 
+  useEffect(() => {
+    if (!searchMounted) {
+      setSearchSize(null);
+      return;
+    }
+    const el = searchDialogRef.current;
+    if (!el) return;
+    // 결과가 늘고 줄면 높이가 바뀌므로 관찰한다. 맵 생성은 O(w×h)지만 이 크기에서는 몇 ms다.
+    const measure = () => {
+      const r = el.getBoundingClientRect();
+      const w = Math.round(r.width);
+      const h = Math.round(r.height);
+      setSearchSize((prev) => (prev && prev.w === w && prev.h === h ? prev : { w, h }));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [searchMounted]);
+
+  // 검색 모달은 캡슐과 같은 맑은 유리라 뒤 글자가 그대로 읽힌다. 상세 글의 목차가 정확히
+  // 모달 자리(오른쪽 위)에 있어서 글자끼리 겹쳐 읽혔다. 모달이 붙어 있는 동안 목차를 비운다.
+  // 전역 상태 대신 <html> 클래스를 쓰는 건 이 저장소의 기존 방식이다(theme-transition 등).
+  // searchOpen이 아니라 searchMounted를 기준으로 해야 퇴장 애니메이션 도중에 목차가 다시
+  // 나타나 겹치지 않는다.
+  useEffect(() => {
+    document.documentElement.classList.toggle("search-open", searchMounted);
+    return () => document.documentElement.classList.remove("search-open");
+  }, [searchMounted]);
+
+  const highlightKey = pendingKey ?? active;
+  useEffect(() => {
+    if (!menuMounted) {
+      setHighlight(null);
+      return;
+    }
+    const el = highlightKey ? navItemRefs.current.get(highlightKey) : null;
+    setHighlight(el ? { top: el.offsetTop, height: el.offsetHeight } : null);
+  }, [menuMounted, highlightKey, panelSize]);
+
+  // 항목을 누르면 하이라이트를 먼저 옮기고, 다 옮겨진 뒤에 메뉴를 닫는다.
+  // 페이지 이동은 막지 않으므로(preventDefault 없음) 로딩은 애니메이션과 동시에 시작된다.
+  const handleNavItemClick = (key: NavKey) => {
+    if (key === active) {
+      setMobileMenuOpen(false);
+      return;
+    }
+    pendingRef.current = true;
+    setPendingKey(key);
+    window.setTimeout(() => {
+      pendingRef.current = false;
+      setPendingKey(null);
+      setMobileMenuOpen(false);
+    }, HIGHLIGHT_MOVE_MS);
+  };
+
   // Close the mobile nav whenever the route actually changes (link click already
   // closes it directly, but this also covers back/forward navigation).
   useEffect(() => {
+    // 하이라이트가 이동하는 동안에는 닫지 않는다. 이게 없으면 라우트가 바뀌는 순간 메뉴가
+    // 사라져서 정작 보여주려던 이동이 한 프레임도 안 보인다.
+    if (pendingRef.current) return;
     setMobileMenuOpen(false);
   }, [pathname]);
 
   const openSearch = useCallback(() => {
     setSearchOpen(true);
-    document.body.style.overflow = "hidden";
+    // 본문 스크롤을 잠그지 않는다(사용자 요청). 덮개가 전체 화면을 덮지만 스크롤 가능한
+    // 요소가 아니라서 휠은 그대로 문서로 흘러간다. 모달과 헤더 캡슐 둘 다 position: fixed라
+    // 스크롤해도 서로의 위치 관계는 유지된다.
     setTimeout(() => inputRef.current?.focus(), 50);
   }, []);
 
@@ -202,7 +271,6 @@ export default function Header() {
     setSearchOpen(false);
     // query/results는 여기서 비우지 않는다 — 비우면 사라지는 동안 모달이 빈 채로 보인다.
     // 언마운트 시점에 정리한다.
-    document.body.style.overflow = "";
   }, []);
 
   useEffect(() => {
@@ -306,7 +374,6 @@ export default function Header() {
         className={`site-header${scrolled ? " is-condensed" : ""}${
           hasLens && settled ? " has-lens" : ""
         }${hasMotion ? " has-motion" : ""}`}
-        style={barW ? ({ "--bar-w": `${barW}px` } as CSSProperties) : undefined}
       >
         {hasLens && barW ? <LiquidGlassFilter width={barW} height={barH} /> : null}
         {hasLens && panelSize ? (
@@ -407,12 +474,22 @@ export default function Header() {
               mobileMenuOpen ? "" : " is-closing"
             }`}
           >
+            {highlight && (
+              <span
+                className="nav-mobile-highlight"
+                aria-hidden="true"
+                style={{ transform: `translateY(${highlight.top}px)`, height: highlight.height }}
+              />
+            )}
             {NAV_ITEMS.map((item) => (
               <Link
                 key={item.key}
                 href={item.href}
-                onClick={() => setMobileMenuOpen(false)}
-                className={`nav-link-mobile${active === item.key ? " is-active" : ""}`}
+                ref={(el) => {
+                  navItemRefs.current.set(item.key, el);
+                }}
+                onClick={() => handleNavItemClick(item.key)}
+                className={`nav-link-mobile${highlightKey === item.key ? " is-active" : ""}`}
               >
                 {item.label}
               </Link>
@@ -425,30 +502,22 @@ export default function Header() {
 
       {searchMounted && (
         <div
-          className={`dialog-backdrop${searchOpen ? "" : " is-closing"}`}
-          style={{
-            position: "fixed",
-            inset: 0,
-            zIndex: 200,
-            display: "flex",
-            alignItems: "flex-start",
-            justifyContent: "center",
-            padding: "12vh var(--space-4) var(--space-4)",
-          }}
+          // 위치·정렬·덮개는 globals.css의 .search-backdrop에 있다. 인라인으로 두면 클래스를
+          // 이겨서 스타일이 안 먹는다(0.8.5에서 퇴장 애니메이션이 무시되던 것과 같은 함정).
+          className={`dialog-backdrop search-backdrop${searchOpen ? "" : " is-closing"}`}
           onClick={closeSearch}
         >
+          {hasLens && searchSize ? (
+            <LiquidGlassFilter
+              id="liquid-glass-lens-search"
+              width={searchSize.w}
+              height={searchSize.h}
+            />
+          ) : null}
           <div
-            className="dialog elev-lg"
-            style={{
-              width: "100%",
-              maxWidth: 600,
-              padding: "var(--space-4)",
-              maxHeight: "70vh",
-              overflow: "hidden",
-              display: "flex",
-              flexDirection: "column",
-              gap: "var(--space-3)",
-            }}
+            // 폭·높이는 .search-backdrop .dialog(globals.css)에서 캡슐과 맞춘다.
+            ref={searchDialogRef}
+            className={`dialog elev-lg${hasLens && searchSize ? " has-lens" : ""}`}
             onClick={(e) => e.stopPropagation()}
           >
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
