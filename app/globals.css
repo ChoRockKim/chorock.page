@@ -686,6 +686,18 @@ html.projects-nav-no-stagger .stagger-list > * {
   60% { opacity: 1; }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
+/* 사라질 때도 방울처럼. 한 번 눌렸다가(표면장력이 끊기기 직전) 버튼 쪽으로 빨려 들어간다.
+   가속 곡선이라 뒤로 갈수록 빨라진다 — 등장(감속)과 반대 방향이라 "맺힘 ↔ 빨려듦"으로 읽힌다. */
+@keyframes navPanelOut {
+  0% { opacity: 1; transform: translateY(0) scale(1, 1); }
+  30% { opacity: 1; transform: translateY(3px) scale(1.05, 0.93); }
+  100% { opacity: 0; transform: translateY(-14px) scale(0.55, 0.62); }
+}
+/* 사라지는 동안에는 클릭을 받지 않아야 한다 — 이미 닫힌 메뉴다. */
+.nav-mobile-panel.is-closing {
+  animation: navPanelOut 0.3s cubic-bezier(0.55, 0, 0.85, 0.25) both;
+  pointer-events: none;
+}
 /* ── 물방울 모션 ─────────────────────────────────────────────────────────────
    아래 키프레임은 손으로 찍은 값이 아니라 감쇠 조화 진동자(ζ=0.34, ω₀=10.5)를 적분해
    생성한 것이다. translateY는 계단 응답(목표를 살짝 지나쳤다 잦아든다), scale은 그
@@ -790,7 +802,10 @@ html.projects-nav-no-stagger .stagger-list > * {
   .site-bar { transition: none; }
   .site-header.has-motion.is-condensed .site-bar,
   .site-header.has-motion:not(.is-condensed) .site-bar,
-  .site-header.has-motion.is-condensed .site-bar::before { animation: none; }
+  .site-header.has-motion.is-condensed .site-bar::before,
+  .nav-mobile-panel { animation: none; }
+  /* 퇴장 애니메이션을 끄면 언마운트까지 남아 있게 되므로 즉시 숨긴다. */
+  .nav-mobile-panel.is-closing { animation: none; opacity: 0; }
 }
 @media (prefers-reduced-transparency: reduce) {
   /* 아직 Baseline이 아니라 지원하는 브라우저에서만 걸리는 점진적 강화다. */

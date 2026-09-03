@@ -15,6 +15,9 @@ import LiquidGlassFilter from "@/components/LiquidGlassFilter";
 
 type NavKey = "about" | "posts" | "series" | "projects";
 
+/** 메뉴가 사라지는 애니메이션 길이(ms). globals.css의 navPanelOut과 함께 바꿔야 한다. */
+const MENU_EXIT_MS = 320;
+
 const NAV_ITEMS: { key: NavKey; label: string; href: string }[] = [
   { key: "about", label: "소개", href: "/about" },
   { key: "posts", label: "글", href: "/posts" },
@@ -44,6 +47,9 @@ export default function Header() {
   // 모바일 메뉴도 같은 유리로 보이려면 자기 크기에 맞는 변위 맵이 따로 필요하다.
   const panelRef = useRef<HTMLElement>(null);
   const [panelSize, setPanelSize] = useState<{ w: number; h: number } | null>(null);
+  // 사라지는 애니메이션을 보여주려면 열림 상태가 false가 된 뒤에도 잠깐 더 붙어 있어야 한다.
+  // (ScrollToTopButton이 쓰는 것과 같은 "퇴장까지 마운트 유지" 패턴)
+  const [menuMounted, setMenuMounted] = useState(false);
   // 물방울 키프레임은 첫 상태 전환 이후에만 건다. 그러지 않으면 페이지가 로드되는 순간
   // "펼침" 쪽 애니메이션이 한 번 재생돼, 아무것도 안 했는데 헤더가 출렁인다.
   const [hasMotion, setHasMotion] = useState(false);
@@ -148,7 +154,17 @@ export default function Header() {
   }, [scrolled]);
 
   useEffect(() => {
-    if (!mobileMenuOpen) {
+    if (mobileMenuOpen) {
+      setMenuMounted(true);
+      return;
+    }
+    // globals.css의 navPanelOut 길이(0.3s)보다 넉넉하게. 이보다 짧으면 사라지는 도중에 잘린다.
+    const timer = window.setTimeout(() => setMenuMounted(false), MENU_EXIT_MS);
+    return () => window.clearTimeout(timer);
+  }, [mobileMenuOpen]);
+
+  useEffect(() => {
+    if (!menuMounted) {
       setPanelSize(null);
       return;
     }
@@ -164,7 +180,7 @@ export default function Header() {
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [mobileMenuOpen]);
+  }, [menuMounted]);
 
   // Close the mobile nav whenever the route actually changes (link click already
   // closes it directly, but this also covers back/forward navigation).
@@ -365,12 +381,14 @@ export default function Header() {
           </button>
           </div>
         </div>
-        {mobileMenuOpen && (
+        {menuMounted && (
           // 위치·재질은 globals.css의 .nav-mobile-panel에 있다. 헤더의 자식이라 top: 100%만으로
           // 캡슐 아래에 붙는다 — 예전처럼 spacerH(=펼침 높이)를 쓰면 떠오른 캡슐과 어긋난다.
           <nav
             ref={panelRef}
-            className={`nav-mobile-panel${hasLens && panelSize ? " has-lens" : ""}`}
+            className={`nav-mobile-panel${hasLens && panelSize ? " has-lens" : ""}${
+              mobileMenuOpen ? "" : " is-closing"
+            }`}
           >
             {NAV_ITEMS.map((item) => (
               <Link
