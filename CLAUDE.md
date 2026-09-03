@@ -241,6 +241,16 @@ be reproduced/verified there — see CHANGELOG 0.7.39). If another element devel
 "looks fine on desktop, mysteriously bigger on a real phone" symptom, check for this class of
 narrow+scrollable+monospace container before assuming it's a font-size or media-query bug.
 
+**On iOS every browser is WebKit, so the lens never runs there — the fallback is what iPhone users
+actually see.** Apple's App Store rules forced browsers onto WebKit, and no vendor has shipped Blink
+on iOS even after the EU opened the door, so "Chrome on iOS" is Safari's engine with a different UI.
+`useLiquidLens` correctly returns false there. That makes the no-lens branch the *primary* look for a
+large share of visitors, not a degraded afterthought: it was reported as "just a blur, nothing shows
+through". The `:not(.has-lens)` block at the end of `globals.css` therefore lowers the blur to 10px,
+raises saturation/contrast so shapes and colours read through, and adds inward edge glows
+(`inset ±7px 14px -9px`) to suggest thickness. Simulate it in Chrome by removing the `has-lens`
+class — that is exactly the iOS render path.
+
 **Four elements carry a lens, each with its own displacement map** — the header capsule, the mobile
 nav popover, the search modal and the scroll-to-top button. `LiquidGlassFilter` takes an `id` and a
 size; a map is generated for one element's dimensions, so sharing a map across differently-sized

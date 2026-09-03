@@ -87,6 +87,9 @@
   /* 굴절이 걸리는 크로뮴에서는 배경을 거의 비우고(--glass-bg-clear) 왜곡으로 유리를 표현한다.
      굴절이 없는 브라우저에서 같은 값을 쓰면 그냥 옅은 사각형이 되므로 서리 유리를 유지한다. */
   --glass-bg-clear: color-mix(in srgb, var(--color-bg) 34%, transparent);
+  /* 굴절이 없는 브라우저용. 맑은 값(34%)은 굴절이 받쳐주지 않으면 그냥 옅은 판이 되고,
+     서리 값(68%)은 뒤가 안 보여 유리로 안 읽힌다. 그 사이. */
+  --glass-bg-fallback: color-mix(in srgb, var(--color-bg) 52%, transparent);
   --glass-bg-panel: color-mix(in srgb, var(--color-bg) 62%, transparent);
   --glass-inner-shade: rgba(0, 0, 0, 0.1);
   /* 굴절이 걸리는 쪽은 거의 흐리지 않는다 — 흐림이 세면 뒤가 안 보여서 정작 굴절이 묻힌다.
@@ -141,6 +144,7 @@ html[data-theme="dark"] {
   --glass-edge: color-mix(in srgb, white 18%, transparent);
   --glass-rim: color-mix(in srgb, white 10%, transparent);
   --glass-bg-clear: color-mix(in srgb, var(--color-bg) 38%, transparent);
+  --glass-bg-fallback: color-mix(in srgb, var(--color-bg) 56%, transparent);
   --glass-bg-panel: color-mix(in srgb, var(--color-bg) 66%, transparent);
   --glass-inner-shade: rgba(0, 0, 0, 0.3);
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
@@ -1284,4 +1288,30 @@ html.search-open .proj-sidebar {
 .wp-split > * { min-width: 0; }
 @media (max-width: 900px) {
   .wp-split { grid-template-columns: 1fr; gap: var(--space-5); }
+}
+
+/* ── 굴절이 불가능한 브라우저용 유리 (WebKit) ──────────────────────────────────
+   `backdrop-filter`에 물린 SVG 필터는 크로뮴에서만 동작한다. 중요한 건 **iOS에서는 크롬도
+   WebKit으로 돈다**는 점이다 — 애플이 App Store 정책으로 브라우저 엔진을 강제해 왔고, EU
+   규제로 대안 엔진이 열린 뒤에도 실제로 Blink를 출시한 벤더가 없다. 즉 아이폰에서는 어떤
+   브라우저를 써도 굴절이 나오지 않는다.
+
+   여기서 흐림만 세게 걸면 유리가 아니라 그냥 불투명한 판으로 보인다(실사용 보고). 흐림을
+   낮춰 뒤 형태와 색이 비치게 하고, 채도·대비를 살짝 올려 유리를 통과한 느낌을 주고,
+   좌우 가장자리에 안쪽으로 모이는 빛을 넣어 두께가 있는 유리처럼 읽히게 한다. 진짜 굴절은
+   아니지만 평평한 서리 판보다 훨씬 유리답다.
+
+   `:not(.has-lens)`로 분리했으므로 굴절이 되는 환경에는 영향이 없다. 파일 맨 끝에 두어
+   각 요소의 기본 규칙보다 뒤에 오게 한다. */
+.site-header.is-condensed:not(.has-lens) .site-bar,
+.search-backdrop .dialog:not(.has-lens),
+.nav-mobile-panel:not(.has-lens),
+.scroll-top-btn:not(.has-lens) {
+  background: linear-gradient(to bottom, var(--glass-sheen) 0%, transparent 62%),
+    var(--glass-bg-fallback);
+  backdrop-filter: blur(10px) saturate(190%) contrast(1.08) brightness(1.03);
+  -webkit-backdrop-filter: blur(10px) saturate(190%) contrast(1.08) brightness(1.03);
+  box-shadow: inset 0 0 0 1px var(--glass-rim), inset 0 1px 0 var(--glass-edge),
+    inset 7px 0 14px -9px var(--glass-edge), inset -7px 0 14px -9px var(--glass-edge),
+    inset 0 -10px 25px var(--glass-inner-shade), var(--shadow-lg);
 }
