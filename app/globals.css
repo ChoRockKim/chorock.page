@@ -87,6 +87,7 @@
   /* 굴절이 걸리는 크로뮴에서는 배경을 거의 비우고(--glass-bg-clear) 왜곡으로 유리를 표현한다.
      굴절이 없는 브라우저에서 같은 값을 쓰면 그냥 옅은 사각형이 되므로 서리 유리를 유지한다. */
   --glass-bg-clear: color-mix(in srgb, var(--color-bg) 34%, transparent);
+  --glass-bg-panel: color-mix(in srgb, var(--color-bg) 62%, transparent);
   --glass-inner-shade: rgba(0, 0, 0, 0.1);
   /* 굴절이 걸리는 쪽은 거의 흐리지 않는다 — 흐림이 세면 뒤가 안 보여서 정작 굴절이 묻힌다.
      맑은 유리로 보이게 하는 값이라 함부로 올리지 말 것. */
@@ -140,6 +141,7 @@ html[data-theme="dark"] {
   --glass-edge: color-mix(in srgb, white 18%, transparent);
   --glass-rim: color-mix(in srgb, white 10%, transparent);
   --glass-bg-clear: color-mix(in srgb, var(--color-bg) 38%, transparent);
+  --glass-bg-panel: color-mix(in srgb, var(--color-bg) 66%, transparent);
   --glass-inner-shade: rgba(0, 0, 0, 0.3);
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
   --shadow-md: 0 3px 10px rgba(0, 0, 0, 0.55);
@@ -647,8 +649,11 @@ html.projects-nav-no-stagger .stagger-list > * {
 /* 굴절이 되는 브라우저에서는 캡슐과 똑같이 맑은 유리로. 패널은 크기가 달라 자기 전용
    변위 맵을 쓴다(Header.tsx가 크기를 재서 두 번째 필터를 마운트한다). */
 .nav-mobile-panel.has-lens {
+  /* 캡슐과 같은 필터·같은 계열이되 틴트만 더 준다. 헤더 바는 지나가며 보는 면이지만 메뉴는
+     읽는 면이라, 캡슐과 똑같이 맑게 두면 뒤 이미지 위에서 항목이 안 읽힌다(실제로 포스터
+     위에서 확인). --glass-bg-panel은 --glass-bg-clear보다 한 단계 진하다. */
   background: linear-gradient(to bottom, var(--glass-sheen) 0%, transparent 62%),
-    var(--glass-bg-clear);
+    var(--glass-bg-panel);
   backdrop-filter: url(#liquid-glass-lens-menu) blur(var(--glass-blur)) contrast(1.15)
     brightness(1.05) saturate(1.2);
   -webkit-backdrop-filter: url(#liquid-glass-lens-menu) blur(var(--glass-blur)) contrast(1.15)

@@ -192,6 +192,15 @@ which dark mode had no way to adjust.
   one. Blur first, then bend.
 - The angular rim highlight (`.site-bar::before`, a conic gradient masked to the border width) is the
   one part of the glass that is **pure CSS and therefore works everywhere**, Safari included.
+- **The mobile menu is a separate glass surface with its own lens.** `LiquidGlassFilter` takes an `id`
+  and is mounted twice — the displacement map is generated for a specific element size, so sharing one
+  map between the capsule and the (differently sized) menu warps it wrongly. The menu also uses a
+  darker tint (`--glass-bg-panel`) than the bar: a bar is glanced past, a menu is read, and at the
+  bar's clarity the items disappear over a post's cover image.
+- **Testing the ≤640px layout in this environment: use a same-origin `<iframe>`, not window resizing.**
+  This machine's Chrome does not apply `resize_window` to the rendering viewport, but media queries
+  inside an iframe evaluate against the iframe's box, so a 390×800 iframe reproduces the mobile
+  layout faithfully and can be scripted through `contentWindow`/`contentDocument`.
 - The mobile nav panel lives inside `<header>` at `top: 100%`; reusing the measured `spacerH` (as it
   once did) misaligns it against the floated capsule.
 
