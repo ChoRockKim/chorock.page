@@ -47,7 +47,6 @@ export default function LeaveConfirmDialog({
         alignItems: "flex-start",
         justifyContent: "center",
         padding: "18vh var(--space-4) var(--space-4)",
-        animation: "backdropIn .2s ease both",
       }}
       onClick={onStay}
       role="presentation"
@@ -64,7 +63,6 @@ export default function LeaveConfirmDialog({
           display: "flex",
           flexDirection: "column",
           gap: "var(--space-3)",
-          animation: "modalPop .28s cubic-bezier(.34,1.56,.64,1) both",
         }}
         onClick={(e) => e.stopPropagation()}
       >

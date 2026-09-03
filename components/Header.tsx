@@ -17,6 +17,8 @@ type NavKey = "about" | "posts" | "series" | "projects";
 
 /** 메뉴가 사라지는 애니메이션 길이(ms). globals.css의 navPanelOut과 함께 바꿔야 한다. */
 const MENU_EXIT_MS = 320;
+/** 검색 모달이 사라지는 시간(ms). globals.css의 modalPopOut/backdropOut과 함께 바꿔야 한다. */
+const SEARCH_EXIT_MS = 280;
 
 const NAV_ITEMS: { key: NavKey; label: string; href: string }[] = [
   { key: "about", label: "소개", href: "/about" },
@@ -54,6 +56,8 @@ export default function Header() {
   // "펼침" 쪽 애니메이션이 한 번 재생돼, 아무것도 안 했는데 헤더가 출렁인다.
   const [hasMotion, setHasMotion] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  // 사라지는 애니메이션을 보여주려면 닫힘 뒤에도 잠깐 더 붙어 있어야 한다(모바일 메뉴와 동일).
+  const [searchMounted, setSearchMounted] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<PostSummary[]>([]);
   const [searching, setSearching] = useState(false);
@@ -196,10 +200,23 @@ export default function Header() {
 
   const closeSearch = useCallback(() => {
     setSearchOpen(false);
-    setQuery("");
-    setResults([]);
+    // query/results는 여기서 비우지 않는다 — 비우면 사라지는 동안 모달이 빈 채로 보인다.
+    // 언마운트 시점에 정리한다.
     document.body.style.overflow = "";
   }, []);
+
+  useEffect(() => {
+    if (searchOpen) {
+      setSearchMounted(true);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setSearchMounted(false);
+      setQuery("");
+      setResults([]);
+    }, SEARCH_EXIT_MS);
+    return () => window.clearTimeout(timer);
+  }, [searchOpen]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -406,9 +423,9 @@ export default function Header() {
       <div style={{ height: spacerH }} />
 
 
-      {searchOpen && (
+      {searchMounted && (
         <div
-          className="dialog-backdrop"
+          className={`dialog-backdrop${searchOpen ? "" : " is-closing"}`}
           style={{
             position: "fixed",
             inset: 0,
@@ -417,7 +434,6 @@ export default function Header() {
             alignItems: "flex-start",
             justifyContent: "center",
             padding: "12vh var(--space-4) var(--space-4)",
-            animation: "backdropIn .2s ease both",
           }}
           onClick={closeSearch}
         >
@@ -432,7 +448,6 @@ export default function Header() {
               display: "flex",
               flexDirection: "column",
               gap: "var(--space-3)",
-              animation: "modalPop .28s cubic-bezier(.34,1.56,.64,1) both",
             }}
             onClick={(e) => e.stopPropagation()}
           >

@@ -64,7 +64,6 @@ export default function DraftsPopup({ currentSlug }: { currentSlug: string | nul
             alignItems: "flex-start",
             justifyContent: "center",
             padding: "12vh var(--space-4) var(--space-4)",
-            animation: "backdropIn .2s ease both",
           }}
           onClick={close}
         >
@@ -79,7 +78,6 @@ export default function DraftsPopup({ currentSlug }: { currentSlug: string | nul
               display: "flex",
               flexDirection: "column",
               gap: "var(--space-3)",
-              animation: "modalPop .28s cubic-bezier(.34,1.56,.64,1) both",
             }}
             onClick={(e) => e.stopPropagation()}
           >

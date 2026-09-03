@@ -241,6 +241,16 @@ be reproduced/verified there — see CHANGELOG 0.7.39). If another element devel
 "looks fine on desktop, mysteriously bigger on a real phone" symptom, check for this class of
 narrow+scrollable+monospace container before assuming it's a font-size or media-query bug.
 
+**Modal entrance/exit animations must live in `app/globals.css`, never in a component's inline
+`style`.** `.dialog`/`.dialog-backdrop` are shared by the header search, `DraftsPopup` and
+`LeaveConfirmDialog`, and all three used to declare `animation: "modalPop …"` inline. Inline style
+beats a class, so `.dialog-backdrop.is-closing .dialog { animation: modalPopOut … }` was silently
+ignored — the closing class was applied and the animation name stayed `modalPop` (confirmed by
+sampling `getComputedStyle(...).animationName` per frame). A dialog that needs an exit animation also
+has to stay mounted through it: keep a `…Mounted` state and unmount on a timer that outlasts the
+keyframes (the pattern `ScrollToTopButton` established), and defer clearing its content to that
+timer, or the box renders empty while it animates away.
+
 **Comments are giscus, not a custom backend.** `components/GiscusComments.tsx` embeds the
 giscus script client-side against `NEXT_PUBLIC_GISCUS_*` env vars; if they're unset it
 renders a setup hint instead of erroring. There is no comment data in MongoDB.

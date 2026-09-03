@@ -324,11 +324,47 @@ textarea.input { min-height: 90px; resize: vertical; }
   position: fixed; inset: 0; display: grid; place-items: center;
   padding: var(--space-4);
   background: color-mix(in srgb, var(--color-neutral-900) 50%, transparent);
+  /* 진입·퇴장 애니메이션은 반드시 여기(클래스)에 있어야 한다. 예전에는 각 컴포넌트가
+     인라인 style로 animation을 줬는데, 인라인은 클래스를 이기므로 .is-closing 규칙이
+     통째로 무시됐다(검색 모달이 사라지는 애니메이션 없이 툭 끊기던 원인). */
+  animation: backdropIn 0.2s ease both;
 }
+/* 헤더 캡슐과 같은 유리. 검색·임시글 목록·이탈 경고가 이 클래스를 공유하므로 셋 다 바뀐다.
+   읽는 면이라 헤더 바보다 진한 --glass-bg-panel을 쓰고, 굴절(SVG 필터)은 걸지 않는다 —
+   변위 맵은 요소 크기마다 따로 만들어야 하는데 모달은 내용에 따라 크기가 변한다. */
 .dialog {
+  position: relative;
   width: min(440px, 100%); display: flex; flex-direction: column; gap: var(--space-3);
-  padding: var(--space-4); border-radius: var(--radius-lg);
-  background: var(--color-surface); box-shadow: var(--shadow-lg);
+  padding: var(--space-4); border-radius: 24px;
+  background: linear-gradient(to bottom, var(--glass-sheen) 0%, transparent 62%),
+    var(--glass-bg-panel);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  box-shadow: inset 0 0 0 1px var(--glass-rim), inset 0 1px 0 var(--glass-edge),
+    inset 0 -10px 25px var(--glass-inner-shade), var(--shadow-lg);
+  animation: modalPop 0.34s cubic-bezier(0.34, 1.4, 0.44, 1) both;
+}
+/* 캡슐과 같은, 각도에 따라 밝기가 도는 테두리. */
+.dialog::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: conic-gradient(
+    from 200deg,
+    transparent 0deg,
+    var(--glass-edge) 55deg,
+    transparent 130deg,
+    transparent 200deg,
+    var(--glass-edge) 290deg,
+    transparent 350deg
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
 }
 .dialog-title {
   font-family: var(--font-heading); font-weight: var(--font-heading-weight);
@@ -342,9 +378,26 @@ html.theme-transition::view-transition-new(root) { animation: theme-reveal 0.6s 
   from { clip-path: circle(0px at var(--theme-x, 50%) var(--theme-y, 50%)); }
   to { clip-path: circle(var(--theme-r, 150vmax) at var(--theme-x, 50%) var(--theme-y, 50%)); }
 }
+/* 방울이 맺히듯 부풀어 오른다. 중간에 살짝 넓적해졌다 펴지는 구간이 헤더 캡슐의
+   dropletIn과 같은 성격을 준다. */
 @keyframes modalPop {
-  from { opacity: 0; transform: scale(0.94) translateY(-6px); }
-  to { opacity: 1; transform: scale(1) translateY(0); }
+  0% { opacity: 0; transform: scale(0.86, 0.9) translateY(-10px); }
+  55% { opacity: 1; transform: scale(1.03, 0.98) translateY(2px); }
+  100% { opacity: 1; transform: scale(1, 1) translateY(0); }
+}
+/* 사라질 때는 눌렸다가 빨려 들어간다(모바일 메뉴의 navPanelOut과 같은 방향). */
+@keyframes modalPopOut {
+  0% { opacity: 1; transform: scale(1, 1) translateY(0); }
+  30% { opacity: 1; transform: scale(1.04, 0.94) translateY(3px); }
+  100% { opacity: 0; transform: scale(0.8, 0.86) translateY(-12px); }
+}
+@keyframes backdropOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+.dialog-backdrop.is-closing { animation: backdropOut 0.22s ease both; pointer-events: none; }
+.dialog-backdrop.is-closing .dialog {
+  animation: modalPopOut 0.26s cubic-bezier(0.55, 0, 0.85, 0.25) both;
 }
 @keyframes backdropIn {
   from { opacity: 0; }
@@ -806,6 +859,8 @@ html.projects-nav-no-stagger .stagger-list > * {
   .nav-mobile-panel { animation: none; }
   /* 퇴장 애니메이션을 끄면 언마운트까지 남아 있게 되므로 즉시 숨긴다. */
   .nav-mobile-panel.is-closing { animation: none; opacity: 0; }
+  .dialog-backdrop.is-closing,
+  .dialog-backdrop.is-closing .dialog { animation: none; opacity: 0; }
 }
 @media (prefers-reduced-transparency: reduce) {
   /* 아직 Baseline이 아니라 지원하는 브라우저에서만 걸리는 점진적 강화다. */
