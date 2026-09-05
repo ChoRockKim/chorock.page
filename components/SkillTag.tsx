@@ -1,13 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { MONOCHROME_ICON_SLUGS, normalizeSkillName, SKILL_ICON_SLUGS } from "@/lib/skillIcons";
+import { DARK_RECOLOR_ICON_SLUGS, normalizeSkillName, SKILL_ICON_SLUGS } from "@/lib/skillIcons";
 import { useTheme } from "@/components/useTheme";
 
-// Matches --color-text for each theme in globals.css — MONOCHROME_ICON_SLUGS icons get
-// recolored to this instead of their near-black default so they stay visible against
-// .tag-outline's transparent (page-background-showing-through) background in dark mode.
-const TEXT_COLOR_BY_THEME = { light: "201e1d", dark: "eeecec" };
+// 다크 테마의 --color-text(globals.css)와 같은 값. DARK_RECOLOR_ICON_SLUGS의 아이콘만 이 색으로
+// 덮어 다크 배경에 묻히지 않게 한다. 라이트에서는 아무것도 덮지 않고 브랜드색 그대로 둔다.
+const DARK_TEXT_COLOR = "eeecec";
 
 export default function SkillTag({ name, icon }: { name: string; icon?: string }) {
   const theme = useTheme();
@@ -24,8 +23,8 @@ export default function SkillTag({ name, icon }: { name: string; icon?: string }
 
   const slug = icon ?? SKILL_ICON_SLUGS[normalizeSkillName(name)];
   const iconUrl = slug
-    ? mounted && MONOCHROME_ICON_SLUGS.has(slug)
-      ? `https://cdn.simpleicons.org/${slug}/${TEXT_COLOR_BY_THEME[theme]}`
+    ? mounted && theme === "dark" && DARK_RECOLOR_ICON_SLUGS.has(slug)
+      ? `https://cdn.simpleicons.org/${slug}/${DARK_TEXT_COLOR}`
       : `https://cdn.simpleicons.org/${slug}`
     : null;
 

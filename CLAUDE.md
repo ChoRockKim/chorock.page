@@ -712,23 +712,38 @@ showing, check the slug still resolves before assuming the code broke: `curl -s 
 that hides a failed `<img>` rather than leaving a broken-image gap, as a safety net for the
 next slug that goes stale.
 
-**Some Simple Icons brand colors are near-black by default, which vanishes on
-`.tag-outline`'s transparent background in dark mode.** `.tag-outline` (what every `SkillTag`
-renders as) has no fill — the page background shows through — so an icon whose brand hex is
-`#000000`-ish (GitHub, Notion, Next.js, Vercel, Expo, Express, Socket.io, OpenJDK — checked
-each one's actual hex against simple-icons' data) reads fine against light mode's `--color-bg`
-but is nearly invisible against dark mode's near-black `--color-bg`. `lib/skillIcons.ts`'s
-`MONOCHROME_ICON_SLUGS` set lists exactly these slugs; `SkillTag` requests them from Simple
-Icons with an explicit color override (`cdn.simpleicons.org/<slug>/<hex>`) matching the current
-theme's `--color-text` instead of their default brand color, while every other (already
-sufficiently-contrasty) slug keeps its real brand color. This is why `SkillTag` is a Client
-Component reading `components/useTheme.ts` — but naively branching the `<img src>` on
-`useTheme()`'s value directly would hydration-mismatch: the server has no `localStorage` to
-read and always renders as if light, while the client's very first render already sees the
-correct (possibly dark) theme via `layout.tsx`'s pre-hydration inline script. `SkillTag` works
-around this the same way `ScrollReveal` avoids a similar mismatch — defers the theme-based
-recolor to a post-mount `useEffect`-set `mounted` flag, so the first client render matches the
-server's plain-default-color output exactly, then swaps a frame later.
+**Some Simple Icons brand colors are too dark to read in dark mode, and the criterion is
+measured, not eyeballed.** `.tag-skill` (what every `SkillTag` renders as) has almost no fill —
+the page background shows through — so a dark icon sinks into dark mode's `--color-bg`
+(`#1b1a1d`). `lib/skillIcons.ts`'s `DARK_RECOLOR_ICON_SLUGS` lists the slugs whose brand hex
+falls **below 3:1 contrast against that background**, computed by fetching each icon's actual
+hex from Simple Icons — not by judging "looks blackish" (that older, vaguer rule missed
+`axios` #5A29E4 at 2.37 and `jest` #C21325 at 2.82, which are vivid, not black). `SkillTag`
+requests those from Simple Icons with an explicit color override
+(`cdn.simpleicons.org/<slug>/eeecec`) **only when the theme is dark** — in light mode every
+icon keeps its real brand color, since a dark icon is perfectly legible there and recoloring
+would throw away brand identity for nothing. This is why `SkillTag` is a Client Component
+reading `components/useTheme.ts` — but naively branching the `<img src>` on `useTheme()`'s
+value directly would hydration-mismatch: the server has no `localStorage` to read and always
+renders as if light, while the client's very first render already sees the correct (possibly
+dark) theme via `layout.tsx`'s pre-hydration inline script. `SkillTag` works around this the
+same way `ScrollReveal` avoids a similar mismatch — defers the theme-based recolor to a
+post-mount `useEffect`-set `mounted` flag, so the first client render matches the server's
+plain-brand-color output exactly, then swaps a frame later.
+
+**`normalizeSkillName()` strips a trailing parenthetical and a trailing version number before
+the lookup, and that is what makes the exact-match map survive real data.** A full audit of
+every name reaching `SkillTag` (`/about`'s SKILLS + career tags, plus each project's `tags` and
+`stack[].items` in Mongo — 70 names) found 41 with no icon, and most were the same brand written
+with a suffix: `React 19`, `Expo (SDK 56)`, `React Native 0.86`, `Next.js (App Router)`,
+`Supabase (Postgres·Storage)`. Handling the two repeating patterns in the normalizer beats
+adding an alias per variant — a future `React 20` is covered for free. Names with no space
+before their digits (`html5`, `css3`) are unaffected, which is why the version rule requires
+leading whitespace. Seventeen names still render text-only because Simple Icons genuinely has no
+icon for them (each 404 confirmed directly, not assumed): the whole Amazon/AWS family, **and
+`OpenAI`/`ChatGPT`, dropped the same way**, plus `Zustand`, `Auth.js`, `Shiki`, `giscus`,
+`Reanimated`, `matter-js`, `AsyncStorage`, `Toast UI Editor`, `ML Kit`. Adding a made-up slug
+buys nothing — the `<img>` 404s and `onError` hides it anyway.
 
 **`/posts` (list) filters/paginates client-side, not via `?tag=`/`?page=` server round-trips.**
 `components/PostsListClient.tsx` fetches every published post once via TanStack Query
