@@ -189,9 +189,13 @@ export default async function AboutPage() {
         </p>
 
         {/* A real <ul> rather than styled divs — a screen reader should announce it as the
-            three-item list it is. The label half of each entry (before the em dash) is bolded
-            so the three lines stay scannable at a glance; see PROFILE.highlights for why the
-            " — " separator has to survive editing. */}
+            list it is. Each entry is a two-line block: the label as a small accent kicker on
+            its own line, the detail under it. The previous version put both halves on one line
+            joined by an em dash, on top of a leading accent em dash — two dashes per entry, and
+            once the detail wrapped (which it does at this width) the bolded label stopped
+            lining up with anything, so the block read as ragged prose instead of a scan list.
+            Giving the label its own line makes wrapping harmless. See PROFILE.highlights for
+            why the " — " separator has to survive editing. */}
         <ul
           style={{
             listStyle: "none",
@@ -200,20 +204,36 @@ export default async function AboutPage() {
             maxWidth: "54ch",
             display: "flex",
             flexDirection: "column",
-            gap: "var(--space-2)",
+            gap: "var(--space-3)",
           }}
         >
           {PROFILE.highlights.map((line) => {
             const [label, ...rest] = line.split(" — ");
             return (
-              <li key={line} style={{ fontSize: 14.5, lineHeight: 1.6, display: "flex", gap: 8 }}>
-                <span aria-hidden style={{ color: "var(--color-accent)", flexShrink: 0 }}>
-                  —
+              <li key={line} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                {/* Same idiom as globals.css's .card-kicker and the project sidebar's field
+                    labels, one step larger for the hero. Not that class itself — 10px is too
+                    small here, and text-transform: uppercase does nothing for Hangul.
+                    --color-accent-800, not --color-accent: measured against each theme's
+                    --color-bg, plain accent is only 2.49:1 in light mode (#4caf50 on #f3f2f2),
+                    well under the 4.5:1 that 11px text needs. accent-800 flips per theme
+                    (#2e7d32 light / #a8dfae dark) and scores 4.59 / 11.41. This label is now
+                    the thing a skimmer reads first, so it can't be the hardest thing to read. */}
+                <span
+                  style={{
+                    fontSize: 11,
+                    letterSpacing: "0.08em",
+                    fontWeight: 600,
+                    color: "var(--color-accent-800)",
+                  }}
+                >
+                  {label}
                 </span>
-                <span>
-                  <strong style={{ fontWeight: 600 }}>{label}</strong>
-                  {rest.length > 0 && <span style={{ opacity: 0.75 }}> — {rest.join(" — ")}</span>}
-                </span>
+                {rest.length > 0 && (
+                  <span style={{ fontSize: 14.5, lineHeight: 1.6, opacity: 0.75 }}>
+                    {rest.join(" — ")}
+                  </span>
+                )}
               </li>
             );
           })}

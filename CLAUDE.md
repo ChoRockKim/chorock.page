@@ -847,10 +847,19 @@ to `app/about/page.tsx`) are **no longer placeholders** — `SKILLS` holds real 
 0.7.9), regrouped in 0.7.82 by proficiency (`{ level, note?, items }`, 주력/실무에서 사용/경험
 있음/도구) instead of Frontend/Backend/DevOps. Treat both as factual about the site owner.
 0.7.82 also reworked the hero for a job-hunting audience: `PROFILE.intro` is deliberately
-number-free (identity + the verification habit) while the NEW `PROFILE.highlights` (three
-scannable `label — detail` lines; the page splits on the spaced em dash, keep it intact) carries
-the figures, and `PROFILE.lookingFor` renders as a status pill only while non-empty — clear that
-one string when the job hunt ends. Contact values live in `lib/profile.ts#CONTACT`
+number-free (identity + the verification habit) while `PROFILE.highlights` carries the figures,
+and `PROFILE.lookingFor` renders as a status pill only while non-empty — clear that one string
+when the job hunt ends. **`highlights` is two `label — detail` entries** (the page still splits
+on the spaced em dash, so keep it intact), each rendered as a two-line block: the label as a
+small accent kicker on its own line, the detail beneath it. It was three entries joined on one
+line by that em dash, under a second leading em dash — six dashes in the block, and once a
+detail wrapped the bolded label no longer aligned with anything, so it read as ragged prose
+rather than a scan list. The dropped third entry restated `intro`'s own closing sentence about
+verification and was the only one with no concrete fact behind it; **the verification message
+now lives in `intro` alone**, so don't reintroduce it as a highlight. Both surviving labels are
+noun phrases that carry the fact themselves — the label is what a skimmer compares first, so
+mixing grammatical shapes across entries (noun phrase / adverbial / full sentence) is what made
+the old version mush. Contact values live in `lib/profile.ts#CONTACT`
 (github/email), consumed by the /about contact card, `components/Footer.tsx`, and the JSON-LD
 `Person` in `app/layout.tsx` (which since 0.7.82 also declares email/sameAs/knowsAbout/worksFor)
 — the old page-local `CONTACT_GITHUB_URL`/`CONTACT_EMAIL` constants are gone. `PROFILE.shortIntro`
