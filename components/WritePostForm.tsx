@@ -469,7 +469,9 @@ export default function WritePostForm({
   return (
     <>
       <LeaveConfirmDialog open={leavePrompt} onStay={handleStay} onLeave={handleLeave} />
-      <div style={{ position: "sticky", top: 0, zIndex: 30 }}>
+      {/* top: 0이면 화면 맨 위, 즉 고정된 사이트 헤더 뒤에 붙어 가려진다(헤더 z-40 > 여기 z-30).
+          헤더가 실측해 :root에 심어둔 --header-h만큼 내려서 헤더 바로 아래에 붙게 한다. */}
+      <div style={{ position: "sticky", top: "var(--header-h, 67px)", zIndex: 30 }}>
         <div
           style={{
             display: "flex",

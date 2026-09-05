@@ -33,6 +33,10 @@ const NAV_ITEMS: { key: NavKey; label: string; href: string }[] = [
 export default function Header() {
   const pathname = usePathname();
   const active = NAV_ITEMS.find((item) => pathname?.startsWith(item.href))?.key;
+  // 글쓰기/수정 화면에서는 헤더를 캡슐로 접지 않는다. 떠오른 캡슐이 폼 상단의 툴바
+  // (임시 저장·발행하기)를 덮어버린다.
+  const isEditor =
+    pathname === "/posts/write" || /^\/posts\/[^/]+\/edit$/.test(pathname ?? "");
   const [theme, setTheme] = useState<"light" | "dark">("dark");
   const [scrolled, setScrolled] = useState(false);
   const [spacerH, setSpacerH] = useState(66);
@@ -86,13 +90,25 @@ export default function Header() {
   useEffect(() => {
     const el = headerRef.current;
     if (!el) return;
-    setSpacerH(el.offsetHeight);
-    const ro = new ResizeObserver(() => setSpacerH(el.offsetHeight));
+    // 스페이서 높이이자, :root에 심어 다른 곳이 읽는 값. 글쓰기 폼의 상단 툴바가 sticky
+    // top: 0이면 화면 맨 위, 즉 고정 헤더 뒤로 들어가 가려진다 — 그 툴바가 이 값을 읽어
+    // 헤더 바로 아래에 붙는다.
+    const apply = (h: number) => {
+      setSpacerH(h);
+      document.documentElement.style.setProperty("--header-h", `${h}px`);
+    };
+    apply(el.offsetHeight);
+    const ro = new ResizeObserver(() => apply(el.offsetHeight));
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
 
   useEffect(() => {
+    if (isEditor) {
+      // 리스너를 아예 걸지 않는다. scrolled가 계속 false라 캡슐도, 물방울 모션도 없다.
+      setScrolled(false);
+      return;
+    }
     // 단일 임계값이면 모양이 바뀌는 전환이 경계에서 떨린다 — 스크롤을 조금만 움직여도
     // 캡슐이 왕복한다. 펼침→축소 48px, 축소→펼침 12px로 이력을 둔다.
     const onScroll = () => {
@@ -101,7 +117,7 @@ export default function Header() {
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
-  }, []);
+  }, [isEditor]);
 
   // 모인 폭 = 자식들의 실제 폭 합 + 간격 + 축소 상태의 가로 패딩. 요소의 min-width를 잠시
   // 풀었다 되돌리는 식으로 재면 전이가 걸려 있어 값이 튀므로, 자식들을 직접 더한다.
@@ -384,7 +400,7 @@ export default function Header() {
         ref={headerRef}
         className={`site-header${scrolled ? " is-condensed" : ""}${
           hasLens && settled ? " has-lens" : ""
-        }${hasMotion ? " has-motion" : ""}`}
+        }${hasMotion && !isEditor ? " has-motion" : ""}`}
       >
         {hasLens && barW ? <LiquidGlassFilter width={barW} height={barH} /> : null}
         {hasLens && panelSize ? (
