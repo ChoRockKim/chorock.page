@@ -78,9 +78,18 @@ type-checking and ESLint as part of `build`, so a green build implies both pass)
     `> /components` file-tree listing, one path per line, rendered as a single run-on line. This
     is a site-wide rendering change (affects prose paragraphs everywhere, not just blockquotes)
     and was applied deliberately as the fix, not as a scoped-down workaround.
-- Series "prev/next" and "related posts" are computed by query (sibling posts sorted by
-  `publishedAt`, tag overlap) rather than stored as arrays on the document — there is no
-  denormalized ordering to keep in sync when posts are added.
+- Series "prev/next" and "related posts" are computed by query (sibling posts, tag overlap) rather
+  than stored as arrays on the document — there is no denormalized ordering to keep in sync when
+  posts are added. **Manual series ordering lives on the post, not the series**: `Post.seriesOrder`
+  (null = unordered) preserves that property. `lib/series.ts#compareSeriesPosts()` is the single
+  ordering rule — `seriesOrder` ascending with **null last**, tie-broken by `publishedAt` — and
+  **three places must use it**: the series detail list, `lib/posts.ts#getSeriesNav` (prev/next and
+  the "n/N" part label), and `listSeriesWithCounts`'s preview titles (an aggregation, so it mimics
+  the rule with `$ifNull`). If one diverges, each screen claims a different order.
+  **Never delegate this to Mongo's `.sort()`** — Mongo sorts null/missing *first*, so a newly added
+  post in an already-ordered series would jump to position 1. The reorder action therefore also
+  rewrites 1..N across *every* post in the series: a series must never hold a mix of null and
+  numbers.
 
 **Models** (`models/Post.ts`, `models/Series.ts`) are a fresh schema, not a 1:1 port of the old
 Express blog's (forum uses the raw MongoDB driver, no slug/tags/status/series concept at all —

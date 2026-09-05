@@ -260,12 +260,23 @@ export default function Header() {
   }, [pathname]);
 
   const openSearch = useCallback(() => {
+    // 검색과 모바일 메뉴는 동시에 떠 있을 수 없다. 둘 다 화면 위쪽을 덮어서 겹치면 서로를
+    // 가리고, 검색 덮개가 전체 화면을 먹으므로 뒤의 메뉴는 누를 수도 없다.
+    // (닫기만 하면 각자의 퇴장 애니메이션은 그대로 재생된다 — 언마운트는 그 뒤에 일어난다.)
+    setMobileMenuOpen(false);
     setSearchOpen(true);
     // 본문 스크롤을 잠그지 않는다(사용자 요청). 덮개가 전체 화면을 덮지만 스크롤 가능한
     // 요소가 아니라서 휠은 그대로 문서로 흘러간다. 모달과 헤더 캡슐 둘 다 position: fixed라
     // 스크롤해도 서로의 위치 관계는 유지된다.
     setTimeout(() => inputRef.current?.focus(), 50);
   }, []);
+
+  // 메뉴를 여는 쪽에서도 같은 규칙을 지킨다. 상태 업데이터 안에서 다른 setState를 부르면
+  // StrictMode에서 두 번 실행될 수 있어 바깥에서 현재 값을 보고 판단한다.
+  const toggleMobileMenu = () => {
+    if (!mobileMenuOpen) closeSearch();
+    setMobileMenuOpen((v) => !v);
+  };
 
   const closeSearch = useCallback(() => {
     setSearchOpen(false);
@@ -451,7 +462,7 @@ export default function Header() {
             className="nav-mobile-toggle btn btn-icon btn-secondary"
             aria-label={mobileMenuOpen ? "메뉴 닫기" : "메뉴 열기"}
             aria-expanded={mobileMenuOpen}
-            onClick={() => setMobileMenuOpen((v) => !v)}
+            onClick={toggleMobileMenu}
           >
             {mobileMenuOpen ? (
               <svg width="17" height="17" viewBox="0 0 256 256" fill="none">

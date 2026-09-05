@@ -4,6 +4,7 @@ import { unstable_cache } from "next/cache";
 import { connectToDatabase } from "@/lib/mongodb";
 import { PostModel } from "@/models/Post";
 import { SeriesModel } from "@/models/Series";
+import { compareSeriesPosts } from "@/lib/series";
 
 export type PostSummary = {
   id: string;
@@ -150,12 +151,13 @@ export async function getSeriesNav(
   const series = await SeriesModel.findById(seriesId).lean<{ slug: string; title: string } | null>();
   if (!series) return null;
 
-  const siblings = await PostModel.find(
+  // 시리즈 상세 목록과 반드시 같은 순서여야 한다 — 이전/다음과 화면의 목록이 어긋나면 안 된다.
+  // compareSeriesPosts가 그 단일 규칙이다(Mongo sort는 null을 맨 앞으로 보내 쓸 수 없다).
+  const found = await PostModel.find(
     { seriesId, status: "published" },
-    { slug: 1 }
-  )
-    .sort({ publishedAt: 1 })
-    .lean<{ slug: string }[]>();
+    { slug: 1, publishedAt: 1, seriesOrder: 1 }
+  ).lean<{ slug: string; publishedAt: Date; seriesOrder?: number | null }[]>();
+  const siblings = [...found].sort(compareSeriesPosts);
 
   const idx = siblings.findIndex((s) => s.slug === currentSlug);
   if (idx === -1) return null;

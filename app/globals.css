@@ -300,6 +300,77 @@ textarea.input { min-height: 90px; resize: vertical; }
   display: flex; align-items: center; gap: 6px; font-size: 11px;
   color: color-mix(in srgb, var(--color-text) 50%, transparent);
 }
+/* — 시리즈 목록 카드 — */
+/* 이 디자인 시스템은 각진 편집 스타일이라(--radius-md가 2px다) 카드를 둥글리는 대신
+   왼쪽 액센트 괘선과 번호로 장식한다. 번호 뱃지는 시리즈 상세 페이지가 각 편에 쓰는
+   원형 뱃지를 작게 줄인 것으로, 목록과 상세가 같은 모티프로 이어진다. 이 토큰들은 다크에서
+   값이 뒤집히므로(accent-100은 어두워지고 accent-700은 밝아진다) 양쪽 테마에서 그대로 읽힌다. */
+.series-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  border-left: 3px solid color-mix(in srgb, var(--color-accent) 35%, transparent);
+  text-decoration: none;
+  color: inherit;
+  transition: border-left-color 0.18s ease, background 0.18s ease;
+}
+.series-card:hover { border-left-color: var(--color-accent); }
+.series-card:hover .series-card-title { color: var(--color-accent); }
+.series-card-title {
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: 18px;
+  line-height: 1.25;
+  margin: 0;
+  transition: color 0.18s ease;
+}
+.series-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.series-card-count {
+  flex: none;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--color-accent);
+}
+/* 목차. 카드 전체가 링크이므로 여기 항목은 절대 <a>가 되면 안 된다(중첩 링크). */
+.series-card-toc {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.series-card-toc li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 13px;
+  opacity: 0.78;
+}
+.series-card-num {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--color-accent-100);
+  color: var(--color-accent-700);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 11px;
+}
+.series-card-more { font-size: 12px; opacity: 0.5; padding-left: calc(22px + var(--space-2)); }
+
 .elev-sm { box-shadow: var(--shadow-sm); }
 .elev-md { box-shadow: var(--shadow-md); }
 .elev-lg { box-shadow: var(--shadow-lg); }
