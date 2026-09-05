@@ -30,7 +30,7 @@ export default function SkillTag({ name, icon }: { name: string; icon?: string }
     : null;
 
   return (
-    <span className="tag tag-outline" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+    <span className="tag tag-skill" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
       {iconUrl && !failed && (
         // eslint-disable-next-line @next/next/no-img-element -- small brand icon from an external CDN, not a page asset next/image should optimize
         <img
