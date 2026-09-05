@@ -240,6 +240,14 @@ export default function Header() {
     return () => document.documentElement.classList.remove("search-open");
   }, [searchMounted]);
 
+  // is-condensed는 <header>에만 붙어 있어 헤더 바깥 요소가 읽을 수 없다. 캡슐로 접히면 화면
+  // 왼쪽 위가 통째로 비므로(캡슐은 오른쪽 정렬 ~462px), 왼쪽 열에 붙는 사이드바는 그만큼 더
+  // 위로 올라갈 수 있다 — 그걸 CSS에서 알 수 있도록 <html>에도 심는다(search-open과 같은 방식).
+  useEffect(() => {
+    document.documentElement.classList.toggle("header-condensed", scrolled);
+    return () => document.documentElement.classList.remove("header-condensed");
+  }, [scrolled]);
+
   const highlightKey = pendingKey ?? active;
   useEffect(() => {
     if (!menuMounted) {
