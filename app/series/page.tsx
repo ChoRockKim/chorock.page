@@ -40,7 +40,7 @@ export default async function SeriesListPage() {
         style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}
       >
         {series.map((s) => (
-          <Link key={s.slug} href={`/series/${s.slug}`} className="series-card elev-sm">
+          <Link key={s.slug} href={`/series/${s.slug}`} className="series-card">
             <div className="series-card-head">
               <h3 className="series-card-title">{s.title}</h3>
               <span className="series-card-count">{s.count}편</span>

@@ -5,7 +5,7 @@ import { getProjectBySlug, listProjectSlugs } from "@/lib/projects";
 import { compileMarkdown, extractHeadings } from "@/lib/markdown";
 import SkillTag from "@/components/SkillTag";
 import ScrollReveal from "@/components/ScrollReveal";
-import RevealBlocks from "@/components/RevealBlocks";
+import ProjectOverview from "@/components/ProjectOverview";
 import TableOfContents from "@/components/TableOfContents";
 import TocMobile from "@/components/TocMobile";
 import ProjectsBackLink from "@/components/ProjectsBackLink";
@@ -60,6 +60,12 @@ export default async function ProjectDetailPage({
   // h2 only — 「문제 해결」 alone carries up to seven h3s (boo-game), which would push the
   // sidebar past the viewport.
   const headings = extractHeadings(project.overviewMd).filter((h) => h.depth === 2);
+  // 이 두 섹션은 개요 도입 문단 바로 아래에서 카드로 강조한다. 제목 텍스트가 아니라 id를 넘기는
+  // 이유는 ProjectOverview 주석 참고 — 이미 컴파일된 엘리먼트를 다시 만들지 않고 감싸기만 한다.
+  const CALLOUT_HEADINGS = ["맡은 일", "성과와 한계"];
+  const calloutIds = new Set(
+    headings.filter((h) => CALLOUT_HEADINGS.includes(h.text)).map((h) => h.id)
+  );
 
   const projectUrl = `${SITE_URL}${canonicalPath("projects", project.slug)}`;
   // CreativeWork rather than SoftwareApplication: these entries describe the work itself and
@@ -299,10 +305,11 @@ export default async function ProjectDetailPage({
 
         {/* Not a <ScrollReveal> around the whole section (see components/RevealBlocks.tsx for
             why that was broken, not merely coarse, on the longest projects) — RevealBlocks
-            reveals each top-level markdown block on its own and keeps the .pd-body class. */}
+            reveals each top-level markdown block on its own and keeps the .pd-body class.
+            ProjectOverview wraps it and turns the two callout sections into cards. */}
         <section>
           <h2 style={{ fontSize: 24, margin: "0 0 var(--space-4)" }}>프로젝트 개요</h2>
-          <RevealBlocks>{content}</RevealBlocks>
+          <ProjectOverview content={content} cardIds={calloutIds} />
         </section>
       </div>
     </div>

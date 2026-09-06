@@ -323,14 +323,20 @@ textarea.input { min-height: 90px; resize: vertical; }
   color: inherit;
   background: var(--color-surface);
   /* 왼쪽 액센트 괘선을 border-left로 두면 직각이라 둥근 모서리와 충돌한다. 안쪽 그림자로
-     그리면 반경을 따라 잘린다. 먼저 나열한 그림자가 위에 그려지므로 괘선을 맨 앞에 둔다. */
+     그리면 반경을 따라 잘린다. 먼저 나열한 그림자가 위에 그려지므로 괘선을 맨 앞에 둔다.
+     0.10.2에서 이 괘선이 두 가지 이유로 한 번도 렌더되지 않았다. (1) 존재하지 않는
+     --color-border를 썼는데, 정의되지 않은 var()는 그 선언 **전체**를 무효로 만든다(올바른
+     이름은 --color-divider). (2) 그걸 고쳐도 마크업의 .elev-sm이 이 규칙보다 **뒤에** 있어
+     같은 특이도로 box-shadow를 통째로 덮었다 — 그래서 카드에서 elev-sm을 뺐다(여기 마지막
+     레이어의 --shadow-sm이 같은 역할을 한다). 카드가 배경과 1.1:1밖에 차이가 안 나 눈으로는
+     티가 안 났고, 계산값을 읽고서야 드러났다. */
   box-shadow: inset 3px 0 0 0 color-mix(in srgb, var(--color-accent) 55%, transparent),
-    inset 0 0 0 1px var(--color-border), var(--shadow-sm);
+    inset 0 0 0 1px var(--color-divider), var(--shadow-sm);
   transition: box-shadow 0.18s ease, transform 0.18s ease;
 }
 .series-card:hover {
   transform: translateY(-2px);
-  box-shadow: inset 3px 0 0 0 var(--color-accent), inset 0 0 0 1px var(--color-border),
+  box-shadow: inset 3px 0 0 0 var(--color-accent), inset 0 0 0 1px var(--color-divider),
     var(--shadow-md);
 }
 @media (prefers-reduced-motion: reduce) {
@@ -1284,6 +1290,25 @@ html.search-open .proj-sidebar {
    구분된다. 인접 형제 margin은 겹쳐서 큰 쪽만 남으므로, h2가 --space-8(40px)이면 문단
    사이(30px)와 10px밖에 차이가 안 나 섹션이 시작된 티가 나지 않았다. */
 .pd-body h2 { font-size: 22px; margin-top: calc(var(--space-8) + var(--space-4)); scroll-margin-top: 90px; }
+/* 개요 본문에서 「맡은 일」·「성과와 한계」만 카드로 강조한다(components/ProjectOverview.tsx가
+   컴파일된 블록을 잘라 감싼다). 재질은 .series-card와 같은 것을 쓴다 — 불투명 표면에, 왼쪽
+   액센트 괘선은 border-left가 아니라 inset 그림자로 그린다(직각 border는 둥근 모서리와 부딪히지만
+   inset 그림자는 반경을 따라 잘린다). */
+.proj-callout {
+  padding: var(--space-4);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  box-shadow: inset 3px 0 0 0 color-mix(in srgb, var(--color-accent) 55%, transparent),
+    inset 0 0 0 1px var(--color-divider);
+  margin: var(--space-4) 0;
+}
+/* .pd-body h2의 60px 위 여백이 카드 *안쪽*에서 제목을 밀어낸다. scroll-margin-top은 건드리지
+   않는다 — 목차 앵커 점프가 그 값에 의존한다. */
+.proj-callout h2 { font-size: 18px; margin-top: 0; }
+.proj-callout > *:last-child { margin-bottom: 0; }
+@media (max-width: 640px) {
+  .proj-callout { padding: var(--space-3); }
+}
 .pd-body h3 { font-size: 18px; margin-top: var(--space-8); scroll-margin-top: 90px; }
 .pd-body blockquote {
   margin: var(--space-4) 0;
