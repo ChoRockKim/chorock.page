@@ -74,7 +74,20 @@ export default function TableOfContents({ headings }: { headings: Heading[] }) {
   if (headings.length === 0) return null;
 
   return (
-    <aside className="toc-desktop" style={{ position: "sticky", top: 80, alignSelf: "start", fontSize: 13 }}>
+    // 고정 오프셋은 헤더가 실측해 :root에 심는 --header-h를 따른다(하드코딩 80px이었다).
+    // /posts/[slug]에서 이 목차는 오른쪽 열에 있고 접힌 헤더 캡슐도 오른쪽 정렬이라, 둘이
+    // 가로로 겹친 채 세로로 3px밖에 안 떨어져 있었다(캡슐 아래 77px, 목차 위 80px — 실측).
+    // --space-8을 더해 30px을 띄운다. /projects/[slug]에서는 .proj-sidebar가 이 값을
+    // position: static !important로 덮으므로(globals.css) 그쪽에는 영향이 없다.
+    <aside
+      className="toc-desktop"
+      style={{
+        position: "sticky",
+        top: "calc(var(--header-h, 67px) + var(--space-8))",
+        alignSelf: "start",
+        fontSize: 13,
+      }}
+    >
       <p
         style={{
           textTransform: "uppercase",

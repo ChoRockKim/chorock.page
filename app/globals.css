@@ -1111,6 +1111,15 @@ html.projects-nav-no-stagger .stagger-list > * {
 }
 
 .toc-mobile { display: none; }
+/* sticky 요소가 뷰포트보다 길면 단순히 잘리는 게 아니라 **아랫부분에 영영 닿을 수 없다** —
+   스크롤은 페이지를 움직이는데 고정된 상자는 그대로 있기 때문이다(.proj-sidebar에서 이미 겪은
+   함정과 같다). 목차를 캡슐 아래로 30px 내리면서 여유가 7px까지 줄었다: 항목이 가장 많은 글이
+   19개·634px인데 748px 뷰포트에서 목차 아래가 741px였다. 조금만 더 낮은 화면이면 재현된다.
+   여기만 스크롤시키고 .proj-grid 쪽은 자기 규칙(.proj-toc)이 따로 있으므로 건드리지 않는다. */
+.pd-grid .toc-desktop {
+  max-height: calc(100vh - var(--header-h, 67px) - var(--space-8) - var(--space-4));
+  overflow-y: auto;
+}
 /* 검색 모달이 떠 있는 동안 목차를 비운다(Header가 <html>에 .search-open을 붙인다).
    모달이 맑은 유리라 뒤 글자가 그대로 읽히는데, 목차가 하필 모달과 같은 자리(오른쪽 위)에
    있어 글자끼리 겹쳐 읽혔다. 흐림을 올려 뭉개는 대신 겹치는 대상을 치우는 쪽을 택했다 —
