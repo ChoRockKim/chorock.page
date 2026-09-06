@@ -154,6 +154,7 @@ async function upsertPost(input: SavePostInput, status: "draft" | "published"): 
   if (input.slug) {
     const existing = await PostModel.findOne({ slug: input.slug });
     if (existing) {
+      const wasPublished = existing.status === "published";
       existing.title = input.title;
       existing.summary = input.summary;
       existing.content = input.content;
@@ -167,7 +168,9 @@ async function upsertPost(input: SavePostInput, status: "draft" | "published"): 
       }
       existing.status = status;
       await existing.save();
-      revalidatePosts(existing.slug);
+      // 발행 글을 초안으로 내리는 경우도 공개 목록에서 사라져야 하므로 재검증한다. 순수한
+      // 초안 저장(발행된 적 없는 글)만 건너뛴다 — 아래 revalidatePosts 주석 참고.
+      if (status === "published" || wasPublished) revalidatePosts(existing.slug);
       // 발행(또는 발행 글 수정)일 때만 검색엔진에 알린다 — 임시 저장은 공개 URL 변화가 없다.
       if (status === "published") await pingIndexNow([`/posts/${encodeURIComponent(existing.slug)}`]);
       return { slug: existing.slug };
@@ -185,8 +188,10 @@ async function upsertPost(input: SavePostInput, status: "draft" | "published"): 
     status,
     publishedAt: new Date(),
   });
-  revalidatePosts(slug);
-  if (status === "published") await pingIndexNow([`/posts/${encodeURIComponent(slug)}`]);
+  if (status === "published") {
+    revalidatePosts(slug);
+    await pingIndexNow([`/posts/${encodeURIComponent(slug)}`]);
+  }
   return { slug };
 }
 
@@ -199,6 +204,13 @@ async function upsertPost(input: SavePostInput, status: "draft" | "published"): 
  * existing one's post count, also ISR since 0.7.36 — see app/series/page.tsx). Without this, a
  * newly published/edited post only shows up once each page's own 300s revalidate window happens
  * to lapse — publishing looked like it silently did nothing.
+ *
+ * **초안 저장에서는 부르지 않는다.** 초안은 위 어느 페이지에도 나오지 않고(모든 공개 조회가
+ * published만 본다) 자기 상세 페이지도 404이므로, 재검증할 대상이 애초에 없다. 그런데
+ * Server Action 안에서 revalidatePath/Tag를 부르면 Next가 **현재 라우트까지** 다시 렌더한다
+ * (인증 없는 프로브 라우트로 직접 확인 — 재검증을 부르지 않는 액션은 renderId가 그대로인데
+ * 부르는 액션은 바뀐다). 그 현재 라우트가 /posts/write라서, 글을 쓰다 임시저장할 때마다
+ * 편집 화면이 통째로 다시 그려졌다. 공개 페이지를 실제로 바꾸는 저장에서만 부른다.
  */
 function revalidatePosts(slug: string) {
   revalidateTag("posts");

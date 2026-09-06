@@ -3,6 +3,33 @@
 이 프로젝트의 주요 변경 사항을 버전(작업 단위) 별로 기록합니다. 형식은
 [Keep a Changelog](https://keepachangelog.com/)를 참고합니다.
 
+## [0.10.7] - 2026-09-06
+
+### Fixed
+
+- **글을 쓰는 도중 편집 화면이 다시 그려지던 문제.** "자꾸 새로고침된다"는 제보로 시작해,
+  인증 없는 프로브 라우트를 만들어 후보를 하나씩 계측해 좁혔다.
+  - **원인**: `upsertPost()`가 **모든 저장에서** `revalidatePosts()`를 불렀다. IndexNow 핑만
+    `status === "published"`로 막혀 있고 재검증은 안 막혀 있었다. 그런데 초안은 어느 공개
+    페이지에도 나오지 않고(모든 공개 조회가 published만 본다) 자기 상세도 404라 **재검증할
+    대상이 애초에 없다**. 그런데도 Server Action 안의 `revalidatePath`/`revalidateTag`는 Next가
+    **현재 라우트까지** 다시 렌더하게 만든다 — 그 현재 라우트가 `/posts/write`였다.
+    `/posts/write`는 동적이고 `loading.tsx`가 있어 회색 스켈레톤이 번쩍였고, 주소의 `?slug=`로
+    초안이 다시 열려 글자는 살아남았다.
+  - **계측으로 배제한 것들**: 400ms마다 도는 `previewMarkdown` 같은 일반 Server Action은
+    페이지의 서버 렌더 id를 바꾸지 않는다(재마운트·포커스 손실도 0). 미리보기 JSX 교체는 DOM
+    노드를 재생성하지 않는다(`<img>`/`<pre>` 신원 유지). 생 `pushState`/`replaceState`(이탈
+    가드·`syncSlugToUrl`)는 내비게이션을 일으키지 않는다. **재검증을 부르는 액션만** 렌더 id를
+    바꿨다. Vercel 런타임 로그에서도 실제 작성 세션 중 액션 POST 사이에 `GET /posts/write`
+    문서 로드가 끼어 있는 것을 확인했다(배포는 하나뿐이라 빌드 불일치가 아니고, 4xx·5xx 0건).
+  - **고친 방식**: `status === "published" || wasPublished`일 때만 재검증한다. `wasPublished`는
+    `existing.status`에 새 값을 넣기 **전에** 잡는다 — 발행 글을 초안으로 내리는 경우
+    (published→draft)는 공개 목록에서 사라져야 하므로 재검증이 필요하고, 이 순서가 아니면
+    그 경우를 놓친다.
+  - **미확정**: 로컬 프로덕션 빌드에서는 재검증이 소프트 재렌더까지만 가고 문서 GET으로
+    떨어지지는 않았다(Vercel의 캐시 계층이 로컬과 다르다). 이 수정이 하드 `GET`까지 없애는지는
+    배포 후 로그로 대조해야 한다.
+
 ## [0.10.6] - 2026-09-06
 
 ### Changed

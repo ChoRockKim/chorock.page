@@ -1059,6 +1059,24 @@ both dim identically and the user still can't tell what they pressed. On a succe
 navigates away, do **not** re-enable the button in a `finally` (`handlePublish` used to): the
 button stays live during `router.push` and can be pressed again, double-publishing.
 
+**A Server Action that calls `revalidatePath`/`revalidateTag` re-renders the route the user is
+currently on — so don't call it for a save that changes nothing public.** `upsertPost` used to
+run `revalidatePosts()` on *every* save, gated only for the IndexNow ping. A draft appears on no
+public page (every public query filters `status: "published"`, and its own detail page 404s), so
+there was nothing to revalidate — but the call still blew away the router cache while the owner
+was mid-sentence in `/posts/write`, re-rendering the editor. Reported as "글 쓰는 도중에 자꾸
+새로고침된다"; `/posts/write` is dynamic and has a `loading.tsx`, so the re-render surfaced as a
+gray skeleton flash, and the draft came back from the `?slug=` in the URL, which is why no text
+was lost. Confirmed the mechanism on an auth-free throwaway route: an action that returns a plain
+value leaves the page's server-render id untouched across repeated calls, while an otherwise
+identical action that calls `revalidatePath` changes it every time. Vercel runtime logs for a real
+writing session also show `GET /posts/write` document loads interleaved with the action POSTs.
+It is now gated on `status === "published" || wasPublished` — `wasPublished` is captured **before**
+`existing.status` is reassigned, and it exists so that unpublishing a live post (published→draft)
+still clears it from `/posts`/`/about`/`/series`. **Not verified end-to-end**: the local
+production build only ever soft-re-rendered, never escalated to a full document load, so whether
+this fully explains the hard `GET` on Vercel is still open.
+
 **Server Actions must `return { error }`, never `throw`, for any message meant to reach the
 user.** Next.js redacts every thrown Server Action error into a generic "An error occurred in
 the Server Components render..." message in production, *regardless of whether the throw was a
