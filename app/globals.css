@@ -1120,20 +1120,31 @@ html.projects-nav-no-stagger .stagger-list > * {
   max-height: calc(100vh - var(--header-h, 67px) - var(--space-8) - var(--space-4));
   overflow-y: auto;
 }
-/* 검색 모달이 떠 있는 동안 목차를 비운다(Header가 <html>에 .search-open을 붙인다).
-   모달이 맑은 유리라 뒤 글자가 그대로 읽히는데, 목차가 하필 모달과 같은 자리(오른쪽 위)에
-   있어 글자끼리 겹쳐 읽혔다. 흐림을 올려 뭉개는 대신 겹치는 대상을 치우는 쪽을 택했다 —
-   유리의 투명함을 잃지 않는다. */
-.toc-desktop,
-.proj-sidebar { transition: opacity 0.2s ease; }
-html.search-open .toc-desktop,
-html.search-open .proj-sidebar {
+/* 검색 모달이 떠 있는 동안 겹치는 것만 비운다(Header가 <html>에 .search-open을 붙인다).
+   모달이 맑은 유리라 뒤 글자가 그대로 읽히는데, 글 상세의 목차가 하필 모달과 같은 자리
+   (오른쪽 위)에 있어 글자끼리 겹쳐 읽혔다. 흐림을 올려 뭉개는 대신 겹치는 대상을 치우는 쪽을
+   택했다 — 유리의 투명함을 잃지 않는다.
+
+   **겹치는 것만**이 중요하다. 처음엔 `.toc-desktop`과 `.proj-sidebar`를 폭 조건 없이 비웠는데,
+   프로젝트 상세의 사이드바는 **왼쪽 열**이라 오른쪽 정렬 모달과 애초에 겹치지 않는다. 실측:
+   1440px에서 모달 948~1410 vs 사이드바 270~530, 2열이 유지되는 최저폭 856px에서도 모달
+   364~826 vs 사이드바 30~290으로 74px이 남는다. 그런데도 제목·설명·버튼·목차가 통째로
+   사라져, 검색을 열면 프로젝트 정보가 없어진다는 제보로 이어졌다.
+   `.proj-grid`가 1열로 무너지는 800px 이하에서는 사이드바가 전폭이 되어 실제로 모달 밑에
+   깔리므로(386px에서 모달 12~374 vs 사이드바 30~356), 그 구간에서만 비운다. */
+.pd-grid .toc-desktop { transition: opacity 0.2s ease; }
+html.search-open .pd-grid .toc-desktop {
   opacity: 0;
   pointer-events: none;
 }
+@media (max-width: 800px) {
+  html.search-open .proj-sidebar {
+    opacity: 0;
+    pointer-events: none;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
-  .toc-desktop,
-  .proj-sidebar { transition: none; }
+  .pd-grid .toc-desktop { transition: none; }
 }
 .pd-grid {
   display: grid;
@@ -1181,8 +1192,12 @@ html.search-open .proj-sidebar {
   top: calc(var(--header-h, 67px) + var(--space-2));
   align-self: start;
   /* 헤더가 접히는 순간 top이 77px에서 20px로 바뀐다. 전환이 없으면 이미 고정된 사이드바가
-     한 프레임에 튄다. 헤더 캡슐 모션과 비슷한 길이로 맞춘다. */
-  transition: top 0.4s var(--bar-ease-size, ease);
+     한 프레임에 튄다. 헤더 캡슐 모션과 비슷한 길이로 맞춘다.
+     opacity도 **여기서 함께** 선언해야 한다. transition은 단축 속성이라 뒤에 오는 선언이 앞의
+     것을 통째로 대체하는데, 위쪽 검색 모달 규칙의 `transition: opacity 0.2s`가 이 줄에 밀려
+     죽어 있었다(0.10.3에서 top 전환을 넣으며 생긴 회귀 — 좁은 화면에서 검색을 열고 닫을 때
+     사이드바가 페이드 없이 그냥 사라졌다 나타났다). */
+  transition: top 0.4s var(--bar-ease-size, ease), opacity 0.2s ease;
 }
 @media (prefers-reduced-motion: reduce) {
   .proj-sidebar { transition: none; }
