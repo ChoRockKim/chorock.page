@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useCountUp } from "@/components/useCountUp";
 
 /**
  * 목록 카드의 조회수. 카드마다 요청을 보내지 않고, **같은 틱에 마운트된 카드들의 slug를 모아
@@ -58,17 +59,17 @@ function subscribe(slug: string, cb: (n: number) => void): () => void {
 }
 
 export default function PostViews({ slug }: { slug: string }) {
-  const [views, setViews] = useState<number | null>(null);
+  const [target, setTarget] = useState<number | null>(null);
+  // 처음엔 "조회 0"을 그리고, 값이 도착하면 거기까지 세어 올린다. 전에는 불러오기 전에 아무것도
+  // 그리지 않았는데, 그러면 숫자가 없다가 불쑥 생겨서 오히려 거슬린다는 피드백을 받았다.
+  const views = useCountUp(target);
 
-  useEffect(() => subscribe(slug, setViews), [slug]);
+  useEffect(() => subscribe(slug, setTarget), [slug]);
 
-  // 불러오기 전에는 아무것도 그리지 않는다. 상세 페이지와 달리 여기엔 카드가 여러 장이라,
-  // 전부 "조회 0"을 띄웠다가 한꺼번에 바뀌면 그 자체가 깜빡임으로 읽힌다.
-  if (views === null) return null;
   return (
     <>
       <span>·</span>
-      <span>조회 {views.toLocaleString("ko-KR")}</span>
+      <span className="tnum">조회 {views.toLocaleString("ko-KR")}</span>
     </>
   );
 }

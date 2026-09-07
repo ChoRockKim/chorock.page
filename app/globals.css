@@ -399,6 +399,12 @@ textarea.input { min-height: 90px; resize: vertical; }
   .series-card { padding: var(--space-3); }
 }
 
+/* 세어 올라가는 숫자용. 기본 폰트는 글리프 폭이 자릿수마다 달라서, 매 프레임 값이 바뀌는 동안
+   텍스트가 좌우로 떨린다. 고정폭 숫자로 그 떨림만 없앤다 — 자릿수 자체가 늘 때(9→10) 폭이
+   변하는 건 막지 않는다(그러려면 최종값을 미리 알아야 하는데, 그 값이 늦게 오는 게 이 문제의
+   출발점이다). components/useCountUp.ts를 쓰는 곳이 함께 쓴다. */
+.tnum { font-variant-numeric: tabular-nums; }
+
 .elev-sm { box-shadow: var(--shadow-sm); }
 .elev-md { box-shadow: var(--shadow-md); }
 .elev-lg { box-shadow: var(--shadow-lg); }

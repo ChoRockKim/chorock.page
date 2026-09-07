@@ -1077,6 +1077,31 @@ still clears it from `/posts`/`/about`/`/series`. **Not verified end-to-end**: t
 production build only ever soft-re-rendered, never escalated to a full document load, so whether
 this fully explains the hard `GET` on Vercel is still open.
 
+**A JS animation must never be the only path to the correct final value.**
+`components/useCountUp.ts` counts the view/visit numbers up from 0 with `requestAnimationFrame`,
+and the first version only ever assigned the real number inside the rAF callback. rAF stops in
+background tabs and starves outright under load — this repo's own dev machine reproduces it — so
+a post whose real count was 60 sat at **"조회 0"** while `rAF` never fired once in 400ms
+(the fetch itself had resolved in 46ms). That isn't a missing animation, it's wrong data on
+screen. A `setTimeout(duration + 400)` guard now snaps to the target if the animation hasn't
+finished; `setTimeout` is throttled in background tabs too but still fires, so the number always
+lands. Same reasoning applies to any future value revealed through an animation.
+
+Verifying that animation on this machine needs the rAF starvation worked around, not fought:
+render the page in an iframe and swap its `requestAnimationFrame` for a `setTimeout(…, 16)` shim,
+then record value changes with a `MutationObserver` (polling in a loop hangs the renderer here).
+That produced the actual step sequence — 0→4→8→…→61 across 32 values, with increments shrinking
+4→1, which is the ease-out visible in data rather than by eye. Patching `matchMedia` in the same
+iframe checks the `prefers-reduced-motion` branch (0→61, no intermediate values). Because this is
+a JS animation, that preference has to be read with `matchMedia`, not a CSS media query — the
+same reason `components/Header.tsx`'s theme toggle checks it manually.
+
+**Numbers that animate need `font-variant-numeric: tabular-nums`** (the `.tnum` utility in
+`app/globals.css`). Proportional digits have different widths, so a value changing every frame
+makes the surrounding text visibly wobble. It does not stop the width change when a digit is
+*added* (9→10) — fixing that would need the final value up front, which is the very thing that
+arrives late here.
+
 **Server Actions must `return { error }`, never `throw`, for any message meant to reach the
 user.** Next.js redacts every thrown Server Action error into a generic "An error occurred in
 the Server Components render..." message in production, *regardless of whether the throw was a

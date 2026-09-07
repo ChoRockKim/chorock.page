@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useCountUp } from "@/components/useCountUp";
 
 const SEEN_PREFIX = "chorock-viewed:";
 const DEDUP_MS = 24 * 60 * 60 * 1000;
@@ -18,7 +19,9 @@ const DEDUP_MS = 24 * 60 * 60 * 1000;
  * 흔들리고, /about 카운터에서 "있는 줄도 몰랐다"는 피드백을 받은 적이 있다.
  */
 export default function PostViewCounter({ slug }: { slug: string }) {
-  const [views, setViews] = useState(0);
+  const [target, setTarget] = useState<number | null>(null);
+  // 응답이 오는 순간 한 프레임에 점프하던 것을 0에서부터 세어 올리도록 바꿨다.
+  const views = useCountUp(target);
 
   useEffect(() => {
     const key = SEEN_PREFIX + slug;
@@ -34,7 +37,7 @@ export default function PostViewCounter({ slug }: { slug: string }) {
     fetch(url, { method: recent ? "GET" : "POST" })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
-        if (typeof data?.views === "number") setViews(data.views);
+        if (typeof data?.views === "number") setTarget(data.views);
         if (!recent) {
           try {
             window.localStorage.setItem(key, String(Date.now()));
@@ -48,5 +51,5 @@ export default function PostViewCounter({ slug }: { slug: string }) {
       });
   }, [slug]);
 
-  return <span>조회 {views.toLocaleString("ko-KR")}</span>;
+  return <span className="tnum">조회 {views.toLocaleString("ko-KR")}</span>;
 }
