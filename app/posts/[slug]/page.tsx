@@ -7,6 +7,7 @@ import ReadingProgressBar from "@/components/ReadingProgressBar";
 import ShareButton from "@/components/ShareButton";
 import SeriesNav from "@/components/SeriesNav";
 import TocMobile from "@/components/TocMobile";
+import PostViewCounter from "@/components/PostViewCounter";
 import TableOfContents from "@/components/TableOfContents";
 import PostCard from "@/components/PostCard";
 import GiscusComments from "@/components/GiscusComments";
@@ -149,7 +150,8 @@ export default async function PostDetailPage({
             }}
           >
             <p style={{ fontSize: 13, opacity: 0.55, margin: 0 }}>
-              {formatDate(post.publishedAt)} · {post.readTime}분 읽기
+              {formatDate(post.publishedAt)} · {post.readTime}분 읽기 ·{" "}
+              <PostViewCounter slug={post.slug} />
             </p>
             <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
               <PostOwnerActions slug={post.slug} />
