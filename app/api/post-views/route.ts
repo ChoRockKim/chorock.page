@@ -21,8 +21,35 @@ function readSlug(request: NextRequest): string | null {
   return slug && slug.trim() ? slug.trim() : null;
 }
 
-/** 조회수를 올리지 않고 읽기만 한다 — 24시간 안에 이미 본 글일 때 클라이언트가 이쪽을 쓴다. */
+// 목록 화면은 카드마다 요청을 보내는 대신 화면에 뜬 slug를 모아 한 번에 묻는다
+// (components/PostViews.tsx). 상한을 두는 건 임의의 긴 $in 배열이 들어오는 걸 막기 위한 것이고,
+// 한 화면에 뜨는 카드 수(목록 5개, /about 3개)보다 넉넉하다.
+const MAX_BATCH = 50;
+
+/**
+ * 조회수를 올리지 않고 읽기만 한다.
+ * - `?slug=x`  → `{ views: number }` — 상세 페이지에서 24시간 안에 이미 본 글일 때.
+ * - `?slugs=a,b` → `{ views: { a: number, b: number } }` — 목록 카드들이 한 번에 묻는 경우.
+ *   기록이 없는 slug도 0으로 채워 돌려준다(클라이언트가 빈 값을 따로 다루지 않아도 되게).
+ */
 export async function GET(request: NextRequest) {
+  const slugsParam = request.nextUrl.searchParams.get("slugs");
+  if (slugsParam !== null) {
+    const slugs = [...new Set(slugsParam.split(",").map((s) => s.trim()).filter(Boolean))];
+    if (slugs.length === 0) return NextResponse.json({ views: {} });
+    if (slugs.length > MAX_BATCH) {
+      return NextResponse.json({ error: `최대 ${MAX_BATCH}개까지 조회할 수 있습니다.` }, { status: 400 });
+    }
+    await connectToDatabase();
+    const agg = await PostViewModel.aggregate<{ _id: string; total: number }>([
+      { $match: { slug: { $in: slugs } } },
+      { $group: { _id: "$slug", total: { $sum: "$count" } } },
+    ]);
+    const found = new Map(agg.map((r) => [r._id, r.total]));
+    const views = Object.fromEntries(slugs.map((s) => [s, found.get(s) ?? 0]));
+    return NextResponse.json({ views });
+  }
+
   const slug = readSlug(request);
   if (!slug) return NextResponse.json({ error: "slug is required" }, { status: 400 });
   await connectToDatabase();

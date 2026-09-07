@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { PostSummary } from "@/lib/posts";
+import PostViews from "@/components/PostViews";
 
 function formatDate(iso: string) {
   return iso.slice(0, 10).split("-").join(".");
@@ -51,6 +52,7 @@ export default function PostCard({
         <span>{formatDate(post.publishedAt)}</span>
         <span>·</span>
         <span>{post.readTime}분 읽기</span>
+        <PostViews slug={post.slug} />
       </div>
     </Link>
   );
