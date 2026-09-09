@@ -182,6 +182,19 @@ body {
   background: var(--color-bg);
   color: var(--color-text);
   font-family: var(--font-body);
+  /* Pretendard는 `<---` 같은 화살표 합자(ligature)를 갖고 있는데, WebKit(= iOS의 모든
+     브라우저)은 이 합자를 **그릴 때만** 쓰고 줄 배치에는 합자 이전의 낱글자 폭 합계를 쓴다.
+     그 결과 합자가 든 텍스트 노드는 실제 그려지는 폭보다 좁게 자리를 차지하고, 같은 줄에서
+     그 뒤에 오는 인라인 박스(인라인 `<code>` 칩, `<strong>`, 링크…)가 그만큼 왼쪽으로 당겨져
+     앞 글자 위에 겹쳐 그려진다. 실제 신고 사례가 `접속 요청 <---> 화면에 렌더링 인 `FCP` 가`
+     문장이었다(0.11.3). Playwright WebKit 26으로 재현·계측했다: 화살표 5글자를 그릴 때는
+     51.6px를 쓰면서 배치는 38.6px만 잡아, 뒤따르는 `FCP` 칩이 Chromium 대비 정확히 13.03px
+     왼쪽(257.72 → 244.69)에 놓였다 — 아이폰 스크린샷에서 잰 값(244.7)과 일치한다.
+     같은 텍스트 노드 안의 글자들은 멀쩡하므로 "합자 + 바로 뒤 인라인 요소"라는 조합에서만
+     터진다. `font-feature-settings: "liga" 0` 이나 `no-contextual` 하나만으로는 이 화살표가
+     안 죽는다(둘 다 꺼야 한다) — 그래서 그 둘을 모두 포함하는 `none`을 쓴다. 마크다운 본문에
+     `<--->`를 친 사람은 화살표 그림이 아니라 친 그대로가 나오길 기대하기도 한다. */
+  font-variant-ligatures: none;
   font-size: 15px;
   line-height: 1.55;
   font-weight: 400;
