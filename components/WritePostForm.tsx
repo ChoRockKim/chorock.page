@@ -28,6 +28,24 @@ type InitialPost = {
   seriesId: string | null;
 };
 
+/**
+ * 저장 뒤 캐시 무효화. Server Action이 아니라 라우트 핸들러를 부르는 것이 요점이다 — 액션
+ * 안에서 revalidate를 부르면 Next가 지금 보고 있는 /posts/write까지 다시 가져와, 동적 라우트라
+ * loading.tsx가 끼어들며 회색 스켈레톤이 번쩍인다(app/api/revalidate-posts/route.ts 주석 참고).
+ */
+async function revalidateAfterSave(slug: string) {
+  try {
+    await fetch("/api/revalidate-posts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ slug }),
+    });
+  } catch {
+    // 저장 자체는 이미 끝났다. 캐시가 늦게 갱신될 뿐이라(각 페이지의 300초 창) 저장을 실패로
+    // 돌리지 않는다.
+  }
+}
+
 function syncSlugToUrl(slug: string) {
   window.history.replaceState(null, "", `/posts/write?slug=${encodeURIComponent(slug)}`);
 }
@@ -401,6 +419,7 @@ export default function WritePostForm({
       } else {
         setSlug(result.slug);
         syncSlugToUrl(result.slug);
+        if (result.needsRevalidate) await revalidateAfterSave(result.slug);
         setStatusLabel("임시 저장됨");
         // 기준선은 "현재 값"이 아니라 "방금 보낸 값"으로 갱신한다 — 저장을 누른 뒤
         // 응답을 기다리는 동안 이어서 타이핑한 부분은 그대로 미저장으로 남아야 한다.
@@ -428,6 +447,8 @@ export default function WritePostForm({
         return;
       }
       savedRef.current = attempted;
+      // 이동 전에 캐시를 비운다 — 그러지 않으면 방금 발행한 글이 목록에 없는 채로 도착한다.
+      if (result.needsRevalidate) await revalidateAfterSave(result.slug);
       leavingRef.current = true;
       // 이동이 끝날 때까지 버튼을 잠근 채로 둔다(saving을 되돌리지 않는다). 되돌리면
       // router.push가 진행되는 동안 한 번 더 눌려 중복 발행될 수 있다.

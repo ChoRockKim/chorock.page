@@ -92,6 +92,13 @@ export const SKILL_ICON_SLUGS: Record<string, string> = {
   "expo-camera": "expo",
   "expo-image": "expo",
   "expo-notifications": "expo",
+  "expo-secure-store": "expo",
+  "expo-apple-authentication": "expo",
+  "expo-updates": "expo",
+  "네이버 로그인 sdk": "naver",
+  네이버: "naver",
+  "firebase analytics": "firebase",
+  "google mobile ads": "googleadmob",
   "jest-expo": "jest", // Jest 프리셋이라 Jest 쪽이 맞다
   // React Native 계열 라이브러리. react-native 전용 아이콘은 없어서 React를 쓴다.
   "react native svg": "react",

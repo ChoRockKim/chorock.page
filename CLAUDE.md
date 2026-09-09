@@ -250,6 +250,34 @@ be reproduced/verified there — see CHANGELOG 0.7.39). If another element devel
 "looks fine on desktop, mysteriously bigger on a real phone" symptom, check for this class of
 narrow+scrollable+monospace container before assuming it's a font-size or media-query bug.
 
+**`body` sets `font-variant-ligatures: none`, and that is a correctness fix, not a typographic
+preference.** Pretendard ligates `<---` into a single long arrow (⟵), and WebKit — i.e. every
+browser on iOS — applies that ligature **when painting but not when advancing the line**: the
+text node reserves the sum of the un-ligated glyph widths while drawing the wider ligature. Any
+inline box that follows on the same line (an inline `<code>` chip, `<strong>`, a link) is
+therefore pulled left by the difference and paints on top of the preceding character. Reported
+against `접속 요청 <---> 화면에 렌더링 인 `FCP` 가 굉장히 단축된다`, where the `FCP` chip covered
+half of "인" (CHANGELOG 0.11.3). Characters *inside* the same text node stay correct, which is why
+it looked intermittent — it only fires when a ligature is followed by an inline element.
+`font-feature-settings: "liga" 0` cannot fix this: the computed `font-variant-ligatures` value
+wins over that low-level property, and killing this particular arrow needs `liga` **and** `calt`
+off together (`no-contextual` alone does nothing either), which is exactly what `none` gives.
+Applied on `body` rather than on `.pd-body`, because the same mismatch fires anywhere the
+combination occurs — card summaries, titles, text around links.
+
+**iOS-only rendering bugs are reproducible on this machine with Playwright WebKit**, and that is
+how the ligature bug above was found. `npx playwright install webkit` (into a scratch dir, not
+this repo), open the page at a 402x874 viewport with `deviceScaleFactor: 3` — that is an iPhone
+16 Pro, so its screenshots line up 1:1 with one taken on the phone — and diff
+`getBoundingClientRect()` between WebKit and Chromium. WebKit put the `FCP` chip at x 244.69
+against Chromium's 257.72; measuring the reported iPhone screenshot's pixels gave 244.7, i.e. the
+local engine reproduces the phone exactly. Bisect the cause by mutating the **live** page's CSS
+and DOM and re-measuring (swapping `<--->` for `ABCDE` made both engines agree instantly, while
+no change to the chip's own padding / font-size / background / `display` / `opacity` moved it by
+a pixel) — a hand-written minimal repro is unreliable here, since different fonts and line breaks
+often stop reproducing it. macOS Safari is *not* an option: `screencapture` has no screen-recording
+permission in this environment, so nothing can be captured from it.
+
 **On iOS every browser is WebKit, so the lens never runs there — the fallback is what iPhone users
 actually see.** Apple's App Store rules forced browsers onto WebKit, and no vendor has shipped Blink
 on iOS even after the EU opened the door, so "Chrome on iOS" is Safari's engine with a different UI.
@@ -1060,22 +1088,29 @@ navigates away, do **not** re-enable the button in a `finally` (`handlePublish` 
 button stays live during `router.push` and can be pressed again, double-publishing.
 
 **A Server Action that calls `revalidatePath`/`revalidateTag` re-renders the route the user is
-currently on — so don't call it for a save that changes nothing public.** `upsertPost` used to
-run `revalidatePosts()` on *every* save, gated only for the IndexNow ping. A draft appears on no
-public page (every public query filters `status: "published"`, and its own detail page 404s), so
-there was nothing to revalidate — but the call still blew away the router cache while the owner
-was mid-sentence in `/posts/write`, re-rendering the editor. Reported as "글 쓰는 도중에 자꾸
-새로고침된다"; `/posts/write` is dynamic and has a `loading.tsx`, so the re-render surfaced as a
-gray skeleton flash, and the draft came back from the `?slug=` in the URL, which is why no text
-was lost. Confirmed the mechanism on an auth-free throwaway route: an action that returns a plain
-value leaves the page's server-render id untouched across repeated calls, while an otherwise
-identical action that calls `revalidatePath` changes it every time. Vercel runtime logs for a real
-writing session also show `GET /posts/write` document loads interleaved with the action POSTs.
-It is now gated on `status === "published" || wasPublished` — `wasPublished` is captured **before**
-`existing.status` is reassigned, and it exists so that unpublishing a live post (published→draft)
-still clears it from `/posts`/`/about`/`/series`. **Not verified end-to-end**: the local
-production build only ever soft-re-rendered, never escalated to a full document load, so whether
-this fully explains the hard `GET` on Vercel is still open.
+currently on — so post-save cache busting lives in `app/api/revalidate-posts/route.ts`, not in
+the action.** Reported as "글 쓰는 도중에 자꾸 새로고침된다". `/posts/write` is dynamic and has a
+`loading.tsx`, so that re-render surfaced as a gray skeleton flash. Confirmed the mechanism on an
+auth-free throwaway route: an action returning a plain value leaves the page's server-render id
+untouched across repeated calls, while an otherwise identical action calling `revalidatePath`
+changes it every time. Confirmed the symptom in the owner's own browser by patching `fetch` and
+logging RSC requests: the flash is an RSC refetch of `/posts/write` itself (no `_rsc=` prefetch
+marker, unlike the harmless `/posts` link prefetch alongside it), and the document never
+reloads — one `navigation.type === "navigate"`, no `beforeunload` — which is why no text is ever
+lost. A **route handler** does the same invalidation without touching the router, so the caches
+still clear and the editor stays put. `upsertPost` now only reports `needsRevalidate`; the client
+calls the endpoint after a successful save (and *before* `router.push` on publish, or the new
+post lands on a `/posts` list that doesn't have it yet). The endpoint is gated on `auth()` alone —
+a session existing already means owner. **Not verified end-to-end**: the authenticated save flow
+can't be exercised locally, so whether the flash is fully gone needs a real writing session.
+
+Two things this does *not* cover, both still open. `revalidateTag`/`revalidatePath` in
+`app/posts/[slug]/actions.ts#deletePost` and `app/series/[slug]/actions.ts` are deliberately left
+in their actions — both navigate or refresh on purpose. And **`/posts/write?slug=` happily opens a
+published post** (`getPostForEditing` has no status filter) while `mode === "write"` still shows
+the "임시 저장" button, so pressing it would flip a live post back to `draft` — the exact footgun
+`app/posts/[slug]/edit` avoids by hiding that button. Redirecting published slugs from the write
+screen to the edit screen is the fix; it hasn't been done yet.
 
 **A JS animation must never be the only path to the correct final value.**
 `components/useCountUp.ts` counts the view/visit numbers up from 0 with `requestAnimationFrame`,

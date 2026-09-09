@@ -3,6 +3,37 @@
 이 프로젝트의 주요 변경 사항을 버전(작업 단위) 별로 기록합니다. 형식은
 [Keep a Changelog](https://keepachangelog.com/)를 참고합니다.
 
+## [0.11.4] - 2026-09-09
+
+이전 세션에서 작업만 해두고 커밋하지 않은 채 남아 있던 변경들을 함께 올린다.
+
+### Fixed
+
+- **글 쓰는 도중 편집기가 회색 스켈레톤으로 번쩍이던 문제.** Server Action 안에서
+  `revalidatePath`/`revalidateTag`를 부르면 Next가 **지금 보고 있는 라우트까지** 다시 렌더한다.
+  `/posts/write`는 동적 라우트에 `loading.tsx`가 있어서 그 재렌더가 스켈레톤으로 보였다.
+  캐시 무효화를 `app/api/revalidate-posts/route.ts`(라우트 핸들러)로 옮겼다 — 같은 무효화를
+  하면서 라우터는 건드리지 않는다. `upsertPost`는 이제 `needsRevalidate`만 돌려주고, 저장이
+  성공한 뒤 클라이언트가 그 엔드포인트를 부른다(발행 시에는 `router.push` **전에** — 그러지
+  않으면 방금 발행한 글이 없는 목록으로 이동한다). 엔드포인트는 `auth()`만으로 막는다:
+  세션이 있다는 것 자체가 이미 주인이라는 뜻이다.
+  **끝까지 확인하지는 못했다** — 로그인이 필요한 저장 흐름은 로컬에서 재현할 수 없어서,
+  번쩍임이 완전히 사라졌는지는 실제 글쓰기 세션에서 확인해야 한다.
+
+### Changed
+
+- forA 프로젝트 소개를 최신 상태로 갱신했다(맡은 영역·기술 스택·설계 판단·문제 해결).
+  `scripts/seed-projects.ts`가 이 컬렉션의 단일 출처이므로, 반영하려면 `npm run seed:projects`를
+  따로 돌려야 한다.
+- `lib/skillIcons.ts`에 위 스택에서 새로 쓰이는 이름들을 추가했다(expo-secure-store,
+  expo-apple-authentication, expo-updates, 네이버, Firebase Analytics, Google Mobile Ads).
+
+### Docs
+
+- `CLAUDE.md`에서 0.11.2의 `useCountUp`·rAF 굶주림·`tabular-nums` 문단이 통째로 빠져 있던 것을
+  되살렸다. revalidate 문단을 갈아끼우는 과정에 딸려 지워진 것으로 보이는데, 셋 다 지금 돌아가는
+  코드를 설명하는 내용이라 지운 채로 커밋하면 안 된다.
+
 ## [0.11.3] - 2026-09-09
 
 ### Fixed
