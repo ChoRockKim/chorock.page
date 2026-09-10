@@ -134,13 +134,27 @@ export default function Header() {
         (el) => getComputedStyle(el).display !== "none"
       );
       if (kids.length === 0) return;
-      const sum = kids.reduce((acc, el) => acc + el.getBoundingClientRect().width, 0);
+      // getBoundingClientRect()는 **조상에 걸린 transform이 반영된** 값을 준다. 캡슐이
+      // 접히는 동안 dropletIn이 .site-bar에 scale을 거는데(scaleX가 타임라인 15%에서
+      // 0.98551까지 내려간다), 그 사이에 이 함수가 돌면 합계가 그만큼 작게 나오고 그 값이
+      // --bar-w로 굳는다. 그러면 캡슐이 필요 폭보다 좁아지고, flex-wrap: nowrap이라 바는
+      // 안 접히는 대신 내비 링크의 글자가 줄바꿈된다 — 한글은 아무 데서나 끊기므로 1px만
+      // 모자라도 항목마다 한 글자씩 밀린다(0.11.5). 현재 배율로 되나눠 변형과 무관한 폭을
+      // 얻는다. offsetWidth는 대안이 아니다 — 정수로 반올림돼 여기서는 항상 1px 모자란다.
+      const transform = getComputedStyle(bar).transform;
+      // 펼쳐진 상태의 computed transform은 "none"이고, DOMMatrixReadOnly("none")은 던진다.
+      const matrix = transform && transform !== "none" ? new DOMMatrixReadOnly(transform) : null;
+      const scaleX = matrix?.a || 1;
+      const scaleY = matrix?.d || 1;
+      const sum = kids.reduce((acc, el) => acc + el.getBoundingClientRect().width / scaleX, 0);
       const w = Math.ceil(sum + gap * (kids.length - 1) + padX * 2);
       setBarW((prev) => (prev === w ? prev : w));
       // 헤더 엘리먼트가 아니라 루트에 둔다 — 검색 모달은 헤더의 자손이 아니라서
       // 헤더에만 걸어두면 이 값을 읽을 수 없다(모달 폭을 캡슐과 맞추는 데 쓴다).
       document.documentElement.style.setProperty("--bar-w", `${w}px`);
-      const bh = Math.round(bar.getBoundingClientRect().height);
+      // 높이도 같은 이유로 되나눈다 — dropletIn의 scaleY는 +4.5%까지 올라가고, 이 값은
+      // 렌즈 변위 맵의 크기가 된다.
+      const bh = Math.round(bar.getBoundingClientRect().height / scaleY);
       setBarH((prev) => (prev === bh ? prev : bh));
     };
     measure();
@@ -397,6 +411,9 @@ export default function Header() {
 
   const linkStyle = (key: NavKey): CSSProperties => ({
     fontSize: 14,
+    // 안전장치. --bar-w가 어떤 이유로든 1px 모자라면 캡슐이 자식을 눌러 글자가 세로로
+    // 쌓인다(0.11.5). 넘칠지언정 접히지는 않게 한다 — 몇 px 넘치는 건 눈에 안 보인다.
+    whiteSpace: "nowrap",
     textDecoration: "none",
     color: active === key ? "var(--color-accent)" : "var(--color-text)",
     fontWeight: active === key ? 600 : 400,

@@ -180,6 +180,23 @@ which dark mode had no way to adjust.
   so the shrink finishes early in the timeline; with a slow easing the bar sat still while the
   corners were still rounding. `Header.tsx` sums the children's widths and re-measures on
   `document.fonts.ready` (Pretendard loads async, so glyph widths change late).
+- **That measurement must divide out the bar's current transform scale, and forgetting to was a
+  real bug (0.11.5).** `getBoundingClientRect()` reports the rect *after* every ancestor
+  transform, and `dropletIn` scales `.site-bar` for 0.85s — scaleX dips to **0.98551** at 15% of
+  the timeline. A `measure()` that lands in that window sums shrunken children and bakes a too-small
+  `--bar-w`, and since it only re-runs on `resize`/`fonts.ready`, it stays wrong. The bar then can't
+  fold (`flex-wrap: nowrap`) so it squeezes its children instead, and the nav links' *text* wraps —
+  Korean breaks between any two characters, so **a 1px shortfall costs each label one character**
+  (`소/개`, `시리/즈`). It needs a *scrolled* page (for `is-condensed` → the animation and
+  `width: var(--bar-w)`) plus a *hard* refresh (fonts come off the network, so `fonts.ready`
+  resolves late, inside the animation) — a cached reload resolves it at mount with scale 1, which is
+  why it looked random. `barH` has the same problem (scaleY reaches +4.5%) and feeds the lens
+  displacement map. Fix: divide each rect by `DOMMatrixReadOnly(getComputedStyle(bar).transform).a`
+  / `.d`, guarding the expanded state where the computed transform is the string `"none"` (the
+  `DOMMatrixReadOnly` constructor throws on it). **`offsetWidth` is not the alternative** — it does
+  ignore transforms, but it rounds to an integer and the sum lands 1px short here, i.e. broken
+  *always* instead of sometimes. Measured with Playwright Chromium: raw rects give 456–464px through
+  the animation where the true width is 462; normalized gives a flat 462.
 - **Two easings, deliberately.** An overshoot curve on `width` drives it *below* the content width
   for a few frames, and the nav visibly folds to two lines and back (reproduced by sampling 40 rAF
   frames). Size properties use `--bar-ease-size` (no overshoot); only `border-radius` and
