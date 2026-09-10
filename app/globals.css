@@ -1139,6 +1139,39 @@ html.projects-nav-no-stagger .stagger-list > * {
   max-height: calc(100vh - var(--header-h, 67px) - var(--space-8) - var(--space-4));
   overflow-y: auto;
 }
+/* 그때 생기는 스크롤바가 문제였다(0.11.6). 목차 열은 200px밖에 안 되는데 기본 스크롤바는
+   그에 비해 굵고, 크로뮴/맥의 오버레이 스크롤바는 폭을 안 먹는 대신 **글자 위에 겹쳐**
+   그려져 항목 오른쪽이 가려진다(실측: offsetWidth - clientWidth === 0인데도 바가 보인다).
+   평소에는 투명하게 두고 포인터가 올라오거나 키보드 포커스가 들어왔을 때만 보여준다.
+   **폭(scrollbar-width)은 상태와 무관하게 고정한다** — 클래식 스크롤바를 쓰는 환경
+   (윈도·리눅스)에서는 폭이 레이아웃을 차지하므로 호버에서 폭을 바꾸면 목차가 좌우로
+   움찔한다. 색만 바뀐다.
+   .proj-toc도 같이 건다 — 같은 TableOfContents 컴포넌트이고 801px 이상에서 똑같이
+   overflow-y: auto가 걸린다. 스크롤이 안 걸리는 구간에서는 아무 일도 하지 않는다. */
+.pd-grid .toc-desktop,
+.proj-toc {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+.pd-grid .toc-desktop:hover,
+.pd-grid .toc-desktop:focus-within,
+.proj-toc:hover,
+.proj-toc:focus-within {
+  scrollbar-color: color-mix(in srgb, var(--color-accent) 70%, transparent) transparent;
+}
+/* 사파리 18.2 미만은 위 표준 속성을 모르므로 -webkit- 의사요소로 같은 모양을 만든다.
+   Blink/Gecko에서는 scrollbar-color/scrollbar-width가 선언된 순간 이 의사요소 규칙들이
+   무시되므로, 둘을 같이 둬도 충돌하지 않고 엔진마다 하나씩만 적용된다. */
+.pd-grid .toc-desktop::-webkit-scrollbar,
+.proj-toc::-webkit-scrollbar { width: 6px; }
+.pd-grid .toc-desktop::-webkit-scrollbar-track,
+.proj-toc::-webkit-scrollbar-track { background: transparent; }
+.pd-grid .toc-desktop::-webkit-scrollbar-thumb,
+.proj-toc::-webkit-scrollbar-thumb { background: transparent; border-radius: 99px; }
+.pd-grid .toc-desktop:hover::-webkit-scrollbar-thumb,
+.proj-toc:hover::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--color-accent) 70%, transparent);
+}
 /* 검색 모달이 떠 있는 동안 겹치는 것만 비운다(Header가 <html>에 .search-open을 붙인다).
    모달이 맑은 유리라 뒤 글자가 그대로 읽히는데, 글 상세의 목차가 하필 모달과 같은 자리
    (오른쪽 위)에 있어 글자끼리 겹쳐 읽혔다. 흐림을 올려 뭉개는 대신 겹치는 대상을 치우는 쪽을
