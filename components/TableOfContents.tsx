@@ -7,6 +7,7 @@ export default function TableOfContents({ headings }: { headings: Heading[] }) {
   const [activeId, setActiveId] = useState<string | null>(headings[0]?.id ?? null);
   const [indicator, setIndicator] = useState({ top: 0, height: 0 });
   const linkRefs = useRef<Record<string, HTMLAnchorElement | null>>({});
+  const rootRef = useRef<HTMLElement>(null);
   /**
    * True while a click-initiated scroll is still travelling; the observer below ignores entries
    * until it clears.
@@ -71,6 +72,56 @@ export default function TableOfContents({ headings }: { headings: Heading[] }) {
     return () => cancelAnimationFrame(raf);
   }, [activeId]);
 
+  /**
+   * 활성 항목이 목차 상자 밖으로 밀려나면 목차만 살짝 굴려 다시 보이게 한다. 목차가 길어
+   * 스크롤이 생긴 글에서는(globals.css의 `.pd-grid .toc-desktop` max-height) 읽고 있는
+   * 위치가 상자 아래로 넘어가 버려, 정작 "내가 어디쯤인지"를 알려주는 표시를 못 보게 된다.
+   *
+   * **`scrollIntoView`를 쓰면 안 된다.** 그건 스크롤 가능한 **모든 조상**을 움직이므로
+   * 문서까지 같이 스크롤돼, 읽는 중인 페이지가 제멋대로 튄다. 컨테이너의 `scrollBy`만
+   * 부르면 그 상자 하나만 움직인다.
+   */
+  const hasFollowed = useRef(false);
+  useEffect(() => {
+    const link = activeId ? linkRefs.current[activeId] : null;
+    const root = rootRef.current;
+    if (!link || !root) return;
+    // 스크롤 컨테이너가 화면마다 다르다. /posts/[slug]에서는 이 <aside> 자신이고
+    // (`.pd-grid .toc-desktop`), /projects/[slug]에서는 조상인 `.proj-toc`다. 자신부터
+    // 위로 올라가며 실제로 넘치는 첫 요소를 찾되, <body>에 닿기 전에 멈춘다 — 문서 자체를
+    // 컨테이너로 잡으면 위에 적은 "페이지가 튀는" 바로 그 동작이 된다.
+    let box: HTMLElement | null = root;
+    while (box && box !== document.body) {
+      const overflowY = getComputedStyle(box).overflowY;
+      if ((overflowY === "auto" || overflowY === "scroll") && box.scrollHeight > box.clientHeight) break;
+      box = box.parentElement;
+    }
+    if (!box || box === document.body) return; // 다 들어가면 따라갈 것도 없다
+
+    const boxRect = box.getBoundingClientRect();
+    const linkRect = link.getBoundingClientRect();
+    // 가장자리에 딱 붙이지 않고 한 항목쯤 여유를 남긴다 — 위아래로 더 있다는 게 보인다.
+    // 다만 상자가 작으면(프로젝트 사이드바는 낮은 화면에서 90px까지 줄어든다) 위아래 여유를
+    // 합친 것이 항목 하나 들어갈 자리보다 커져, 위로 밀어도 아래로 밀어도 조건이 계속 참인
+    // 상태가 된다 — 실제로 그 화면에서 항목이 끝내 다 안 보이는 걸 확인했다. 남는 공간의
+    // 절반을 넘지 않게 묶으면 어느 상자에서든 항목 전체가 안으로 들어온다.
+    const margin = Math.min(28, Math.max(0, (box.clientHeight - link.offsetHeight) / 2));
+    let delta = 0;
+    if (linkRect.top < boxRect.top + margin) delta = linkRect.top - boxRect.top - margin;
+    else if (linkRect.bottom > boxRect.bottom - margin) delta = linkRect.bottom - boxRect.bottom + margin;
+    if (Math.abs(delta) < 1) return;
+
+    // CSS 애니메이션이 아니라 JS 스크롤이라 감축 모션 선호는 미디어 쿼리가 아니라
+    // matchMedia로 읽어야 한다(Header의 테마 토글과 같은 이유). 첫 적용은 즉시 맞춘다 —
+    // 글 중간에서 새로고침한 경우 맨 위에서부터 굴러 내려오는 게 오히려 산만하다.
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    box.scrollBy({
+      top: delta,
+      behavior: hasFollowed.current && !reduceMotion ? "smooth" : "auto",
+    });
+    hasFollowed.current = true;
+  }, [activeId]);
+
   if (headings.length === 0) return null;
 
   return (
@@ -80,6 +131,7 @@ export default function TableOfContents({ headings }: { headings: Heading[] }) {
     // --space-8을 더해 30px을 띄운다. /projects/[slug]에서는 .proj-sidebar가 이 값을
     // position: static !important로 덮으므로(globals.css) 그쪽에는 영향이 없다.
     <aside
+      ref={rootRef}
       className="toc-desktop"
       style={{
         position: "sticky",
