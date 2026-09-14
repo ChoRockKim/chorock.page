@@ -1434,6 +1434,17 @@ html.search-open .pd-grid .toc-desktop {
 .pd-body p > img + br + img { margin-top: 0; }
 .pd-body ul,
 .pd-body ol { padding-left: 1.4em; font-size: 16px; line-height: 1.8; opacity: var(--pd-text-opacity); }
+/* 도입 문장 바로 뒤에 오는 리스트는 그 문장에 붙인다(0.11.10). 문단 하단 30px가 ul의
+   기본 margin-top(16px)을 상쇄로 이겨서, 도입 문장→첫 항목이 30px — 항목 사이(10px)는
+   물론 리스트 끝→다음 문단(16px)보다도 넓어, 리스트가 자기 도입 문장보다 다음 문단에
+   붙어 보였다. 둘 다 10px로 내려 항목 간격과 같게 만든다. 중첩 리스트(li 안의 ul)는 UA
+   기본이 margin-top 0이라 바깥 규칙이 오히려 벌려놓으므로 되돌린다. */
+.pd-body ul,
+.pd-body ol { margin-top: var(--space-2); }
+.pd-body li ul,
+.pd-body li ol { margin-top: 0; }
+.pd-body p:has(+ ul),
+.pd-body p:has(+ ol) { margin-bottom: var(--space-2); }
 .pd-body li + li { margin-top: var(--space-2); }
 .pd-body code:not(pre code) {
   font-family: var(--font-mono);
