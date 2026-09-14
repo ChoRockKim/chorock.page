@@ -363,7 +363,9 @@ const projects = [
       "https://play.google.com/store/apps/details?id=com.fora.appfora&hl=ko",
     appStoreUrl:
       "https://apps.apple.com/kr/app/fora-adhd-%EC%BB%A4%EB%AE%A4%EB%8B%88%ED%8B%B0-%EC%95%BD%EC%A0%95%EB%B3%B4-%EB%A7%A4%EA%B1%B0%EC%A7%84/id6736352280",
-    publishedAt: "2026-06-30",
+    // 목록은 publishedAt 내림차순이라 이 값이 곧 정렬 순서다(화면에 날짜는 안 나온다).
+    // forA를 맨 위에 두려고 전체에서 가장 늦은 날짜로 뒀다 — 1.6.0 스토어 출시일.
+    publishedAt: "2026-09-14",
     status: "published" as const,
   },
   {
