@@ -3,6 +3,16 @@
 이 프로젝트의 주요 변경 사항을 버전(작업 단위) 별로 기록합니다. 형식은
 [Keep a Changelog](https://keepachangelog.com/)를 참고합니다.
 
+## [0.11.11] - 2026-09-14
+
+### Changed
+
+- **글 목록을 한 페이지 10개로** (`lib/postsPagination.ts`의 `POSTS_PAGE_SIZE` 5 → 10).
+  클라이언트 페이지네이션(`PostsListClient`)과 크롤러용 `/posts/page/[n]`이 같은 상수를
+  읽으므로 한 곳만 바꾸면 된다. 발행 28글 기준 6페이지 → 3페이지가 되고, 기존
+  `/posts/page/4~6`은 범위 밖 `notFound()`로 404가 된다 — 검색엔진이 자연히 떨어뜨리는
+  경로라 별도 리다이렉트는 두지 않았다.
+
 ## [0.11.10] - 2026-09-14
 
 ### Fixed

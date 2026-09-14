@@ -4,7 +4,7 @@
  * the one the client-side pagination shows. Deliberately NOT in lib/posts.ts — that module is
  * "server-only" and importing it from the client component would fail the build.
  */
-export const POSTS_PAGE_SIZE = 5;
+export const POSTS_PAGE_SIZE = 10;
 
 /**
  * The crawlable URL for a given page of /posts.
