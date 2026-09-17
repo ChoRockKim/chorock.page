@@ -32,6 +32,14 @@ export async function POST(request: NextRequest) {
   revalidatePath(`/posts/${encodeURIComponent(slug)}`);
   revalidatePath("/about");
   revalidatePath("/series");
+  // /posts의 페이지네이션 숫자는 getCachedPosts(태그 무효화 대상)로 계산하는데, 그 링크가
+  // 가리키는 /posts/page/[n]은 자기 300초 ISR로만 갱신됐다. 그래서 새 글이 페이지 수를
+  // 늘리는 순간 /posts가 아직 생성된 적 없는 /posts/page/N을 링크했고, 그 URL은 최대 5분간
+  // 404였다 — 크롤러에게 깨진 링크를 내주는 셈이라 색인 관점에서 특히 나쁘다(실제로 관측:
+  // /posts가 /posts/page/4를 링크하는 동안 그 URL이 404였다).
+  revalidatePath("/posts/page/[n]", "page");
+  // 사이트맵도 같이 비운다 — app/sitemap.ts의 revalidate만으로는 최대 300초 늦게 반영된다.
+  revalidatePath("/sitemap.xml");
 
   return NextResponse.json({ ok: true });
 }

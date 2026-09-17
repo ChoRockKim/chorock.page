@@ -5,6 +5,18 @@ import { listSeriesSitemapEntries } from "@/lib/series";
 
 const BASE_URL = "https://chorock.page";
 
+/**
+ * **Without this the sitemap is generated once at build time and never again.** A metadata
+ * route with no `revalidate` is fully static, so publishing a post did nothing to it — the
+ * live sitemap sat 35 hours old and was missing the three newest posts, while /api/posts
+ * (getCachedPosts, tag-invalidated on publish) already had them at 31. Google does not
+ * participate in IndexNow (lib/indexnow.ts), so this file's `lastmod` IS its discovery path
+ * — a post that never enters it is only found if Google happens to re-crawl a list page.
+ * 300s matches every other route's window; app/api/revalidate-posts also busts it on publish
+ * so a new post shows up immediately rather than up to five minutes later.
+ */
+export const revalidate = 300;
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const [posts, projects, series] = await Promise.all([
     listPostSitemapEntries(),

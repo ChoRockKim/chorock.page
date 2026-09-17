@@ -33,6 +33,14 @@ export async function deletePost(slug: string): Promise<{ error: string } | void
   revalidatePath(`/posts/${encodeURIComponent(slug)}`);
   revalidatePath("/about");
   revalidatePath("/series");
+  // /posts computes its page-number links from getCachedPosts (tag-invalidated here) while
+  // /posts/page/[n] gates on countPublishedPosts behind its own 300s ISR — so a change to the
+  // post count leaves /posts linking to a page that route doesn't agree exists, which for a
+  // deletion means the last page 404s for a crawler that follows the link.
+  revalidatePath("/posts/page/[n]", "page");
+  // app/sitemap.ts is ISR now, but leaving this out means up to 300s of a sitemap that still
+  // lists a deleted post.
+  revalidatePath("/sitemap.xml");
   // 삭제된 URL도 제출한다 — IndexNow 스펙상 검색엔진이 재크롤해 404를 보고 색인에서 내린다.
   await pingIndexNow([`/posts/${encodeURIComponent(slug)}`]);
 }
