@@ -83,9 +83,13 @@ type-checking and ESLint as part of `build`, so a green build implies both pass)
   posts are added. **Manual series ordering lives on the post, not the series**: `Post.seriesOrder`
   (null = unordered) preserves that property. `lib/series.ts#compareSeriesPosts()` is the single
   ordering rule — `seriesOrder` ascending with **null last**, tie-broken by `publishedAt` — and
-  **three places must use it**: the series detail list, `lib/posts.ts#getSeriesNav` (prev/next and
-  the "n/N" part label), and `listSeriesWithCounts`'s preview titles (an aggregation, so it mimics
-  the rule with `$ifNull`). If one diverges, each screen claims a different order.
+  **two places must use it**: the series detail list and `lib/posts.ts#getSeriesNav` (prev/next and
+  the "n/N" part label). If one diverges, each screen claims a different order. There used to be a
+  third — `listSeriesWithCounts`'s preview titles, an aggregation that mimicked the rule with
+  `$ifNull` + `$sort` — but `/series` became a card grid with no per-card table of contents, so both
+  the titles and the sort stages that existed only to order them are gone. Re-add both together if
+  that preview ever comes back; `$sum`/`$max` alone are order-independent, which is exactly why the
+  sort could be dropped without changing any output.
   **Never delegate this to Mongo's `.sort()`** — Mongo sorts null/missing *first*, so a newly added
   post in an already-ordered series would jump to position 1. The reorder action therefore also
   rewrites 1..N across *every* post in the series: a series must never hold a mix of null and

@@ -9,25 +9,20 @@ export type SeriesSummary = {
   title: string;
   description: string;
   count: number;
-  /** 목록 카드에 목차처럼 보여줄 앞부분 글 제목. 연재 순서(게시일 오름차순). */
-  previewTitles: string[];
-  /** 가장 최근 글의 게시일. "2026.08.21" */
+  /** 가장 최근 글의 게시일. "2026년 8월 21일" */
   lastUpdated: string;
 };
-
-/** 카드에 미리 보여줄 편수. 이보다 많으면 "… 외 N편"으로 접는다. */
-const PREVIEW_COUNT = 3;
 
 /**
  * 시리즈 안에서의 글 순서. `seriesOrder`가 있으면 그 순서, 없으면 `publishedAt` 순.
  *
  * **Mongo의 `.sort()`에 맡기면 안 된다** — Mongo는 null/누락을 맨 앞으로 보내므로, 순서를
  * 지정해 둔 시리즈에 새 글이 들어오면 그 글이 1편으로 튀어 오른다. 여기서는 null을 맨 뒤로
- * 보낸다. 시리즈의 글 전체를 어차피 가져오는 곳(상세 목록, 이전/다음)은 이 함수로 JS 정렬하고,
- * 집계로 처리하는 곳은 `$ifNull`로 같은 규칙을 흉내 낸다(listSeriesWithCounts).
+ * 보낸다. 시리즈의 글 전체를 어차피 가져오는 곳(상세 목록, 이전/다음)은 이 함수로 JS 정렬한다.
  *
- * 세 소비처(목록 카드 미리보기 · 시리즈 상세 · 글 상세의 이전/다음)가 반드시 같은 규칙을
- * 써야 한다. 하나라도 어긋나면 화면마다 다른 순서를 말하게 된다.
+ * 두 소비처(시리즈 상세 · 글 상세의 이전/다음)가 반드시 같은 규칙을 써야 한다. 하나라도
+ * 어긋나면 화면마다 다른 순서를 말하게 된다. 세 번째 소비처였던 목록 카드의 목차 미리보기는
+ * /series가 카드 그리드로 바뀌면서 사라졌고, 그래서 집계 쪽 $ifNull 흉내도 같이 없앴다.
  */
 export function compareSeriesPosts(
   a: { seriesOrder?: number | null; publishedAt: Date | string },
@@ -39,8 +34,6 @@ export function compareSeriesPosts(
   return new Date(a.publishedAt).getTime() - new Date(b.publishedAt).getTime();
 }
 
-/** 순서 미지정(null)을 맨 뒤로 보내기 위한 대체값. 집계에서 $ifNull과 함께 쓴다. */
-const UNORDERED_RANK = 1e9;
 
 export type SeriesPost = {
   slug: string;
@@ -57,28 +50,38 @@ export type SeriesWithPosts = {
   posts: SeriesPost[];
 };
 
+/**
+ * 카드 메타에 쓰는 "2026년 9월 14일" 표기.
+ *
+ * **UTC 게터를 쓴다.** 이 사이트는 글 날짜를 전부 `toISOString().slice(0, 10)`로 뽑는다
+ * (같은 파일 getSeriesWithPosts의 dateLabel, lib/posts.ts의 publishedAt). 여기서만 getFullYear
+ * 같은 로컬 게터를 쓰면 두 가지가 깨진다 — 같은 글이 목록 카드와 시리즈 상세에서 다른 날짜로
+ * 보이고, Vercel(UTC)과 이 맥(KST)의 렌더 결과가 갈린다. 한국 시간 기준으로 바꾸고 싶다면
+ * 이 함수만이 아니라 날짜를 만드는 모든 곳을 같이 옮겨야 한다.
+ *
+ * 로케일 API(toLocaleDateString/Intl)를 거치지 않는 이유는 호출부 주석 참고.
+ */
+function formatKoreanDate(d: Date): string {
+  return `${d.getUTCFullYear()}년 ${d.getUTCMonth() + 1}월 ${d.getUTCDate()}일`;
+}
+
 export async function listSeriesWithCounts(): Promise<SeriesSummary[]> {
   await connectToDatabase();
 
-  // 개수만 세던 집계를 넓혀 제목과 최신 날짜까지 한 번에 가져온다(왕복은 그대로 2회).
-  // $group 앞의 $sort가 $push의 순서를 보존하므로 titles는 연재 순서 그대로다.
-  // 제목을 전부 push한 뒤 앞 3개만 쓰는 건 글이 수십 편인 현재 규모에서 문제가 없어서다.
-  // 편수가 크게 늘면 $firstN으로 바꾸면 된다.
+  // 편수와 최신 날짜만 있으면 카드가 그려진다(왕복은 2회).
+  // 예전에는 카드에 목차 미리보기가 있어서 제목을 연재 순서대로 $push 했고, 그 순서를 맞추려고
+  // $group 앞에 $ifNull + $sort가 있었다. 목차가 사라진 지금 $sum/$max는 순서와 무관하므로
+  // 그 단계들을 들고 있을 이유가 없다 — 되살릴 일이 생기면 compareSeriesPosts 주석을 보라.
   const grouped = await PostModel.aggregate<{
     _id: unknown;
     count: number;
-    titles: string[];
     last: Date;
   }>([
     { $match: { status: "published", seriesId: { $ne: null } } },
-    // Mongo는 null을 맨 앞으로 정렬하므로 큰 수로 치환해 맨 뒤로 보낸다(compareSeriesPosts와 동일 규칙).
-    { $addFields: { _ord: { $ifNull: ["$seriesOrder", UNORDERED_RANK] } } },
-    { $sort: { _ord: 1, publishedAt: 1 } },
     {
       $group: {
         _id: "$seriesId",
         count: { $sum: 1 },
-        titles: { $push: "$title" },
         last: { $max: "$publishedAt" },
       },
     },
@@ -99,11 +102,10 @@ export async function listSeriesWithCounts(): Promise<SeriesSummary[]> {
           title: s.title,
           description: s.description,
           count: g?.count ?? 0,
-          previewTitles: (g?.titles ?? []).slice(0, PREVIEW_COUNT),
-          // 같은 파일의 getSeriesWithPosts가 쓰는 포맷과 동일하게 맞춘다.
-          lastUpdated: at
-            ? new Date(at).toISOString().slice(0, 10).split("-").join(".")
-            : "",
+          // "2026년 9월 14일". toLocaleDateString/Intl은 쓰지 않는다 — 이 값은 서버에서
+          // 만들어져 그대로 HTML에 박히므로 Node ICU와 브라우저의 표기가 갈리면 곤란하고,
+          // 직접 조립하면 월·일에 0이 붙지도 않는다(CLAUDE.md의 localeCompare 주의와 같은 취지).
+          lastUpdated: at ? formatKoreanDate(new Date(at)) : "",
         },
       };
     })
