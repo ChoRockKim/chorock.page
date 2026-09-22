@@ -22,6 +22,8 @@
   color-scheme: light;
   --color-bg: #f3f2f2;
   --color-surface: #eae9e9;
+  /* 시리즈 카드 배너. 페이지보다 확실히 어두워서 밝은 배경 위에 '표지'로 떠오른다. */
+  --series-banner-bg: #202023;
   --color-text: #201e1d;
   --color-divider: color-mix(in srgb, #201e1d 16%, transparent);
 
@@ -108,6 +110,9 @@ html[data-theme="dark"] {
   color-scheme: dark;
   --color-bg: #1b1a1d;
   --color-surface: #242327;
+  /* 라이트에서는 배경보다 어둡고 다크에서는 밝다 — 어느 쪽이든 배너가 페이지에서 떠오르게
+     하려면 명도 관계를 뒤집는 수밖에 없다. 어두운 배경 위의 어두운 판은 분리되지 않는다. */
+  --series-banner-bg: #34343a;
   --color-text: #eeecec;
   --color-divider: color-mix(in srgb, #eeecec 18%, transparent);
 
@@ -326,9 +331,8 @@ textarea.input { min-height: 90px; resize: vertical; }
    그 썸네일 시안의 재시도이고, 시끄러움을 피하려고 장식을 제목 하나로 줄였다(로고·패턴·
    그라디언트 없음). 다시 시끄럽다는 판단이 서면 여기를 먼저 의심하라.
 
-   배너는 **양쪽 테마에서 모두 어둡다.** 테마를 따라 반전시키면 라이트에서 카드가 배경에
-   녹아 그리드의 리듬이 사라진다 — 어두운 판을 일정하게 깔아 카드 경계를 만드는 게 이
-   레이아웃의 요점이다. 그래서 --color-surface가 아니라 고정 색을 쓴다. */
+   배너 색은 테마마다 다르다 — 라이트에서는 배경보다 어둡고 다크에서는 밝다. 목표는 '어둡게'가
+   아니라 '페이지에서 떠오르게'이고, 그걸 한 값으로는 만족시킬 수 없다(--series-banner-bg 참고). */
 .series-card {
   display: flex;
   flex-direction: column;
@@ -346,18 +350,12 @@ textarea.input { min-height: 90px; resize: vertical; }
   padding: var(--space-4);
   border-radius: 8px;
   overflow: hidden;
-  /* **평평한 어두운 색 하나로는 다크 모드에서 배너가 성립하지 않는다.** 처음엔 #232326 단색이었는데
-     다크의 페이지 배경(#1b1a1d)과 대비가 1.11까지 떨어져(직접 계산) 커버가 아니라 테두리만 있는
-     빈 상자로 읽혔다. 어두운 배경 위의 어두운 판은 밝기만으로는 절대 분리되지 않으므로, 밝기 대신
-     **색**으로 분리한다 — 왼쪽 위에서 들어오는 액센트 글로우가 그 역할을 하고, 덤으로 배너가
-     브랜드 색과 이어진다. 라이트/다크 양쪽에서 같은 배너를 쓰는 이유는 위 블록 주석 참고. */
-  background:
-    radial-gradient(
-      120% 120% at 12% 0%,
-      color-mix(in srgb, var(--color-accent) 30%, transparent) 0%,
-      transparent 58%
-    ),
-    #202023;
+  /* 단색이다. 액센트 글로우를 얹은 버전이 한 번 있었지만 시끄럽다는 판단으로 걷어냈다.
+     **다만 양쪽 테마에 같은 단색을 쓰면 안 된다** — 처음에 #232326 하나로 고정했다가 다크의
+     페이지 배경(#1b1a1d)과 대비가 1.11까지 떨어져 커버가 아니라 테두리만 있는 빈 상자로
+     읽혔다. 어두운 배경 위의 어두운 판은 밝기로 분리되지 않는다. 그래서 --series-banner-bg를
+     테마별로 뒤집는다(라이트는 배경보다 어둡게, 다크는 밝게). 값은 팔레트 블록에 있다. */
+  background: var(--series-banner-bg);
   box-shadow: inset 0 0 0 1px var(--color-divider);
   transition: transform 0.18s ease, box-shadow 0.18s ease;
 }

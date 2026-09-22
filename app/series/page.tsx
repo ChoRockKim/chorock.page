@@ -27,7 +27,7 @@ export default async function SeriesListPage() {
   const series = await listSeriesWithCounts();
 
   return (
-    <main style={{ maxWidth: 960, margin: "0 auto", padding: "var(--space-6)", animation: "pageFadeIn .5s ease both" }}>
+    <main style={{ maxWidth: 760, margin: "0 auto", padding: "var(--space-6)", animation: "pageFadeIn .5s ease both" }}>
       <h1 style={{ fontSize: 30, margin: "0 0 var(--space-2)" }}>시리즈</h1>
       <p style={{ fontSize: 14, opacity: 0.65, margin: "0 0 var(--space-6)" }}>
         여러 편으로 나눠 쓴 연재 글 모음입니다.
@@ -35,8 +35,9 @@ export default async function SeriesListPage() {
 
       {/* stagger-list는 /projects가 쓰는 등장 애니메이션 그대로다. 거기서 문제가 됐던
           View Transitions와의 충돌은 /series에는 해당하지 않는다(이 경로는 모프를 쓰지 않는다).
-          그리드도 /projects 목록과 같은 관례다 — auto-fill + minmax라서 960px에서 2단,
-          좁아지면 알아서 1단이 된다. 이걸 위해 새 미디어 쿼리를 만들 필요가 없다. */}
+          그리드도 /projects 목록과 같은 관례다 — auto-fill + minmax라 좁아지면 알아서 1단이
+          되므로 새 미디어 쿼리가 필요 없다. 폭은 /about과 같은 760이다(안쪽 여백 30씩을 빼면
+          700이라 320짜리 두 칸 + gap 30 = 670이 들어간다). */}
       <div
         className="stagger-list"
         style={{
