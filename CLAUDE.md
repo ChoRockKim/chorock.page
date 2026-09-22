@@ -607,6 +607,37 @@ freshness signal to prioritise crawling with — a contributing cause of the ind
 own `updatedAt`: the page's content is its post list, so adding a post changes the page while
 leaving the Series document untouched.
 
+**That sitemap was silently frozen at build time for months, and the rule behind it applies to
+every route here, not just metadata ones.** A route with no `export const revalidate` and no
+dynamic API is prerendered **once, at build, and never regenerated** — `app/sitemap.ts` had none,
+so publishing a post did nothing to it. Measured on the live site: `sitemap.xml` was serving an
+`age` of 127,594s (≈35 hours, i.e. the last deploy) and listed 28 posts while `/api/posts`
+(`getCachedPosts`, tag-invalidated on publish) already had 31 — the three newest posts existed,
+were linked from `/posts`, and were simply **absent from the sitemap**. Since Google does not
+participate in IndexNow (`lib/indexnow.ts`), `lastmod` here is its only discovery path, so a post
+that never enters this file is only found if Google happens to re-crawl a list page. Fixed with
+`export const revalidate = 300` (matching every other route) plus `revalidatePath("/sitemap.xml")`
+at both invalidation sites.
+- **`revalidateTag("posts")` does not reach this file.** That tag only invalidates
+  `getCachedPosts`'s `unstable_cache` entry. `listPostSitemapEntries` and `countPublishedPosts`
+  are plain functions that query Mongo directly, so any route built on them is refreshed *only*
+  by its own ISR window — which is why the fix had to name the paths explicitly rather than
+  relying on the tag that was already there.
+- **This is also what made `/posts` link to a 404.** `/posts` derives its page-number links from
+  `getCachedPosts` (31) while `/posts/page/[n]` gates on `countPublishedPosts` behind its own 300s
+  window — the moment a new post crosses a page boundary, `/posts` advertises a
+  `/posts/page/N` that route does not yet agree exists. Observed live: `/posts` linking
+  `/posts/page/4` while that URL returned 404. It self-heals when the window lapses (which is why
+  it reads as intermittent), and it is worse on delete, where the vanished last page keeps being
+  linked. Hence `revalidatePath("/posts/page/[n]", "page")` alongside the others.
+- **The build output's `Revalidate` column is the checklist.** Any route that queries Mongo and
+  shows an empty column there is this bug. Auditing all of them turned up exactly one other:
+  **`app/projects/page.tsx` still has no `revalidate`** while calling `listProjects()`, so the
+  project *list* is frozen at deploy time even though `/projects/[slug]` refreshes every 5m.
+  `npm run seed:projects` writes straight to Mongo and can only ping IndexNow — a standalone tsx
+  process has no Next request context to revalidate from — so editing that array and reseeding
+  updates every detail page while the list keeps showing the old set until the next deploy.
+
 **Both detail pages have a TOC, and it is the same two components.** `components/TableOfContents.tsx`
 (client, scrollspy) and `components/TocMobile.tsx` (a plain `<details>` server component) are used
 by `/posts/[slug]` AND `/projects/[slug]`; neither was modified to be reused. The scrollspy finds
