@@ -13,6 +13,7 @@ import PhotoViewProvider from "@/components/PhotoViewProvider";
 import JsonLd from "@/components/JsonLd";
 import { PROFILE, CONTACT } from "@/lib/profile";
 import { SITE_TITLE, SITE_DESCRIPTION, SITE_URL, SITE_OG_BASE, PERSON_ID } from "@/lib/siteMeta";
+import { Analytics } from "@vercel/analytics/next";
 
 export const metadata: Metadata = {
   // Without this, relative OG image URLs (from opengraph-image.tsx files) resolve against
@@ -140,6 +141,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               <QueryProvider>
                 <Header />
                 <div className="site-content">{children}</div>
+                <Analytics />
                 <Footer />
               </QueryProvider>
             </AuthSessionProvider>

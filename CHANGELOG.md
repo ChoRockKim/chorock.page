@@ -3,6 +3,30 @@
 이 프로젝트의 주요 변경 사항을 버전(작업 단위) 별로 기록합니다. 형식은
 [Keep a Changelog](https://keepachangelog.com/)를 참고합니다.
 
+## [0.11.12] - 2026-09-25
+
+### Added
+
+- **글 목록 카드에 giscus 댓글 수** — 조회수 옆에 말풍선 아이콘 + 숫자로, **댓글이 있는 글에만**
+  붙는다(0이면 구분점까지 아무것도 안 그림). 댓글과 답글을 합산한다.
+  - giscus는 자체 API가 없어 `lib/giscusCounts.ts`가 GitHub GraphQL로 giscus 카테고리의
+    Discussion 전체를 한 번에 읽어 `제목 → 개수` 맵을 만들고 `unstable_cache`로 300초 묶는다.
+    공개 저장소라도 GraphQL은 인증 필수라 서버 전용 `GISCUS_GITHUB_TOKEN`(Discussions
+    read-only)이 새로 필요하다 — `.env.local.example`에 발급 경로 기록. 비어 있으면 캐시를
+    거치지 않고 전부 0(빈 결과가 300초 캐시에 남아 토큰을 넣은 직후에도 0이 나오는 걸 로컬에서
+    겪고 넣은 분기).
+  - Discussion 제목은 실제 저장소에서 확인한 대로 **앞 슬래시 없는 `posts/<slug>`**이고 한글
+    slug는 percent-encoding된 채다. 맵 키와 조회 키를 "슬래시 제거 + 디코드"로 정규화해 어느
+    쪽으로 저장돼 있든 맞춘다.
+  - 클라이언트는 `components/PostCommentCount.tsx` — `PostViews`와 같은 틱 단위 배치(카드 10개에
+    `/api/comment-counts` 요청 1건, 브라우저에서 확인). 카운트업 애니메이션은 쓰지 않는다(0에서
+    시작하면 숨겨졌다 튀어나온다) — 나타날 때 짧은 페이드만(`.card-meta-fade`).
+  - `PostCard`를 쓰는 세 곳(/posts, /about 최근 글, 글 하단 관련 글)에 자동 적용. 시리즈 상세의
+    글 목록은 조회수도 없으므로 여기도 없다.
+
+- **Vercel Analytics** (`@vercel/analytics`) — `app/layout.tsx`에 `<Analytics />`를 마운트해 페이지뷰를
+  Vercel 대시보드에서 본다. 자체 방문자 카운터(`/api/visits`)와는 별개로, 그쪽은 그대로 둔다.
+
 ## [0.11.11] - 2026-09-14
 
 ### Changed

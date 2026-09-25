@@ -344,6 +344,17 @@ timer, or the box renders empty while it animates away.
 **Comments are giscus, not a custom backend.** `components/GiscusComments.tsx` embeds the
 giscus script client-side against `NEXT_PUBLIC_GISCUS_*` env vars; if they're unset it
 renders a setup hint instead of erroring. There is no comment data in MongoDB.
+**Comment counts on list cards** (`components/PostCommentCount.tsx`, mounted in `PostCard`
+right after `PostViews` and batched the same way) come from `lib/giscusCounts.ts`, which reads
+the whole giscus category over GitHub GraphQL (needs server-only `GISCUS_GITHUB_TOKEN`,
+Discussions read-only — GraphQL refuses unauthenticated calls even for public repos) and caches
+the `title → count` map with `unstable_cache` for 300s. giscus's `pathname` mapping stores the
+Discussion title as **`posts/<slug>` with no leading slash and Korean percent-encoded** (checked
+against the real repo), so both sides go through `normalizeTitle()` (strip leading `/`, then
+`decodeURIComponent`). Count = comments + replies. Zero renders nothing at all, including the
+`·` separator, so a missing token or a GitHub outage looks like "no comments", never an error;
+when unconfigured the cache is bypassed so an empty result can't linger for 300s after the
+token is added.
 
 **Clicking a markdown-body image opens a full-screen pinch-zoom viewer** (Naver Blog-style),
 via `react-photo-view` — `components/Mdx.tsx#MDXImage` wraps its `<img>` in `PhotoView`, and

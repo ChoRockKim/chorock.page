@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { PostSummary } from "@/lib/posts";
 import PostViews from "@/components/PostViews";
+import PostCommentCount from "@/components/PostCommentCount";
 
 function formatDate(iso: string) {
   return iso.slice(0, 10).split("-").join(".");
@@ -53,6 +54,7 @@ export default function PostCard({
         <span>·</span>
         <span>{post.readTime}분 읽기</span>
         <PostViews slug={post.slug} />
+        <PostCommentCount slug={post.slug} />
       </div>
     </Link>
   );
