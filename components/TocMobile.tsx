@@ -1,4 +1,5 @@
 import type { Heading } from "@/lib/markdown";
+import HeadingLink from "@/components/HeadingLink";
 
 export default function TocMobile({ headings }: { headings: Heading[] }) {
   if (headings.length === 0) return null;
@@ -16,9 +17,9 @@ export default function TocMobile({ headings }: { headings: Heading[] }) {
       <summary style={{ cursor: "pointer", fontSize: 13, fontWeight: 600 }}>목차</summary>
       <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: "var(--space-2)" }}>
         {headings.map((h) => (
-          <a
+          <HeadingLink
             key={h.id}
-            href={`#${h.id}`}
+            id={h.id}
             style={{
               fontSize: 13,
               color: "var(--color-text)",
@@ -28,7 +29,7 @@ export default function TocMobile({ headings }: { headings: Heading[] }) {
             }}
           >
             {h.text}
-          </a>
+          </HeadingLink>
         ))}
       </div>
     </details>

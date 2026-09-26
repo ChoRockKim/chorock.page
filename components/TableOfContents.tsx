@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { Heading } from "@/lib/markdown";
+import { isPlainLeftClick, scrollToHeading } from "@/components/scrollToHeading";
 
 export default function TableOfContents({ headings }: { headings: Heading[] }) {
   const [activeId, setActiveId] = useState<string | null>(headings[0]?.id ?? null);
@@ -18,12 +19,18 @@ export default function TableOfContents({ headings }: { headings: Heading[] }) {
    * the heading you just clicked lands ~170px ABOVE the band and is never reported as active.
    * The marker stayed on whatever was active before (usually still the first entry).
    *
-   * The lock can't be a fixed timeout, because `html { scroll-behavior: smooth }` (globals.css)
-   * means the trip takes as long as the distance demands — every heading passing through the
-   * band on the way would otherwise drag the marker along and leave it on whatever ended up
-   * there. `scrollend` is the exact signal; the timer is the fallback for browsers without it
-   * and for a click that doesn't actually scroll (already at the target), where `scrollend`
-   * never fires.
+   * The lock can't be a fixed timeout, because the click scrolls smoothly (`scrollToHeading`,
+   * `scrollIntoView({ behavior: "smooth" })`) and the trip takes as long as the distance
+   * demands — every heading passing through the band on the way would otherwise drag the
+   * marker along and leave it on whatever ended up there. `scrollend` is the exact signal; the
+   * timer is the fallback for browsers without it. A click that doesn't actually scroll (already
+   * at the target) never fires `scrollend`, so the lock isn't taken at all in that case —
+   * `scrollToHeading` reports whether a scroll started.
+   *
+   * The links used to be plain anchors riding on `html { scroll-behavior: smooth }`. That
+   * combination froze the whole page for ~4s in the owner's Chrome when the current section's
+   * entry was clicked again (see scrollToHeading.ts) — do not go back to native anchor
+   * navigation here.
    */
   const scrollLocked = useRef(false);
 
@@ -190,12 +197,15 @@ export default function TableOfContents({ headings }: { headings: Heading[] }) {
               ref={(el) => {
                 linkRefs.current[h.id] = el;
               }}
-              // Marks the clicked entry active immediately — the anchor navigation alone never
-              // would (see scrollLocked above). Not preventDefault'd: the native anchor gives
-              // both the smooth scroll (from html's scroll-behavior) and the #hash in the URL.
-              onClick={() => {
+              // Marks the clicked entry active immediately — the scroll alone never would (see
+              // scrollLocked above). The navigation itself is done in JS, not by the anchor
+              // (scrollToHeading.ts explains the Chrome freeze that forced this); modifier and
+              // middle clicks are left to the browser so open-in-new-tab keeps working.
+              onClick={(e) => {
+                if (!isPlainLeftClick(e)) return;
+                e.preventDefault();
                 setActiveId(h.id);
-                lockUntilScrollEnds();
+                if (scrollToHeading(h.id)) lockUntilScrollEnds();
               }}
               style={{
                 textDecoration: "none",

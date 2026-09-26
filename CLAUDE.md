@@ -685,12 +685,26 @@ never reported active, so the marker stayed put (this affected `/posts/[slug]` t
 the TOC has existed). The link's `onClick` now sets `activeId` directly and stamps a `clickedAt`
 ref that makes the observer ignore entries for 700ms, so the settling scroll can't immediately
 override the click. `clickedAt` starts at 0, so the early-return can't fire before a first click —
-plain scroll behavior is unchanged. The lock is released by `scrollend`, not a fixed timer:
-`app/globals.css` sets `html { scroll-behavior: smooth }` (so TOC links glide rather than
-teleport), and a timed lock that expires mid-flight lets every heading the scroll passes through
-drag the marker along. The 1.2s timer is only a fallback for browsers without `scrollend` and for
-a click that doesn't scroll at all — clicking the section you're already on — where `scrollend`
-never fires.
+plain scroll behavior is unchanged. The lock is released by `scrollend`, not a fixed timer: the
+click scrolls smoothly and a timed lock that expires mid-flight lets every heading the scroll
+passes through drag the marker along. The 1.2s timer is only a fallback for browsers without
+`scrollend`; a click that doesn't scroll at all (the section you're already on) takes no lock,
+because `scrollToHeading` reports whether a scroll started.
+
+**TOC links must never be native `<a href="#id">` navigation, and `html { scroll-behavior:
+smooth }` must not come back.** That combination froze the whole page for **4,016–4,017ms** in
+the owner's Chrome 153 whenever the current section's entry was clicked again: zero long tasks,
+clicks still delivered, no frame painted until a `scrollend` fired — the browser sits on a
+zero-distance smooth fragment scroll until some internal timeout (CHANGELOG 0.11.13). Reproduced
+three times with real mouse clicks in the owner's Chrome; **not** reproducible with a synthetic
+`.click()` nor in a clean Playwright Chromium of the same version, so a clean-browser check
+proves nothing here. `components/scrollToHeading.ts` intercepts the click (`preventDefault`,
+plain left-click only), scrolls with `scrollIntoView({ behavior: "smooth" })` — which honours
+`scroll-margin-top`, verified to land on the same pixel — and mirrors the hash with
+`history.replaceState` only, so nothing is pushed for a same-document scroll. `TocMobile`'s
+links go through `components/HeadingLink.tsx` for the same reason. The remaining smooth scrolls
+(`ScrollToTopButton`, `PostsListClient`) are explicit `window.scrollTo` calls and were measured
+clean.
 
 **`components/RevealBlocks.tsx` exists because a ratio `threshold` is the wrong tool for a tall
 element.** `/projects/[slug]`'s overview used to be one `<ScrollReveal>`, and long projects showed

@@ -3,6 +3,31 @@
 이 프로젝트의 주요 변경 사항을 버전(작업 단위) 별로 기록합니다. 형식은
 [Keep a Changelog](https://keepachangelog.com/)를 참고합니다.
 
+## [0.11.13] - 2026-09-26
+
+### Fixed
+
+- **목차의 "지금 읽는 섹션" 항목을 다시 클릭하면 화면 전체가 4초 멈추던 문제.** 사용자 Chrome
+  (153, Mac, GPU 가속 정상)에서 실제 마우스 클릭으로 3회 재현: 첫 클릭은 정상(해시 변경 + 부드러운
+  스크롤), **같은 항목을 재클릭하면 `popstate`만 뜨고 그 직후 rAF가 4,016~4,017ms 동안 한 프레임도
+  안 돈다.** 롱태스크 0 — 메인 스레드는 살아 있고 클릭도 접수되는데 화면만 멈추고, `scrollend`가
+  뜨면서 풀린다. 즉 JS가 아니라 **"이미 제자리인 fragment로의 CSS smooth 스크롤"**을 브라우저가
+  타임아웃까지 붙들고 있는 Chrome 동작이다. 원인은 네이티브 `<a href="#id">` 내비게이션 +
+  `html { scroll-behavior: smooth }`의 조합.
+  - 같은 페이지 A/B(사용자 Chrome, 실제 클릭): `scroll-behavior: auto`로 바꾸면 멈춤 0,
+    앵커 기본 동작을 막고 `scrollIntoView({ behavior: "smooth" })`로 대체해도 멈춤 0 — 도착 위치
+    (306px)·`scrollend`·URL 해시 모두 원본과 동일.
+  - 깨끗한 Playwright Chromium(같은 153, 헤드 모드, 실제 GPU)에서는 **어느 시나리오로도 재현되지
+    않았다.** 합성 `.click()`으로도 안 난다. Chrome 안정판 프로필에서만 나는 버그라 "내 브라우저에선
+    멀쩡"으로 넘기기 쉽다 — 검증은 사용자 Chrome에서 실제 클릭으로 해야 한다.
+  - 수정: `components/scrollToHeading.ts` — 목차 링크는 `href`를 유지하되 클릭을 JS가 가로채
+    `scrollIntoView`로 굴리고 해시는 `history.replaceState`로만 반영(네이티브 앵커처럼 히스토리를
+    쌓지 않는다 — 뒤로가기가 헤딩 사이를 되감던 것도 사라짐). `TableOfContents`는 실제로 스크롤이
+    시작될 때만 스크롤스파이 락을 건다. `TocMobile`은 새 `HeadingLink`(client)로 링크만 교체.
+    `html { scroll-behavior: smooth }`는 삭제 — 부드러운 스크롤은 전부 JS가 명시적으로 한다.
+  - 다크모드 토글·검색 열기·공유·복사·맨 위로 버튼도 같은 방식으로 재봤다: 깨끗한 Chromium에서 최대
+    66ms라 "버튼이 순간 안 먹는" 주범은 아니다. 그 증상 중 목차(현재 섹션) 클릭은 이 버그다.
+
 ## [0.11.12] - 2026-09-25
 
 ### Added
