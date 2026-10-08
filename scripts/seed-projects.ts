@@ -170,13 +170,21 @@ const projects = [
         ],
       },
     ],
-    coverImage: "/projects/hufs-clock/campus-select.webp",
+    coverImage: "/projects/hufs-clock/intro.webp",
     coverImageFit: "cover",
     overviewMd: `한국외국어대학교 학생을 위한 크롬 새 탭 익스텐션입니다. 종강까지 남은 시간을 실시간으로 보여주고, 학식·도서관 여석·날씨·학사일정·시간표를 새 탭 하나에 모았습니다. 약 140명의 학우가 쓰고 있고, 2025년 11월부터 지금까지 유지보수하며 2.2.0까지 올렸습니다.
 
 ## 맡은 일
 
 기획부터 배포까지 1인 개발입니다. React로 익스텐션을 만들고, 학교 사이트에서 학식·도서관 여석·학사일정을 긁어오는 FastAPI 서버를 따로 두어 Vercel에 올렸습니다. 크롬 웹스토어 심사와 버전 릴리즈도 직접 했습니다.
+
+## 아키텍처
+
+![아키텍처 — React 컴포넌트 · Zustand · Chrome Storage API · Vercel 크롤링 서버의 데이터 흐름](/projects/hufs-clock/architecture.webp)
+
+- 화면은 React 컴포넌트가 그리고, 사용자 설정·배경화면 같은 상태는 Zustand 전역 스토어 하나가 들고 있습니다. 비동기 처리와 탭 간 동기화를 한곳에서 다루려고 전역으로 뺐습니다.
+- Zustand는 Chrome Storage API와 양방향으로 붙어 있습니다. 설정이 바뀌면 저장하고, 새 탭이 열리면 저장된 유저 정보와 배경화면을 복원합니다. 아래 "문제 해결"의 설정 초기화 버그가 바로 이 경계에서 났습니다.
+- 공지사항·학식·도서관 여석은 Vercel에 올린 크롤링 서버가 JSON으로 내려주고, 컴포넌트가 React Query로 요청해 캐시합니다. 크롤링 결과가 익스텐션 코드와 분리돼 있어 학교 페이지 구조가 바뀌어도 서버만 고치면 됩니다.
 
 ## 성과와 한계
 
@@ -209,13 +217,17 @@ const projects = [
 
 ## 스크린샷
 
-![메인 화면](/projects/hufs-clock/seoul-main.webp)
+![공지와 학식 — 새 탭에서 바로 보는 학교 공지, 오늘의 학식, 종강까지 남은 시간](/projects/hufs-clock/notice-meal.webp)
 
-![야간 모드](/projects/hufs-clock/seoul-night.webp)
+![바로가기 — 화면 오른쪽 끝에 접혀 있는 즐겨찾기 열기·고정·추가](/projects/hufs-clock/shortcuts.webp)
 
-![위젯 화면](/projects/hufs-clock/widget.webp)
+![설정 — 이름·학번, 북마크 수, 새 탭 인삿말](/projects/hufs-clock/settings.webp)
 
-![타임라인](/projects/hufs-clock/timeLine.webp)
+![위젯 — 열람실 빈자리, 캠퍼스 날씨, 메뉴 뽑기, 내 시간표](/projects/hufs-clock/widgets.webp)
+
+![캠퍼스 선택과 다크 모드 — 서울·글로벌 캠퍼스별 주간·야간 배경](/projects/hufs-clock/campus-dark.webp)
+
+![개발자 소개와 피드백 보내기](/projects/hufs-clock/feedback.webp)
 `,
     demoUrl: "https://hufsclock2026.vercel.app/",
     repoUrl: "https://github.com/ChoRockKim/HUFS_Clock_REACT_CHROME_EXTENSION",
