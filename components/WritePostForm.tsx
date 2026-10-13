@@ -425,11 +425,16 @@ export default function WritePostForm({
   };
 
   // Typed code gets the same treatment as pasted code: once the author pauses inside a closed
-  // fence that has no language yet, fill it in from the content. The owner writes fences by
-  // typing ``` twice rather than with the toolbar, so paste-only detection never fired for them.
-  // Only the fence at the caret — opening an old post for editing must not relabel every bare
-  // fence in it. A content string is tried once: if the author deletes the label it stays gone.
+  // fence, label it from the content. The owner writes fences by typing ``` twice rather than with
+  // the toolbar, so paste-only detection never fired for them. Only the fence at the caret —
+  // opening an old post for editing must not relabel every bare fence in it.
+  // A label *we* filled keeps being re-checked while the author writes (a block that starts as a
+  // bare `class X {}` reads differently once types show up); detection is a few regexes, ~2ms on
+  // 80 lines, and only runs after a 1s pause. A label the author typed, changed, or restored with
+  // ⌘Z no longer matches `autoLabel` and is never touched. A label they *deleted* stays deleted
+  // for that content (`labeledFences`).
   const labeledFences = useRef(new Set<string>());
+  const autoLabel = useRef<{ langStart: number; lang: string } | null>(null);
   useEffect(() => {
     const timer = setTimeout(() => {
       const ed = editor();
@@ -437,14 +442,22 @@ export default function WritePostForm({
       const value = ed.getValue();
       const { s, e: selEnd } = ed.getSelection();
       const fence = findFence(value, s);
-      if (!fence || !fence.closed || fence.lang) return;
+      if (!fence || !fence.closed) return;
+      const auto = autoLabel.current;
+      const ours = !!fence.lang && auto?.langStart === fence.langStart && auto.lang === fence.lang;
+      if (fence.lang && !ours) return;
       const content = value.slice(fence.contentStart, fence.contentEnd);
-      if (content.trim().length < 12 || labeledFences.current.has(content)) return;
-      labeledFences.current.add(content);
+      if (content.trim().length < 12) return;
+      if (!fence.lang) {
+        if (labeledFences.current.has(content)) return;
+        labeledFences.current.add(content);
+      }
       const lang = detectCodeLang(content);
-      if (!lang) return;
-      const shift = (p: number) => (p >= fence.langStart ? p + lang.length : p);
-      applyEdit({ from: fence.langStart, to: fence.langStart, text: lang, selStart: shift(s), selEnd: shift(selEnd) });
+      if (!lang || lang === fence.lang) return;
+      const delta = lang.length - fence.lang.length;
+      const shift = (p: number) => (p > fence.langStart ? p + delta : p);
+      applyEdit({ from: fence.langStart, to: fence.langEnd, text: lang, selStart: shift(s), selEnd: shift(selEnd) });
+      autoLabel.current = { langStart: fence.langStart, lang };
     }, 1000);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps

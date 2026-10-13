@@ -7,7 +7,6 @@ import {
   EditorView,
   ViewPlugin,
   WidgetType,
-  drawSelection,
   keymap,
   placeholder as placeholderExt,
   type DecorationSet,
@@ -107,6 +106,35 @@ class ImageWidget extends WidgetType {
   }
 }
 
+/** The published code block's header bar (components/CodeBlock.tsx): traffic-light dots and the
+ *  language label. An unlabeled fence renders as tsx on the site (defaultLang), so it says so. */
+class FenceHeaderWidget extends WidgetType {
+  constructor(readonly lang: string) {
+    super();
+  }
+  eq(other: FenceHeaderWidget) {
+    return other.lang === this.lang;
+  }
+  toDOM() {
+    const bar = document.createElement("span");
+    bar.className = "cm-md-fence-bar";
+    for (const color of ["#ff5f57", "#ffbd2e", "#28c840"]) {
+      const dot = document.createElement("span");
+      dot.className = "cm-md-fence-dot";
+      dot.style.background = color;
+      bar.appendChild(dot);
+    }
+    const label = document.createElement("span");
+    label.className = "cm-md-fence-lang";
+    label.textContent = this.lang || "tsx";
+    bar.appendChild(label);
+    return bar;
+  }
+  ignoreEvent() {
+    return false;
+  }
+}
+
 const hide = Decoration.replace({});
 const HEADING = /^ATXHeading([1-6])$/;
 
@@ -193,12 +221,31 @@ function buildDecorations(view: EditorView): DecorationSet {
             return;
           }
           case "FencedCode": {
+            // Drawn like the published block: header bar, numbered body lines, no visible fences.
+            // Each fence line shows its raw ``` text only while the caret is on that line, so
+            // the language stays one click away from being edited.
             const first = doc.lineAt(node.from).number;
             const last = doc.lineAt(node.to).number;
-            for (let n = first; n <= last; n++) {
-              const line = doc.line(n);
-              const edge = n === first ? " cm-md-fence-first" : n === last ? " cm-md-fence-last" : "";
-              decos.push(Decoration.line({ class: `cm-md-fence${edge}` }).range(line.from));
+            const closing = node.node.lastChild;
+            const closed = !!closing && closing.name === "CodeMark" && doc.lineAt(closing.from).number !== first;
+            const bodyLast = closed ? last - 1 : last;
+            const digits = String(Math.max(1, bodyLast - first)).length;
+            const head = doc.line(first);
+            decos.push(Decoration.line({ class: "cm-md-fence cm-md-fence-head" }).range(head.from));
+            if (!active.has(first)) {
+              const info = node.node.getChild("CodeInfo");
+              const lang = info ? doc.sliceString(info.from, info.to).toLowerCase() : "";
+              decos.push(Decoration.replace({ widget: new FenceHeaderWidget(lang) }).range(head.from, head.to));
+            }
+            for (let n = first + 1; n <= bodyLast; n++) {
+              const edge = `${n === first + 1 ? " is-first" : ""}${n === bodyLast ? ` is-last${closed ? " has-tail" : ""}` : ""}`;
+              const cls = `cm-md-fence cm-md-fence-body cm-md-fence-d${digits}${edge}`;
+              decos.push(Decoration.line({ class: cls }).range(doc.line(n).from));
+            }
+            if (closed) {
+              const tail = doc.line(last);
+              decos.push(Decoration.line({ class: "cm-md-fence cm-md-fence-tail" }).range(tail.from));
+              if (!active.has(last) && tail.to > tail.from) decos.push(hide.range(tail.from, tail.to));
             }
             return;
           }
@@ -231,9 +278,13 @@ const theme = EditorView.theme({
   ".cm-scroller": { fontFamily: "var(--font-body)", lineHeight: "1.8", overflow: "auto" },
   ".cm-content": { padding: "var(--space-3) var(--space-4)", caretColor: "var(--color-text)" },
   ".cm-cursor": { borderLeftColor: "var(--color-text)" },
-  "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection": {
-    backgroundColor: "color-mix(in srgb, var(--color-accent) 30%, transparent) !important",
-  },
+  // Native selection, not drawSelection(): CodeMirror's drawn selection sits in a layer *behind*
+  // the text, so the code block's opaque line backgrounds covered it and dragging inside a block
+  // showed nothing. The native highlight paints over backgrounds.
+  ".cm-content ::selection": { backgroundColor: "color-mix(in srgb, var(--color-accent) 35%, transparent)" },
+  // Both the line itself (bare text between tokens, e.g. spaces) and the token spans inside it —
+  // with only the descendant selector the gaps took the prose color and the highlight was striped.
+  ".cm-md-fence::selection, .cm-md-fence ::selection": { backgroundColor: "rgb(56 139 253 / 0.4)" },
   ".cm-placeholder": { color: "var(--color-text)", opacity: "0.35" },
   ".cm-md-h1": { fontSize: "26px", fontWeight: "600", lineHeight: "1.5", paddingTop: "0.6em" },
   ".cm-md-h2": { fontSize: "22px", fontWeight: "600", lineHeight: "1.5", paddingTop: "0.6em" },
@@ -252,18 +303,56 @@ const theme = EditorView.theme({
     paddingLeft: "12px !important",
     background: "var(--color-accent-100)",
   },
+  // Mirrors .code-block / .code-block-header / .code-block pre in globals.css: #3a3a3a header,
+  // github-dark #24292e body, 13px/1.6 mono, line-number gutter, hovered-line highlight.
   ".cm-md-fence": {
     fontFamily: "var(--font-mono)",
-    fontSize: "13.5px",
+    fontSize: "13px",
     lineHeight: "1.6",
     background: "#24292e",
     color: "#e1e4e8",
-    paddingLeft: "14px !important",
-    paddingRight: "14px !important",
+    caretColor: "#e1e4e8",
+    paddingLeft: "15px !important",
+    paddingRight: "15px !important",
   },
-  ".cm-md-fence-first": { borderRadius: "8px 8px 0 0", paddingTop: "6px", color: "#8b949e" },
-  ".cm-md-fence-last": { borderRadius: "0 0 8px 8px", paddingBottom: "6px", color: "#8b949e" },
-  ".cm-md-fence .cm-cursor": { borderLeftColor: "#e1e4e8" },
+  ".cm-md-fence-head": {
+    background: "#3a3a3a",
+    borderRadius: "8px 8px 0 0",
+    padding: "8px 15px !important",
+    lineHeight: "1.4",
+    color: "#9ca3af",
+    counterReset: "cmfence",
+  },
+  ".cm-md-fence-bar": { display: "inline-flex", alignItems: "center", gap: "8px", verticalAlign: "middle" },
+  ".cm-md-fence-dot": { width: "12px", height: "12px", borderRadius: "50%", display: "inline-block" },
+  ".cm-md-fence-lang": {
+    fontSize: "11px",
+    color: "#9ca3af",
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+    marginLeft: "2px",
+  },
+  ".cm-md-fence-body": { counterIncrement: "cmfence" },
+  ".cm-md-fence-body.is-first": { paddingTop: "16px" },
+  // An unclosed block has no tail line, so its last body line carries the bottom padding.
+  ".cm-md-fence-body.is-last:not(.has-tail)": { paddingBottom: "16px" },
+  ".cm-md-fence-body::before": {
+    content: "counter(cmfence)",
+    display: "inline-block",
+    width: "1ch",
+    marginRight: "1.25rem",
+    textAlign: "right",
+    color: "#636b78",
+    userSelect: "none",
+  },
+  ".cm-md-fence-d2::before": { width: "2ch" },
+  ".cm-md-fence-d3::before": { width: "3ch" },
+  // The (hidden) closing ``` line doubles as the block's bottom padding.
+  ".cm-md-fence-tail": { borderRadius: "0 0 8px 8px", color: "#8b949e", lineHeight: "1", paddingBottom: "6px" },
+  "@media (hover: hover)": {
+    ".cm-md-fence-body:hover": { backgroundImage: "linear-gradient(rgb(255 255 255 / 0.06), rgb(255 255 255 / 0.06))" },
+    ".cm-md-fence-body:hover::before": { color: "#d4d4d8" },
+  },
   ".cm-md-image": { display: "block", margin: "6px 0" },
   ".cm-md-image img": { maxWidth: "100%", maxHeight: "360px", borderRadius: "6px", display: "block" },
   ".cm-md-image.is-uploading": { fontSize: "13px", opacity: "0.6" },
@@ -307,7 +396,6 @@ export default function LiveMarkdownEditor({ value, onChange, adapterRef, onKey,
           }),
           history(),
           keymap.of([...historyKeymap, ...defaultKeymap]),
-          drawSelection(),
           EditorView.lineWrapping,
           // addKeymap: false — Enter/Backspace list handling comes from the shared shortcut table
           // so both modes behave identically.

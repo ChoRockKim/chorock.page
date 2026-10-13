@@ -481,7 +481,11 @@ touches the DOM. Four non-obvious constraints, each hit or measured while buildi
   detected too** (the owner writes fences by typing ``` twice, never the toolbar, so paste-only
   detection never fired): a 1s-idle effect labels the closed, language-less fence *at the caret*
   only — never every bare fence in an old post opened for editing — and remembers each content
-  string it tried, so a label the author deletes stays deleted.
+  string it tried, so a label the author deletes stays deleted. A label the effect itself filled
+  (`autoLabel`: same `langStart`, same text) keeps being re-detected as the block grows; any
+  label the author typed, changed or ⌘Z-restored no longer matches and is left alone. flourite
+  also over-reads `class X {}` as C#/Java, so those two are only accepted with a language-specific
+  marker (`using System`, `System.out`, …) and otherwise fall back to JS/TS.
 
 **The write form has two editors: 분할 (textarea + server preview) and 라이브 (Obsidian-style,
 `components/LiveMarkdownEditor.tsx`, CodeMirror 6), chosen per browser via `localStorage`

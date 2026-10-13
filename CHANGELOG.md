@@ -3,6 +3,33 @@
 이 프로젝트의 주요 변경 사항을 버전(작업 단위) 별로 기록합니다. 형식은
 [Keep a Changelog](https://keepachangelog.com/)를 참고합니다.
 
+## [0.12.1] - 2026-10-13
+
+### Changed
+
+- **자동으로 채운 코드 블록 언어는 쓰는 동안 계속 다시 판단한다.** 처음 몇 줄만 보고 붙인 이름이
+  내용이 늘면서 틀려지는 경우가 있어서다(예: `class` + `this`로 시작해 javascript였다가 타입 선언이
+  붙으면 typescript). 커서가 있는 블록만, 1초 멈췄을 때만 돈다. 탐지 한 번은 80줄 기준 약 2ms다.
+  직접 쓰거나 고친 언어, ⌘Z로 되돌린 언어는 더 이상 건드리지 않는다. 실제 키 입력으로 확인:
+  javascript → typescript 자동 전환, `ts`로 직접 고친 뒤에는 내용을 더 써도 `ts` 유지.
+
+### Fixed
+
+- **`class`를 쓰면 언어를 csharp로 잡던 문제.** flourite는 `class X { … }` 모양이면 C#이나 Java로
+  붙였다(측정: 평범한 JS 클래스 → csharp, `class A extends B` → java, SwiftUI 클래스 → csharp).
+  C#·Java만의 표시(`using System`, `namespace`, `{ get; set; }`, `System.out`, `public static void
+  main` 등)가 없으면 JS/TS로 본다. `@Published`·`ObservableObject`·`@Observable`은 Swift로 먼저 잡는다.
+  진짜 C#·Java 코드는 그대로 인식된다.
+
+- **라이브 모드의 코드 블록을 실제 글과 같은 모양으로.** 여는 ` ```lang ` 줄은 커서가 없으면 실제 글의
+  헤더 바(신호등 점 + 언어 이름, #3a3a3a)로 그리고, 본문 줄에는 줄 번호(CSS counter)와 마우스를 올린
+  줄의 강조를 단다. 닫는 ` ``` `는 숨긴다. 배경 #24292e, 13px/1.6 고정폭 글꼴, 안쪽 여백도 발행된
+  `.code-block`과 맞췄다. 펜스 줄은 커서가 그 줄에 오면 원문이 다시 보여서 언어를 바로 고칠 수 있다.
+- **라이브 모드 코드 블록 안에서 드래그 선택이 안 보이던 문제.** CodeMirror의 `drawSelection()`은
+  선택 영역을 글자 *뒤* 층에 그린다. 그래서 코드 블록 줄의 불투명한 배경이 그 층을 덮었다. 브라우저
+  기본 선택 표시로 바꿨다. 코드 블록용 선택 색은 줄 요소 자신과 그 안의 토큰 양쪽에 걸었다. 처음에는
+  토큰에만 걸어서 공백 부분이 다른 색으로 칠해져 줄무늬처럼 보였다. 실제 드래그로 확인했다.
+
 ## [0.12.0] - 2026-10-13
 
 ### Added

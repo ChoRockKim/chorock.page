@@ -20,7 +20,7 @@ export function detectCodeLang(code: string): string | null {
   const src = code.trim();
   if (src.length < 8) return null;
 
-  if (/^\s*import (SwiftUI|Foundation|UIKit)\b|:\s*View\s*\{|\bsome View\b|@State\b|\bguard let\b/m.test(src)) {
+  if (/^\s*import (SwiftUI|Foundation|UIKit)\b|:\s*View\s*\{|\bsome View\b|@State\b|@Published\b|@Observable\b|\bObservableObject\b|\bguard let\b/m.test(src)) {
     return "swift";
   }
   const lines = src.split("\n").filter((l) => l.trim());
@@ -44,6 +44,15 @@ export function detectCodeLang(code: string): string | null {
   // flourite reaches for C on short snippets of anything brace-and-semicolon shaped (a one-line
   // SQL query came back "c"); this blog writes no C, so demand the one unmistakable sign.
   if ((language === "c" || language === "cpp") && !/^\s*#include\b/m.test(src)) return null;
+  // Same story for C# and Java: flourite labels any `class X { ... }` with either (measured: a plain
+  // JS class came back "csharp", a `class A extends B` "java"). A class with none of their
+  // unmistakable markers is far more likely JS/TS in this blog.
+  const looksCSharp = /\busing System\b|\bnamespace\s+\w|\{\s*get;|\bConsole\.|\bpublic\s+(static\s+)?(void|int|string|bool)\s/.test(src);
+  const looksJava = /\bpublic\s+static\s+void\s+main\b|\bSystem\.out\.|^\s*import\s+java\.|^\s*package\s+[\w.]+;/m.test(src);
+  if ((language === "csharp" && !looksCSharp) || (language === "java" && !looksJava)) {
+    if (jsLike || /\bclass\s+\w+/.test(src)) return hasTypes ? "typescript" : "javascript";
+    return null;
+  }
   return language;
 }
 
