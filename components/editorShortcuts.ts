@@ -234,10 +234,11 @@ export function handleEnter(value: string, s: number, e: number): Edit | null {
 const PAIRS: Record<string, string> = { "(": ")", "[": "]", "{": "}", '"': '"' };
 const CLOSERS = new Set([")", "]", "}", '"']);
 
-/** Typing one of `( [ { "`. Wraps a selection; otherwise inserts the pair when the next
- *  character is whitespace, end of line or a closing bracket (so typing `(` in front of a word
- *  doesn't produce `()word`). Typing a closer that is already the next character steps over
- *  it instead of doubling it. `"` only pairs when it isn't glued to a preceding word. */
+/** Typing one of `( [ { "`. Wraps a selection; otherwise always inserts the pair, even with
+ *  text right after the caret (an earlier version skipped that case, VSCode-style, and it read
+ *  as "auto-close randomly doesn't work"). Typing a closer that is already the next character
+ *  steps over it instead of doubling it. `"` only pairs when it isn't glued to a preceding word,
+ *  since there it is almost always the closing quote. */
 export function autoPair(value: string, s: number, e: number, ch: string): Edit | null {
   const next = value[s] ?? "";
   if (s === e && CLOSERS.has(ch) && next === ch) {
@@ -249,7 +250,6 @@ export function autoPair(value: string, s: number, e: number, ch: string): Edit 
     const sel = value.slice(s, e);
     return { from: s, to: e, text: ch + sel + close, selStart: s + 1, selEnd: e + 1 };
   }
-  if (next && !/[\s)\]},.;:]/.test(next)) return null;
   if (ch === '"' && /[\p{L}\p{N}_"]/u.test(value[s - 1] ?? "")) return null;
   return { from: s, to: s, text: ch + close, selStart: s + 1, selEnd: s + 1 };
 }

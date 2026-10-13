@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ComponentPropsWithoutRef } from "react";
+import { useRef, useState, type ComponentPropsWithoutRef } from "react";
 
 /**
  * Replaces MDX's <pre> (rehype-pretty-code wraps it in <figure
@@ -13,11 +13,10 @@ export default function CodeBlock(props: ComponentPropsWithoutRef<"pre">) {
   const preRef = useRef<HTMLPreElement>(null);
   const [copied, setCopied] = useState(false);
   const [failed, setFailed] = useState(false);
-  const [lang, setLang] = useState<string | null>(null);
-
-  useEffect(() => {
-    setLang(preRef.current?.dataset.language ?? null);
-  }, []);
+  // Read from props, not once from the DOM after mount: the write form's live preview re-renders
+  // this same instance as the fence changes, so a mount-time read froze the badge at whatever
+  // the fence first said (the toolbar's `tsx`) after the author retyped it as `python`.
+  const lang = (rest as Record<string, unknown>)["data-language"] as string | undefined;
 
   const onCopy = async () => {
     const text = preRef.current?.textContent ?? "";
