@@ -136,10 +136,13 @@ export type Fence = {
   /** Range of the fence's body: just after the opening line, up to the closing line. */
   contentStart: number;
   contentEnd: number;
+  /** False for a fence still missing its closing ``` (it then runs to the end of the text). */
+  closed: boolean;
 };
 
 /** The fenced code block containing `pos`, if any. A fence opens and closes on lines starting
- *  with ``` (or ~~~); an unclosed fence runs to the end of the document. */
+ *  with ``` (or ~~~); an unclosed fence runs to the end of the document. A caret on the closing
+ *  ``` line still counts as inside — that is where it sits right after the author closes it. */
 export function findFence(value: string, pos: number): Fence | null {
   const re = /^ {0,3}(`{3,}|~{3,})([^\n]*)$/gm;
   let open: { lineEnd: number; langStart: number; lang: string; marker: string } | null = null;
@@ -154,13 +157,14 @@ export function findFence(value: string, pos: number): Fence | null {
       const langStart = lineEnd - info.length + (info.length - info.trimStart().length);
       open = { lineEnd, langStart, lang, marker: m[1] };
     } else if (m[1][0] === open.marker[0] && m[1].length >= open.marker.length && !m[2].trim()) {
-      if (pos > open.lineEnd && pos <= lineStart) {
+      if (pos > open.lineEnd && pos <= lineEnd) {
         return {
           langStart: open.langStart,
           langEnd: open.langStart + open.lang.length,
           lang: open.lang,
           contentStart: open.lineEnd + 1,
           contentEnd: lineStart,
+          closed: true,
         };
       }
       if (lineStart >= pos) return null;
@@ -174,6 +178,7 @@ export function findFence(value: string, pos: number): Fence | null {
       lang: open.lang,
       contentStart: open.lineEnd + 1,
       contentEnd: value.length,
+      closed: false,
     };
   }
   return null;
@@ -195,8 +200,9 @@ export function handleEnter(value: string, s: number, e: number): Edit | null {
   if (fence) {
     if (s < fence.contentStart) return null;
     const indent = before.match(/^[ \t]*/)![0];
-    const unit = /^(python|py)$/.test(fence.lang) ? "    " : "  ";
     const last = before.trimEnd().slice(-1);
+    // A fence with no language yet that just opened a `:` block is almost certainly Python.
+    const unit = /^(python|py)$/.test(fence.lang) || (!fence.lang && last === ":") ? "    " : "  ";
     const opens = last === ":" || last in OPEN_TO_CLOSE;
     if (!opens) {
       // A bare Enter on an unindented line is just a newline — let the browser do it.

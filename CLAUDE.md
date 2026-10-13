@@ -477,7 +477,11 @@ touches the DOM. Four non-obvious constraints, each hit or measured while buildi
   `flourite` alone mislabels exactly what this blog writes (TSX→html, an npm/cd script→lua,
   SwiftUI→javascript, one-line SQL→c), so Swift/shell/SQL/JSX are matched first and flourite is
   only trusted above a score floor. Returning null (leave the label) is always preferred to a
-  wrong label. Write-time only — rendering still uses `defaultLang: "tsx"`.
+  wrong label. Write-time only — rendering still uses `defaultLang: "tsx"`. **Typed code is
+  detected too** (the owner writes fences by typing ``` twice, never the toolbar, so paste-only
+  detection never fired): a 1s-idle effect labels the closed, language-less fence *at the caret*
+  only — never every bare fence in an old post opened for editing — and remembers each content
+  string it tried, so a label the author deletes stays deleted.
 
 **Header search** (`app/api/search/route.ts` + `lib/posts.ts#searchPosts`) does a regex
 match against title/summary/tags server-side — it is not a full-text/Atlas Search index.

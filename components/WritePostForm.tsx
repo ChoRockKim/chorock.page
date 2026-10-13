@@ -447,6 +447,30 @@ export default function WritePostForm({
     return pos + placeholder.length + 1;
   };
 
+  // Typed code gets the same treatment as pasted code: once the author pauses inside a closed
+  // fence that has no language yet, fill it in from the content. The owner writes fences by
+  // typing ``` twice rather than with the toolbar, so paste-only detection never fired for them.
+  // Only the fence at the caret — opening an old post for editing must not relabel every bare
+  // fence in it. A content string is tried once: if the author deletes the label it stays gone.
+  const labeledFences = useRef(new Set<string>());
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const el = bodyRef.current;
+      if (!el || document.activeElement !== el) return;
+      const { value, selectionStart: s, selectionEnd: selEnd } = el;
+      const fence = findFence(value, s);
+      if (!fence || !fence.closed || fence.lang) return;
+      const content = value.slice(fence.contentStart, fence.contentEnd);
+      if (content.trim().length < 12 || labeledFences.current.has(content)) return;
+      labeledFences.current.add(content);
+      const lang = detectCodeLang(content);
+      if (!lang) return;
+      const shift = (p: number) => (p >= fence.langStart ? p + lang.length : p);
+      applyEdit({ from: fence.langStart, to: fence.langStart, text: lang, selStart: shift(s), selEnd: shift(selEnd) });
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [body]);
+
   // Pasting code into an *empty* fence (the toolbar's "코드 블록" then ⌘V) fills in the fence's
   // language from the snippet. Only empty fences: a block that already has content had its label
   // chosen deliberately. detectCodeLang returns null when unsure, and the label is left alone.
@@ -1012,7 +1036,7 @@ export default function WritePostForm({
                   <path d="M92 104 68 128l24 24M164 104l24 24-24 24" stroke="currentColor" strokeWidth="14" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>,
                 "코드 블록",
-                () => insertBlock("```tsx\n\n```", 7)
+                () => insertBlock("```\n\n```", 4)
               )}
               <details className="wp-shortcuts">
                 <summary className="wp-toolbar-btn" title="단축키" aria-label="단축키 보기">?</summary>
