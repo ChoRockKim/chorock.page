@@ -267,3 +267,110 @@ export function deletePair(value: string, s: number, e: number): Edit | null {
   if (!PAIRS[open] || value[s] !== PAIRS[open]) return null;
   return { from: s - 1, to: s + 1, text: "", selStart: s - 1, selEnd: s - 1 };
 }
+
+/* — Tab — */
+
+/** Tab / Shift+Tab. Collapsed caret: Tab inserts two spaces, Shift+Tab removes up to two leading
+ *  spaces from the line. A selection indents/outdents every line it touches, like a code editor. */
+export function tabEdit(value: string, s: number, e: number, shift: boolean): Edit | null {
+  if (s === e) {
+    if (!shift) return { from: s, to: s, text: "  ", selStart: s + 2, selEnd: s + 2 };
+    const { start, end } = lineRange(value, s, s);
+    const removed = value.slice(start, end).match(/^ {1,2}/)?.[0].length ?? 0;
+    if (removed === 0) return null;
+    const pos = Math.max(start, s - removed);
+    return { from: start, to: start + removed, text: "", selStart: pos, selEnd: pos };
+  }
+  const start = value.lastIndexOf("\n", s - 1) + 1;
+  const selected = value.slice(start, e);
+  const transformed = shift ? selected.replace(/^ {1,2}/gm, "") : selected.replace(/^/gm, "  ");
+  if (transformed === selected) return null;
+  return { from: start, to: e, text: transformed, selStart: start, selEnd: start + transformed.length };
+}
+
+/* — keyboard → Edit — */
+
+export type KeyInput = {
+  code: string;
+  key: string;
+  metaKey: boolean;
+  ctrlKey: boolean;
+  altKey: boolean;
+  shiftKey: boolean;
+};
+
+/**
+ * The whole shortcut table, shared by the split-mode <textarea> and the live CodeMirror editor.
+ * `handled` means the key belongs to the editor (preventDefault) even when `edit` is null —
+ * e.g. Tab at a line with nothing to outdent, or ⌥↑ on the first line. `stop` means the event
+ * must not reach window: Header.tsx opens site search on (meta|ctrl)+K and ignores Shift.
+ * Matched on `code`, not `key` — with the Korean input source on, `key` for ⌘B can be a jamo.
+ */
+export function shortcutEdit(
+  k: KeyInput,
+  value: string,
+  s: number,
+  e: number,
+  isMac: boolean,
+): { edit: Edit | null; handled: boolean; stop: boolean } {
+  const mod = isMac ? k.metaKey : k.ctrlKey;
+  const none = { edit: null, handled: false, stop: false };
+  const done = (edit: Edit | null, stop = false) => ({ edit, handled: true, stop });
+
+  if (k.key === "Tab" && !mod && !k.altKey) return done(tabEdit(value, s, e, k.shiftKey));
+
+  if (mod && !k.altKey) {
+    if (k.code === "KeyB" && !k.shiftKey) return done(toggleWrap(value, s, e, "**"));
+    if (k.code === "KeyI" && !k.shiftKey) return done(toggleWrap(value, s, e, "*"));
+    if (k.code === "KeyE" && !k.shiftKey) return done(toggleWrap(value, s, e, "`"));
+    if (k.code === "KeyS" && k.shiftKey) return done(toggleWrap(value, s, e, "~~"));
+    if (k.code === "KeyK") return done(k.shiftKey ? deleteLines(value, s, e) : insertLink(value, s, e), true);
+    return none;
+  }
+  if (mod && k.altKey && /^Digit[123]$/.test(k.code)) {
+    return done(setHeading(value, s, Number(k.code.slice(-1)) + 1));
+  }
+  if (k.altKey && !mod && (k.code === "ArrowUp" || k.code === "ArrowDown")) {
+    const dir = k.code === "ArrowUp" ? "up" : "down";
+    // Swallowed even at the first/last line, where there's nowhere to move — otherwise the
+    // caret jumps to the paragraph boundary (⌥↑'s native meaning on macOS).
+    return done(k.shiftKey ? duplicateLines(value, s, e, dir) : moveLines(value, s, e, dir));
+  }
+  if (k.key === "Enter" && !mod && !k.shiftKey && !k.altKey) {
+    const edit = handleEnter(value, s, e);
+    return edit ? done(edit) : none;
+  }
+  if (k.key === "Backspace" && !mod && !k.altKey) {
+    const edit = deletePair(value, s, e);
+    return edit ? done(edit) : none;
+  }
+  return none;
+}
+
+/* — headings (live mode's TOC preview) — */
+
+export type DraftHeading = { depth: 2 | 3; text: string; pos: number };
+
+/** `##`/`###` headings of a draft — the same two levels the published TOC lists — skipping
+ *  anything inside a code fence (a `# comment` in a bash block is not a heading). The text has
+ *  inline markdown marks stripped so the list reads like the rendered TOC. */
+export function listHeadings(value: string): DraftHeading[] {
+  const out: DraftHeading[] = [];
+  let fence: string | null = null;
+  let pos = 0;
+  for (const line of value.split("\n")) {
+    const f = line.match(/^ {0,3}(`{3,}|~{3,})/);
+    if (f) {
+      if (!fence) fence = f[1];
+      else if (f[1][0] === fence[0] && f[1].length >= fence.length && !line.slice(f[0].length).trim()) fence = null;
+    } else if (!fence) {
+      const h = line.match(/^(#{2,3})\s+(.+?)\s*#*\s*$/);
+      if (h) {
+        const text = h[2].replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/[*_`~]/g, "").trim();
+        if (text) out.push({ depth: h[1].length as 2 | 3, text, pos });
+      }
+    }
+    pos += line.length + 1;
+  }
+  return out;
+}

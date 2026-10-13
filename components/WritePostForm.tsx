@@ -12,24 +12,34 @@ import {
   type ReactNode,
 } from "react";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { previewMarkdown, saveDraft, publishPost, uploadImage, type SavePostInput } from "@/app/posts/write/actions";
 import DraftsPopup from "@/components/DraftsPopup";
 import LeaveConfirmDialog from "@/components/LeaveConfirmDialog";
 import {
   autoPair,
-  deleteLines,
-  deletePair,
-  duplicateLines,
   findFence,
-  handleEnter,
   insertLink,
   isMacPlatform,
-  moveLines,
+  listHeadings,
   setHeading,
+  shortcutEdit,
   toggleWrap,
   type Edit,
+  type KeyInput,
 } from "@/components/editorShortcuts";
+import type { EditorAdapter } from "@/components/LiveMarkdownEditor";
+
+// CodeMirror is only loaded once someone actually picks the live mode — it never reaches the
+// split mode's bundle, let alone a public page's.
+const LiveMarkdownEditor = dynamic(() => import("@/components/LiveMarkdownEditor"), {
+  ssr: false,
+  loading: () => <div className="wp-live wp-live-loading">편집기를 불러오는 중…</div>,
+});
+
+type EditorMode = "split" | "live";
+const EDITOR_MODE_KEY = "chorock-editor-mode";
 import { detectCodeLang, sameFamily } from "@/components/detectCodeLang";
 
 type SeriesOption = { id: string; title: string };
@@ -181,6 +191,22 @@ export default function WritePostForm({
 
   const titleRef = useRef<HTMLTextAreaElement>(null);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
+  // 분할(원문 + 미리보기) / 라이브(옵시디언식). Starts as split on both server and first client
+  // render, then switches to the remembered choice after mount, so hydration always matches.
+  const [editorMode, setEditorMode] = useState<EditorMode>("split");
+  const modeRef = useRef<EditorMode>("split");
+  modeRef.current = editorMode;
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(EDITOR_MODE_KEY) === "live") setEditorMode("live");
+    } catch {}
+  }, []);
+  const changeEditorMode = (next: EditorMode) => {
+    setEditorMode(next);
+    try {
+      localStorage.setItem(EDITOR_MODE_KEY, next);
+    } catch {}
+  };
   const fileInputRef = useRef<HTMLInputElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
   // Which pane's scroll event triggered the sync — set right before programmatically
@@ -248,136 +274,89 @@ export default function WritePostForm({
   // make Cmd+Z stop working almost immediately — Tab-indenting a code block or file tree (common
   // in this blog's content) reset the undo baseline every time. The one deliberate exception is
   // uploadImageAtCursor's async placeholder->URL replace below, which stays a plain setBody call.
-  // Applies an editorShortcuts.ts Edit through the same execCommand path. An empty-range,
-  // empty-text edit (stepping over an auto-closed bracket) only moves the caret.
+  // Two editors share every helper below through one small adapter: the split mode's <textarea>
+  // (the execCommand path described above) and the live mode's CodeMirror, which has its own
+  // transactions and undo history. An empty-range, empty-text edit (stepping over an
+  // auto-closed bracket) only moves the caret.
+  const textareaAdapter: EditorAdapter = {
+    getValue: () => bodyRef.current?.value ?? "",
+    getSelection: () => ({ s: bodyRef.current?.selectionStart ?? 0, e: bodyRef.current?.selectionEnd ?? 0 }),
+    apply: (edit) => {
+      const el = bodyRef.current;
+      if (!el) return;
+      el.focus();
+      if (edit.from !== edit.to || edit.text) {
+        el.setSelectionRange(edit.from, edit.to);
+        document.execCommand("insertText", false, edit.text);
+      }
+      el.setSelectionRange(edit.selStart, edit.selEnd);
+    },
+    focus: () => bodyRef.current?.focus(),
+    hasFocus: () => !!bodyRef.current && document.activeElement === bodyRef.current,
+  };
+  const liveAdapterRef = useRef<EditorAdapter | null>(null);
+  // Live mode only: a TOC preview beside the editor, laid out like the published post's.
+  const [caretPos, setCaretPos] = useState(0);
+  const draftHeadings = editorMode === "live" ? listHeadings(body) : [];
+  const activeHeadingPos = draftHeadings.reduce((acc, h) => (h.pos <= caretPos ? h.pos : acc), -1);
+  const editor = (): EditorAdapter | null =>
+    modeRef.current === "live" ? liveAdapterRef.current : bodyRef.current ? textareaAdapter : null;
+
   const applyEdit = (edit: Edit | null) => {
-    const el = bodyRef.current;
-    if (!el || !edit) return false;
-    el.focus();
-    if (edit.from !== edit.to || edit.text) {
-      el.setSelectionRange(edit.from, edit.to);
-      document.execCommand("insertText", false, edit.text);
-    }
-    el.setSelectionRange(edit.selStart, edit.selEnd);
+    const ed = editor();
+    if (!ed || !edit) return false;
+    ed.apply(edit);
     return true;
   };
 
   // Toggles: the same button/shortcut on already-wrapped text unwraps it (Notion behavior).
   const wrapSelection = (marker: string, endMarker = marker) => {
-    const el = bodyRef.current;
-    if (!el) return;
-    applyEdit(toggleWrap(el.value, el.selectionStart, el.selectionEnd, marker, endMarker));
+    const ed = editor();
+    if (!ed) return;
+    const { s, e } = ed.getSelection();
+    applyEdit(toggleWrap(ed.getValue(), s, e, marker, endMarker));
   };
 
   const insertLinePrefix = (prefix: string) => {
-    const el = bodyRef.current;
-    if (!el) return;
-    el.focus();
-    const s = el.selectionStart;
-    const lineStart = el.value.lastIndexOf("\n", s - 1) + 1;
-    el.setSelectionRange(lineStart, lineStart);
-    document.execCommand("insertText", false, prefix);
+    const ed = editor();
+    if (!ed) return;
+    const { s } = ed.getSelection();
+    const lineStart = ed.getValue().lastIndexOf("\n", s - 1) + 1;
     const pos = s + prefix.length;
-    el.setSelectionRange(pos, pos);
+    applyEdit({ from: lineStart, to: lineStart, text: prefix, selStart: pos, selEnd: pos });
   };
 
   const insertBlock = (template: string, cursorOffset?: number) => {
-    const el = bodyRef.current;
-    if (!el) return;
-    el.focus();
-    const s = el.selectionStart;
-    const before = el.value.slice(0, s);
+    const ed = editor();
+    if (!ed) return;
+    const { s, e } = ed.getSelection();
+    const before = ed.getValue().slice(0, s);
     const needsNL = before.length > 0 && !before.endsWith("\n");
-    const insertText = (needsNL ? "\n" : "") + template + "\n";
-    document.execCommand("insertText", false, insertText);
-    const pos = before.length + (needsNL ? 1 : 0) + (cursorOffset ?? template.length);
-    el.setSelectionRange(pos, pos);
+    const text = (needsNL ? "\n" : "") + template + "\n";
+    const pos = s + (needsNL ? 1 : 0) + (cursorOffset ?? template.length);
+    applyEdit({ from: s, to: e, text, selStart: pos, selEnd: pos });
   };
 
-  // A plain <textarea> treats Tab as "move focus to the next field" by default — markdown/code
-  // editing wants it to indent instead, and Shift+Tab to outdent. No selection: Tab inserts 2
-  // spaces at the cursor, Shift+Tab removes up to 2 leading spaces from the current line.
-  // Selection spanning one or more lines: indent/outdent every line it touches (matches how code
-  // editors handle a selected block), not just replace the selected text.
-  //
-  // Every other shortcut is matched on e.code (the physical key), not e.key: with the Korean
-  // input source active, e.key for ⌘B can arrive as the jamo "ㅠ". Keys pressed mid-composition
-  // (isComposing) are left alone — handling Enter there duplicates or drops the last syllable.
+  // The shortcut table itself lives in editorShortcuts.ts#shortcutEdit, shared by both editors.
+  // Returns whether the key was consumed. `stop` keeps ⌘K/⌘⇧K away from Header's site search.
+  const handleEditorKey = (e: KeyInput & { preventDefault(): void; stopPropagation(): void }) => {
+    const ed = editor();
+    if (!ed) return false;
+    const { s, e: selEnd } = ed.getSelection();
+    const result = shortcutEdit(e, ed.getValue(), s, selEnd, isMacPlatform());
+    if (!result.handled) return false;
+    e.preventDefault();
+    if (result.stop) e.stopPropagation();
+    if (result.edit) ed.apply(result.edit);
+    return true;
+  };
+
+  // A plain <textarea> treats Tab as "move focus to the next field" by default — the shared
+  // table makes it indent instead. Keys pressed mid-composition (isComposing) are left alone —
+  // handling Enter there duplicates or drops the last Hangul syllable.
   const handleBodyKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.nativeEvent.isComposing) return;
-    if (e.key !== "Tab") {
-      handleShortcut(e);
-      return;
-    }
-    e.preventDefault();
-    const el = bodyRef.current;
-    if (!el) return;
-    const { selectionStart: s, selectionEnd: selEnd } = el;
-    const value = el.value;
-
-    if (s === selEnd) {
-      if (!e.shiftKey) {
-        document.execCommand("insertText", false, "  ");
-        return;
-      }
-      const lineStart = value.lastIndexOf("\n", s - 1) + 1;
-      const lineEnd = value.indexOf("\n", s);
-      const line = value.slice(lineStart, lineEnd === -1 ? value.length : lineEnd);
-      const removed = line.match(/^ {1,2}/)?.[0].length ?? 0;
-      if (removed === 0) return;
-      el.setSelectionRange(lineStart, lineStart + removed);
-      document.execCommand("insertText", false, "");
-      const pos = Math.max(lineStart, s - removed);
-      el.setSelectionRange(pos, pos);
-      return;
-    }
-
-    const lineStart = value.lastIndexOf("\n", s - 1) + 1;
-    const selected = value.slice(lineStart, selEnd);
-    const transformed = e.shiftKey ? selected.replace(/^ {1,2}/gm, "") : selected.replace(/^/gm, "  ");
-    if (transformed === selected) return;
-    el.setSelectionRange(lineStart, selEnd);
-    document.execCommand("insertText", false, transformed);
-    el.setSelectionRange(lineStart, lineStart + transformed.length);
-  };
-
-  const handleShortcut = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    const el = bodyRef.current;
-    if (!el) return;
-    const { value, selectionStart: s, selectionEnd: selEnd } = el;
-    const mod = isMacPlatform() ? e.metaKey : e.ctrlKey;
-    let edit: Edit | null | undefined;
-
-    if (mod && !e.altKey) {
-      if (e.code === "KeyB" && !e.shiftKey) edit = toggleWrap(value, s, selEnd, "**");
-      else if (e.code === "KeyI" && !e.shiftKey) edit = toggleWrap(value, s, selEnd, "*");
-      else if (e.code === "KeyE" && !e.shiftKey) edit = toggleWrap(value, s, selEnd, "`");
-      else if (e.code === "KeyS" && e.shiftKey) edit = toggleWrap(value, s, selEnd, "~~");
-      else if (e.code === "KeyK") {
-        // ⌘K is also the site-wide search (Header listens on window and ignores Shift, so ⌘⇧K
-        // would open it too). Stopping propagation keeps it from opening while the cursor is
-        // in the body; anywhere else on the page it still does.
-        e.stopPropagation();
-        edit = e.shiftKey ? deleteLines(value, s, selEnd) : insertLink(value, s, selEnd);
-      }
-    } else if (mod && e.altKey && /^Digit[123]$/.test(e.code)) {
-      edit = setHeading(value, s, Number(e.code.slice(-1)) + 1);
-    } else if (e.altKey && !mod && (e.code === "ArrowUp" || e.code === "ArrowDown")) {
-      const dir = e.code === "ArrowUp" ? "up" : "down";
-      edit = e.shiftKey ? duplicateLines(value, s, selEnd, dir) : moveLines(value, s, selEnd, dir);
-      // At the first/last line there's nowhere to move — still swallow the key so the caret
-      // doesn't jump to the paragraph boundary (Option+↑'s native meaning on macOS).
-      if (edit === null) e.preventDefault();
-    } else if (e.key === "Enter" && !mod && !e.shiftKey && !e.altKey) {
-      edit = handleEnter(value, s, selEnd);
-    } else if (e.key === "Backspace" && !mod && !e.altKey) {
-      edit = deletePair(value, s, selEnd);
-    }
-
-    if (edit) {
-      e.preventDefault();
-      applyEdit(edit);
-    }
+    handleEditorKey(e);
   };
 
   // Auto-closing ( [ { " runs on the native beforeinput event, not keydown. Typing "(" right
@@ -397,7 +376,9 @@ export default function WritePostForm({
     };
     el.addEventListener("beforeinput", onBeforeInput);
     return () => el.removeEventListener("beforeinput", onBeforeInput);
-  }, []);
+    // The textarea unmounts in live mode, so the listener must be re-attached on the way back.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editorMode]);
 
   // Matches the 4MB cap actions.ts#uploadImage enforces server-side — checked here too so an
   // oversized paste never leaves the browser. Vercel's own serverless request body cap
@@ -419,12 +400,8 @@ export default function WritePostForm({
 
     const token = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const placeholder = `![업로드 중...](uploading:${token})`;
-    const el = bodyRef.current;
-    if (el) {
-      el.focus();
-      el.setSelectionRange(pos, pos);
-      document.execCommand("insertText", false, `${placeholder}\n`);
-    } else {
+    const after = pos + placeholder.length + 1;
+    if (!applyEdit({ from: pos, to: pos, text: `${placeholder}\n`, selStart: after, selEnd: after })) {
       setBody((prev) => prev.slice(0, pos) + placeholder + "\n" + prev.slice(pos));
     }
 
@@ -455,9 +432,10 @@ export default function WritePostForm({
   const labeledFences = useRef(new Set<string>());
   useEffect(() => {
     const timer = setTimeout(() => {
-      const el = bodyRef.current;
-      if (!el || document.activeElement !== el) return;
-      const { value, selectionStart: s, selectionEnd: selEnd } = el;
+      const ed = editor();
+      if (!ed || !ed.hasFocus()) return;
+      const value = ed.getValue();
+      const { s, e: selEnd } = ed.getSelection();
       const fence = findFence(value, s);
       if (!fence || !fence.closed || fence.lang) return;
       const content = value.slice(fence.contentStart, fence.contentEnd);
@@ -469,44 +447,48 @@ export default function WritePostForm({
       applyEdit({ from: fence.langStart, to: fence.langStart, text: lang, selStart: shift(s), selEnd: shift(selEnd) });
     }, 1000);
     return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [body]);
 
   // Pasting code into an *empty* fence (the toolbar's "코드 블록" then ⌘V) fills in the fence's
   // language from the snippet. Only empty fences: a block that already has content had its label
   // chosen deliberately. detectCodeLang returns null when unsure, and the label is left alone.
   // Two execCommands (label, then text) so both steps stay in the undo stack.
-  const pasteIntoCodeFence = (e: ClipboardEvent<HTMLTextAreaElement>) => {
-    const el = bodyRef.current;
-    const text = e.clipboardData.getData("text/plain");
-    if (!el || !text.trim()) return;
-    const fence = findFence(el.value, el.selectionStart);
-    if (!fence || el.value.slice(fence.contentStart, fence.contentEnd).trim()) return;
+  const pasteIntoCodeFence = (text: string) => {
+    const ed = editor();
+    if (!ed || !text.trim()) return false;
+    const value = ed.getValue();
+    const { s, e } = ed.getSelection();
+    const fence = findFence(value, s);
+    if (!fence || value.slice(fence.contentStart, fence.contentEnd).trim()) return false;
     const lang = detectCodeLang(text);
-    if (!lang || sameFamily(lang, fence.lang)) return;
-    e.preventDefault();
-    const { selectionStart: s, selectionEnd: selEnd } = el;
+    if (!lang || sameFamily(lang, fence.lang)) return false;
     const delta = lang.length - fence.lang.length;
     // A fence with no language ("```" alone) needs no space; the opening line is just ```.
-    applyEdit({ from: fence.langStart, to: fence.langEnd, text: lang, selStart: s + delta, selEnd: selEnd + delta });
-    document.execCommand("insertText", false, text);
+    applyEdit({ from: fence.langStart, to: fence.langEnd, text: lang, selStart: s + delta, selEnd: e + delta });
+    const end = s + delta + text.length;
+    applyEdit({ from: s + delta, to: e + delta, text, selStart: end, selEnd: end });
+    return true;
   };
 
-  const handleBodyPaste = (e: ClipboardEvent<HTMLTextAreaElement>) => {
-    const imageFiles = Array.from(e.clipboardData.items)
+  // Shared by both editors; returns true when the paste was consumed (caller prevents default).
+  const handlePasteData = (data: DataTransfer) => {
+    const imageFiles = Array.from(data.items)
       .filter((item) => item.type.startsWith("image/"))
       .map((item) => item.getAsFile())
       .filter((f): f is File => f !== null);
-    if (imageFiles.length === 0) {
-      pasteIntoCodeFence(e);
-      return;
-    }
+    if (imageFiles.length === 0) return pasteIntoCodeFence(data.getData("text/plain"));
 
-    e.preventDefault();
     setImageError(null);
-    let pos = bodyRef.current?.selectionStart ?? body.length;
+    let pos = editor()?.getSelection().s ?? body.length;
     for (const file of imageFiles) {
       pos = uploadImageAtCursor(file, pos);
     }
+    return true;
+  };
+
+  const handleBodyPaste = (e: ClipboardEvent<HTMLTextAreaElement>) => {
+    if (handlePasteData(e.clipboardData)) e.preventDefault();
   };
 
   const handleFilePicked = (e: ChangeEvent<HTMLInputElement>) => {
@@ -514,7 +496,7 @@ export default function WritePostForm({
     e.target.value = ""; // allow picking the same file again later
     if (!file) return;
     setImageError(null);
-    uploadImageAtCursor(file, bodyRef.current?.selectionStart ?? body.length);
+    uploadImageAtCursor(file, editor()?.getSelection().s ?? body.length);
   };
 
   // Proportional (not line-accurate) scroll sync — mirrors how far down each pane is by
@@ -926,7 +908,7 @@ export default function WritePostForm({
           <span style={{ fontSize: 12, opacity: 0.55, marginLeft: "auto" }}>예상 읽는 시간 {readTime}분</span>
         </div>
 
-        <div className="wp-split">
+        <div className={`wp-split${editorMode === "live" ? " is-live" : ""}`}>
           <div>
             <input
               ref={fileInputRef}
@@ -935,14 +917,31 @@ export default function WritePostForm({
               onChange={handleFilePicked}
               style={{ display: "none" }}
             />
-            <p className="text-muted" style={{ fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", margin: "0 0 var(--space-2)" }}>
-              마크다운 편집
+            <div className="wp-mode-row">
+              <div className="wp-mode-toggle" role="group" aria-label="편집 방식">
+                <button
+                  type="button"
+                  className={editorMode === "split" ? "is-active" : ""}
+                  aria-pressed={editorMode === "split"}
+                  onClick={() => changeEditorMode("split")}
+                  title="마크다운 원문과 미리보기를 나란히"
+                >
+                  분할
+                </button>
+                <button
+                  type="button"
+                  className={editorMode === "live" ? "is-active" : ""}
+                  aria-pressed={editorMode === "live"}
+                  onClick={() => changeEditorMode("live")}
+                  title="쓰는 자리에서 바로 서식이 보이는 편집기"
+                >
+                  라이브
+                </button>
+              </div>
               {imageError && (
-                <span style={{ marginLeft: 8, color: "var(--color-danger, #e5484d)", textTransform: "none", letterSpacing: "normal" }}>
-                  {imageError}
-                </span>
+                <span style={{ fontSize: 11, color: "var(--color-danger, #e5484d)" }}>{imageError}</span>
               )}
-            </p>
+            </div>
             <div
               style={{
                 display: "flex",
@@ -957,8 +956,8 @@ export default function WritePostForm({
               }}
             >
               {toolbarBtn(<span style={{ fontWeight: 700, fontSize: 13 }}>H1</span>, `제목 (${mod}${alt}1)`, () => {
-                const el = bodyRef.current;
-                if (el) applyEdit(setHeading(el.value, el.selectionStart, 2));
+                const ed = editor();
+                if (ed) applyEdit(setHeading(ed.getValue(), ed.getSelection().s, 2));
               })}
               {toolbarBtn(<span style={{ fontWeight: 700, fontSize: 14 }}>B</span>, `굵게 (${mod}B)`, () => wrapSelection("**"))}
               {toolbarBtn(<span style={{ fontStyle: "italic", fontSize: 14 }}>I</span>, `기울임 (${mod}I)`, () => wrapSelection("*"))}
@@ -1009,8 +1008,10 @@ export default function WritePostForm({
                 </svg>,
                 `링크 (${mod}K)`,
                 () => {
-                  const el = bodyRef.current;
-                  if (el) applyEdit(insertLink(el.value, el.selectionStart, el.selectionEnd));
+                  const ed = editor();
+                  if (!ed) return;
+                  const { s, e } = ed.getSelection();
+                  applyEdit(insertLink(ed.getValue(), s, e));
                 }
               )}
               {toolbarBtn(
@@ -1053,6 +1054,17 @@ export default function WritePostForm({
                 </div>
               </details>
             </div>
+            {editorMode === "live" ? (
+              <LiveMarkdownEditor
+                value={body}
+                onChange={setBody}
+                adapterRef={liveAdapterRef}
+                onKey={handleEditorKey}
+                onPaste={handlePasteData}
+                onCaret={setCaretPos}
+                placeholder="## 소제목 — 쓰는 자리에서 바로 서식이 보입니다."
+              />
+            ) : (
             <textarea
               ref={bodyRef}
               className="wp-body"
@@ -1064,8 +1076,31 @@ export default function WritePostForm({
               onKeyDown={handleBodyKeyDown}
               onScroll={() => syncScroll("body")}
             />
+            )}
           </div>
-          <div>
+          {editorMode === "live" && (
+            <aside className="wp-live-toc" aria-label="목차 미리보기">
+              <p>목차</p>
+              {draftHeadings.length === 0 ? (
+                <span className="wp-live-toc-empty">## 제목을 쓰면 여기에 목차가 생깁니다.</span>
+              ) : (
+                <ul>
+                  {draftHeadings.map((h) => (
+                    <li key={`${h.pos}-${h.text}`} className={h.depth === 3 ? "is-sub" : undefined}>
+                      <button
+                        type="button"
+                        className={h.pos === activeHeadingPos ? "is-active" : undefined}
+                        onClick={() => liveAdapterRef.current?.reveal?.(h.pos)}
+                      >
+                        {h.text}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </aside>
+          )}
+          <div className="wp-preview-col">
             <p className="text-muted" style={{ fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", margin: "0 0 var(--space-2)" }}>
               미리보기
             </p>

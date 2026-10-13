@@ -1,0 +1,381 @@
+"use client";
+
+import { useEffect, useRef, type MutableRefObject } from "react";
+import { EditorState, Prec, Transaction, type Range } from "@codemirror/state";
+import {
+  Decoration,
+  EditorView,
+  ViewPlugin,
+  WidgetType,
+  drawSelection,
+  keymap,
+  placeholder as placeholderExt,
+  type DecorationSet,
+  type ViewUpdate,
+} from "@codemirror/view";
+import { history, historyKeymap, defaultKeymap } from "@codemirror/commands";
+import { HighlightStyle, syntaxHighlighting, syntaxTree } from "@codemirror/language";
+import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
+import { languages } from "@codemirror/language-data";
+import { tags as t } from "@lezer/highlight";
+import { autoPair, type Edit } from "@/components/editorShortcuts";
+
+/**
+ * The write form's "라이브" mode: an Obsidian-style live-preview markdown editor.
+ *
+ * The document is the markdown source, character for character — formatting is drawn on top of
+ * it with CodeMirror decorations, and the syntax marks (`##`, `**`, `` ` ``, `[](url)`) are only
+ * hidden on lines the selection does not touch. Nothing is ever converted to another model and
+ * back, which is the point: a Notion-style editor would re-serialize the markdown on save and
+ * quietly rewrite old posts (and fight remark-breaks' single-newline rule). Loaded with
+ * next/dynamic only when this mode is picked, so CodeMirror never reaches any other bundle.
+ */
+
+export type EditorAdapter = {
+  getValue(): string;
+  getSelection(): { s: number; e: number };
+  apply(edit: Edit): void;
+  focus(): void;
+  hasFocus(): boolean;
+  /** Puts the caret at `pos` and scrolls that line to the top (the TOC preview's jump). */
+  reveal?(pos: number): void;
+};
+
+type Props = {
+  value: string;
+  onChange: (value: string) => void;
+  adapterRef: MutableRefObject<EditorAdapter | null>;
+  /** Shared shortcut table; returns true when it consumed the key. */
+  onKey: (e: KeyboardEvent) => boolean;
+  /** Image upload / fence-language paste handling; returns true when it consumed the paste. */
+  onPaste: (data: DataTransfer) => boolean;
+  /** Caret position after every selection or document change — drives the TOC highlight. */
+  onCaret?: (pos: number) => void;
+  placeholder?: string;
+};
+
+/* — formatting — */
+
+// Markdown-level styling. Code inside fences is highlighted by the fence language's own grammar
+// (codeLanguages below); those tokens get github-dark colors, matching the published
+// rehype-pretty-code theme, on the dark fence background.
+const markdownStyle = HighlightStyle.define([
+  { tag: t.heading, fontWeight: "600" },
+  { tag: t.strong, fontWeight: "700" },
+  { tag: t.emphasis, fontStyle: "italic" },
+  { tag: t.strikethrough, textDecoration: "line-through" },
+  { tag: t.link, color: "var(--color-accent-600)" },
+  { tag: t.url, color: "var(--color-accent-600)", opacity: "0.7" },
+  { tag: [t.processingInstruction, t.contentSeparator], opacity: "0.45" },
+  { tag: t.quote, fontStyle: "italic" },
+  // fenced-code tokens (github-dark)
+  { tag: [t.keyword, t.operatorKeyword, t.modifier, t.controlKeyword], color: "#ff7b72" },
+  { tag: [t.string, t.special(t.string), t.regexp], color: "#a5d6ff" },
+  { tag: [t.comment, t.lineComment, t.blockComment], color: "#8b949e", fontStyle: "italic" },
+  { tag: [t.number, t.bool, t.atom, t.null], color: "#79c0ff" },
+  { tag: [t.function(t.variableName), t.function(t.propertyName)], color: "#d2a8ff" },
+  { tag: [t.typeName, t.className, t.namespace], color: "#ffa657" },
+  { tag: [t.propertyName, t.attributeName], color: "#79c0ff" },
+  { tag: [t.tagName, t.angleBracket], color: "#7ee787" },
+  { tag: [t.definition(t.variableName)], color: "#ffa657" },
+  { tag: t.operator, color: "#ff7b72" },
+]);
+
+class ImageWidget extends WidgetType {
+  constructor(readonly src: string) {
+    super();
+  }
+  eq(other: ImageWidget) {
+    return other.src === this.src;
+  }
+  toDOM() {
+    const wrap = document.createElement("span");
+    wrap.className = "cm-md-image";
+    if (this.src.startsWith("uploading:")) {
+      wrap.textContent = "이미지 업로드 중…";
+      wrap.classList.add("is-uploading");
+    } else {
+      const img = document.createElement("img");
+      img.src = this.src;
+      img.alt = "";
+      wrap.appendChild(img);
+    }
+    return wrap;
+  }
+  ignoreEvent() {
+    return false;
+  }
+}
+
+const hide = Decoration.replace({});
+const HEADING = /^ATXHeading([1-6])$/;
+
+/** Lines touched by any selection range — on those, the raw markdown stays visible. */
+function activeLines(view: EditorView) {
+  const lines = new Set<number>();
+  const { doc } = view.state;
+  for (const r of view.state.selection.ranges) {
+    const a = doc.lineAt(r.from).number;
+    const b = doc.lineAt(r.to).number;
+    for (let n = a; n <= b; n++) lines.add(n);
+  }
+  return lines;
+}
+
+function buildDecorations(view: EditorView): DecorationSet {
+  const { state } = view;
+  const { doc } = state;
+  const active = activeLines(view);
+  const isActive = (pos: number) => active.has(doc.lineAt(pos).number);
+  const decos: Range<Decoration>[] = [];
+  const lineClass = (pos: number, cls: string) =>
+    decos.push(Decoration.line({ class: cls }).range(doc.lineAt(pos).from));
+
+  for (const { from, to } of view.visibleRanges) {
+    syntaxTree(state).iterate({
+      from,
+      to,
+      enter: (node) => {
+        const name = node.name;
+        const heading = HEADING.exec(name);
+        if (heading) {
+          lineClass(node.from, `cm-md-h${heading[1]}`);
+          return;
+        }
+        switch (name) {
+          case "HeaderMark": {
+            if (isActive(node.from)) return;
+            // Hide "## " including the space, so the heading text starts flush left.
+            const end = doc.sliceString(node.to, node.to + 1) === " " ? node.to + 1 : node.to;
+            decos.push(hide.range(node.from, end));
+            return;
+          }
+          case "EmphasisMark":
+          case "StrikethroughMark":
+            if (!isActive(node.from)) decos.push(hide.range(node.from, node.to));
+            return;
+          case "CodeMark": {
+            // Inline code's backticks only — a fence's ``` is a CodeMark too, kept visible so
+            // the block's boundaries stay editable.
+            if (node.node.parent?.name !== "InlineCode") return;
+            if (!isActive(node.from)) decos.push(hide.range(node.from, node.to));
+            return;
+          }
+          case "InlineCode":
+            decos.push(Decoration.mark({ class: "cm-md-code" }).range(node.from, node.to));
+            return;
+          case "Link": {
+            if (isActive(node.from)) return;
+            // [text](url): hide everything except the text.
+            const marks = node.node.getChildren("LinkMark");
+            const url = node.node.getChild("URL");
+            if (marks.length >= 2) {
+              decos.push(hide.range(marks[0].from, marks[0].to));
+              decos.push(hide.range(marks[1].from, url && marks.length >= 4 ? marks[3].to : node.to));
+            }
+            return;
+          }
+          case "Image": {
+            if (isActive(node.from)) return;
+            const url = node.node.getChild("URL");
+            if (!url) return;
+            const src = doc.sliceString(url.from, url.to);
+            decos.push(hide.range(node.from, node.to));
+            decos.push(Decoration.widget({ widget: new ImageWidget(src), side: 1 }).range(node.to));
+            return;
+          }
+          case "Blockquote": {
+            for (let pos = node.from; pos <= node.to; ) {
+              const line = doc.lineAt(pos);
+              lineClass(line.from, "cm-md-quote");
+              pos = line.to + 1;
+            }
+            return;
+          }
+          case "FencedCode": {
+            const first = doc.lineAt(node.from).number;
+            const last = doc.lineAt(node.to).number;
+            for (let n = first; n <= last; n++) {
+              const line = doc.line(n);
+              const edge = n === first ? " cm-md-fence-first" : n === last ? " cm-md-fence-last" : "";
+              decos.push(Decoration.line({ class: `cm-md-fence${edge}` }).range(line.from));
+            }
+            return;
+          }
+        }
+      },
+    });
+  }
+  return Decoration.set(decos, true);
+}
+
+const livePreview = ViewPlugin.fromClass(
+  class {
+    decorations: DecorationSet;
+    constructor(view: EditorView) {
+      this.decorations = buildDecorations(view);
+    }
+    update(u: ViewUpdate) {
+      if (u.docChanged || u.selectionSet || u.viewportChanged || syntaxTree(u.startState) !== syntaxTree(u.state)) {
+        this.decorations = buildDecorations(u.view);
+      }
+    }
+  },
+  { decorations: (v) => v.decorations },
+);
+
+// Colors and type come from the site's own CSS variables, so light/dark needs no second theme.
+const theme = EditorView.theme({
+  "&": { color: "var(--color-text)", backgroundColor: "transparent", fontSize: "16px", height: "100%" },
+  "&.cm-focused": { outline: "none" },
+  ".cm-scroller": { fontFamily: "var(--font-body)", lineHeight: "1.8", overflow: "auto" },
+  ".cm-content": { padding: "var(--space-3) var(--space-4)", caretColor: "var(--color-text)" },
+  ".cm-cursor": { borderLeftColor: "var(--color-text)" },
+  "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection": {
+    backgroundColor: "color-mix(in srgb, var(--color-accent) 30%, transparent) !important",
+  },
+  ".cm-placeholder": { color: "var(--color-text)", opacity: "0.35" },
+  ".cm-md-h1": { fontSize: "26px", fontWeight: "600", lineHeight: "1.5", paddingTop: "0.6em" },
+  ".cm-md-h2": { fontSize: "22px", fontWeight: "600", lineHeight: "1.5", paddingTop: "0.6em" },
+  ".cm-md-h3": { fontSize: "18px", fontWeight: "600", paddingTop: "0.4em" },
+  ".cm-md-h4": { fontSize: "16px", fontWeight: "600", paddingTop: "0.3em" },
+  ".cm-md-h5, .cm-md-h6": { fontSize: "15px", fontWeight: "600" },
+  ".cm-md-code": {
+    fontFamily: "var(--font-mono)",
+    fontSize: "0.88em",
+    padding: "1px 4px",
+    borderRadius: "4px",
+    background: "color-mix(in srgb, var(--color-text) 9%, transparent)",
+  },
+  ".cm-md-quote": {
+    borderLeft: "3px solid color-mix(in srgb, var(--color-accent) 60%, transparent)",
+    paddingLeft: "12px !important",
+    background: "var(--color-accent-100)",
+  },
+  ".cm-md-fence": {
+    fontFamily: "var(--font-mono)",
+    fontSize: "13.5px",
+    lineHeight: "1.6",
+    background: "#24292e",
+    color: "#e1e4e8",
+    paddingLeft: "14px !important",
+    paddingRight: "14px !important",
+  },
+  ".cm-md-fence-first": { borderRadius: "8px 8px 0 0", paddingTop: "6px", color: "#8b949e" },
+  ".cm-md-fence-last": { borderRadius: "0 0 8px 8px", paddingBottom: "6px", color: "#8b949e" },
+  ".cm-md-fence .cm-cursor": { borderLeftColor: "#e1e4e8" },
+  ".cm-md-image": { display: "block", margin: "6px 0" },
+  ".cm-md-image img": { maxWidth: "100%", maxHeight: "360px", borderRadius: "6px", display: "block" },
+  ".cm-md-image.is-uploading": { fontSize: "13px", opacity: "0.6" },
+});
+
+export default function LiveMarkdownEditor({ value, onChange, adapterRef, onKey, onPaste, onCaret, placeholder }: Props) {
+  const hostRef = useRef<HTMLDivElement>(null);
+  const viewRef = useRef<EditorView | null>(null);
+  // Handlers change identity every WritePostForm render; the editor is built once, so it reads
+  // them through a ref instead of being rebuilt (which would drop history and selection).
+  const handlers = useRef({ onChange, onKey, onPaste, onCaret });
+  handlers.current = { onChange, onKey, onPaste, onCaret };
+
+  useEffect(() => {
+    if (!hostRef.current) return;
+    const view = new EditorView({
+      parent: hostRef.current,
+      state: EditorState.create({
+        doc: value,
+        extensions: [
+          Prec.highest(
+            EditorView.domEventHandlers({
+              keydown: (e, v) => (e.isComposing || v.composing ? false : handlers.current.onKey(e)),
+              paste: (e) => {
+                if (!e.clipboardData || !handlers.current.onPaste(e.clipboardData)) return false;
+                e.preventDefault();
+                return true;
+              },
+            }),
+          ),
+          EditorView.inputHandler.of((v, from, to, text) => {
+            if (v.composing || text.length !== 1) return false;
+            const edit = autoPair(v.state.doc.toString(), from, to, text);
+            if (!edit) return false;
+            v.dispatch({
+              changes: { from: edit.from, to: edit.to, insert: edit.text },
+              selection: { anchor: edit.selStart, head: edit.selEnd },
+              userEvent: "input.type",
+            });
+            return true;
+          }),
+          history(),
+          keymap.of([...historyKeymap, ...defaultKeymap]),
+          drawSelection(),
+          EditorView.lineWrapping,
+          // addKeymap: false — Enter/Backspace list handling comes from the shared shortcut table
+          // so both modes behave identically.
+          markdown({ base: markdownLanguage, codeLanguages: languages, addKeymap: false }),
+          syntaxHighlighting(markdownStyle),
+          livePreview,
+          theme,
+          placeholder ? placeholderExt(placeholder) : [],
+          EditorView.updateListener.of((u) => {
+            if (u.docChanged) handlers.current.onChange(u.state.doc.toString());
+            if (u.docChanged || u.selectionSet) handlers.current.onCaret?.(u.state.selection.main.head);
+          }),
+        ],
+      }),
+    });
+    viewRef.current = view;
+    adapterRef.current = {
+      getValue: () => view.state.doc.toString(),
+      getSelection: () => ({ s: view.state.selection.main.from, e: view.state.selection.main.to }),
+      apply: (edit) => {
+        view.dispatch({
+          changes: { from: edit.from, to: edit.to, insert: edit.text },
+          selection: { anchor: edit.selStart, head: edit.selEnd },
+          userEvent: "input",
+          scrollIntoView: true,
+        });
+        view.focus();
+      },
+      focus: () => view.focus(),
+      hasFocus: () => view.hasFocus,
+      reveal: (pos) => {
+        view.dispatch({
+          selection: { anchor: pos },
+          effects: EditorView.scrollIntoView(pos, { y: "start", yMargin: 24 }),
+        });
+        view.focus();
+      },
+    };
+    return () => {
+      adapterRef.current = null;
+      viewRef.current = null;
+      view.destroy();
+    };
+    // Built once; `value` is only the initial document — later changes sync below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // External edits to `body` (an image upload swapping its placeholder for the real URL, which
+  // lands via setBody) are applied as a minimal diff so the caret stays where the author is
+  // typing, and kept out of the undo history like the split mode's equivalent.
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    const current = view.state.doc.toString();
+    if (current === value) return;
+    let start = 0;
+    while (start < current.length && start < value.length && current[start] === value[start]) start++;
+    let endA = current.length;
+    let endB = value.length;
+    while (endA > start && endB > start && current[endA - 1] === value[endB - 1]) {
+      endA--;
+      endB--;
+    }
+    view.dispatch({
+      changes: { from: start, to: endA, insert: value.slice(start, endB) },
+      annotations: Transaction.addToHistory.of(false),
+    });
+  }, [value]);
+
+  return <div ref={hostRef} className="wp-live" />;
+}

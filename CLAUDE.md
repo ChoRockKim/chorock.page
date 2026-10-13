@@ -483,6 +483,23 @@ touches the DOM. Four non-obvious constraints, each hit or measured while buildi
   only — never every bare fence in an old post opened for editing — and remembers each content
   string it tried, so a label the author deletes stays deleted.
 
+**The write form has two editors: 분할 (textarea + server preview) and 라이브 (Obsidian-style,
+`components/LiveMarkdownEditor.tsx`, CodeMirror 6), chosen per browser via `localStorage`
+`chorock-editor-mode`.** Live mode keeps the markdown source as the document and only *draws*
+formatting with decorations, hiding `##`/`**`/backticks/`[](url)` on lines the selection doesn't
+touch. Never replace it with a Notion-style WYSIWYG (Milkdown/Tiptap): those round-trip through
+their own model and re-serialize on save, which rewrites old posts and fights `remark-breaks`'
+single-newline rule. Everything that edits the body goes through `EditorAdapter`
+(`getValue/getSelection/apply(Edit)/…`) — textarea via the execCommand path, CodeMirror via
+transactions — and the key table is one pure function, `editorShortcuts.ts#shortcutEdit`, so the
+two modes cannot drift. CodeMirror is behind `next/dynamic` (`ssr: false`) so it never ships in
+the split mode or any public bundle. The live column is exactly the published body width (640px,
+`.pd-grid`'s first track) with a TOC preview beside it; the TOC's sticky `top` has to clear the
+write page's own 60px action bar under the header, not just `--header-h`. **Testing note**: the
+local Chrome is signed in on localhost, so an "auth-free" throwaway route still runs owner-gated
+actions — a test image paste really uploaded to S3 once. Don't assume `requireOwner()` will
+refuse in local tests.
+
 **Header search** (`app/api/search/route.ts` + `lib/posts.ts#searchPosts`) does a regex
 match against title/summary/tags server-side — it is not a full-text/Atlas Search index.
 

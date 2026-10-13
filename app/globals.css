@@ -1582,8 +1582,73 @@ html.search-open .pd-grid .toc-desktop {
   align-items: start;
 }
 .wp-split > * { min-width: 0; }
+/* 라이브 모드: 미리보기 칸을 없애고 편집기가 전체 폭을 쓴다(components/LiveMarkdownEditor.tsx). */
+/* 라이브 모드는 쓰는 화면이 곧 결과 화면이라, 글자 영역 폭을 실제 글 페이지 본문(.pd-grid의 첫
+   칸: 940 - 좌우 여백 60 - 목차 200 - 간격 40 = 640px)과 똑같이 맞춘다. 줄이 바뀌는 위치까지 발행된
+   글과 같아진다. 칸 전체 폭 = 640 + 편집기 좌우 안쪽 여백(.cm-content) + 테두리. 좁은 화면에서는
+   max-width라 그대로 줄어든다. */
+.wp-split.is-live {
+  grid-template-columns: minmax(0, calc(640px + 2 * var(--space-4) + 2px)) 200px;
+  justify-content: center;
+  gap: var(--space-8);
+}
+/* 목차 미리보기 — 글 페이지의 .toc-desktop과 같은 생김새(왼쪽 레일 + 현재 항목 액센트). 현재
+   항목은 스크롤 위치가 아니라 커서 위치로 정한다. 편집기 안에서 스크롤하기 때문이다. */
+.wp-live-toc {
+  /* 글쓰기 화면은 헤더 아래에 "← 나가기 … 발행하기" 바(높이 60px)가 하나 더 붙어 있다. 헤더 높이만
+     빼면 목차 윗줄이 그 바 밑으로 들어가 가려진다(실측: 바 아래 끝 127px, 목차 위 87px). */
+  position: sticky;
+  top: calc(var(--header-h, 67px) + 60px + var(--space-4));
+  align-self: start;
+  margin-top: 34px;
+  font-size: 13px;
+  max-height: calc(100vh - var(--header-h, 67px) - 60px - 2 * var(--space-4));
+  overflow-y: auto;
+}
+.wp-live-toc > p {
+  text-transform: uppercase; letter-spacing: 0.08em; font-size: 11px; opacity: 0.5;
+  margin: 0 0 var(--space-2);
+}
+.wp-live-toc ul {
+  list-style: none; margin: 0; padding: 0 0 0 var(--space-3);
+  display: flex; flex-direction: column; gap: 8px;
+  border-left: 2px solid var(--color-divider);
+}
+.wp-live-toc li.is-sub { padding-left: var(--space-3); }
+.wp-live-toc button {
+  all: unset; cursor: pointer; display: block; line-height: 1.45;
+  color: var(--color-text); opacity: 0.65; transition: color .2s ease, opacity .2s ease;
+  position: relative;
+}
+.wp-live-toc button:hover { opacity: 1; }
+.wp-live-toc button.is-active { color: var(--color-accent); opacity: 1; font-weight: 600; }
+.wp-live-toc button.is-active::before {
+  content: ""; position: absolute; left: calc(-1 * var(--space-3) - 2px); top: 0; bottom: 0;
+  width: 2px; background: var(--color-accent);
+}
+.wp-live-toc li.is-sub button.is-active::before { left: calc(-2 * var(--space-3) - 2px); }
+.wp-live-toc-empty { opacity: 0.45; font-size: 12px; line-height: 1.5; display: block; }
+.wp-split.is-live .wp-preview-col { display: none; }
+.wp-live {
+  height: 70vh;
+  border: 1px solid var(--color-divider);
+  border-radius: 0 0 6px 6px;
+  overflow: hidden;
+}
+.wp-live-loading { display: grid; place-items: center; font-size: 13px; opacity: 0.55; }
+.wp-mode-row { display: flex; align-items: center; gap: var(--space-3); margin: 0 0 var(--space-2); min-height: 24px; }
+.wp-mode-toggle {
+  display: inline-flex; padding: 2px; gap: 2px; border-radius: 6px;
+  background: color-mix(in srgb, var(--color-text) 7%, transparent);
+}
+.wp-mode-toggle button {
+  border: none; background: none; color: var(--color-text); opacity: 0.6; cursor: pointer;
+  font-size: 12px; padding: 2px 10px; border-radius: 4px;
+}
+.wp-mode-toggle button.is-active { opacity: 1; background: var(--color-bg); box-shadow: var(--shadow-sm, 0 1px 2px rgb(0 0 0 / 0.12)); }
 @media (max-width: 900px) {
-  .wp-split { grid-template-columns: 1fr; gap: var(--space-5); }
+  .wp-split, .wp-split.is-live { grid-template-columns: 1fr; gap: var(--space-5); }
+  .wp-live-toc { display: none; }
 }
 
 /* ── 굴절이 불가능한 브라우저용 유리 (WebKit) ──────────────────────────────────
