@@ -86,6 +86,17 @@ const CAREER: {
   },
 ];
 
+// 학번·학점처럼 공개 페이지에 둘 이유가 없는 정보는 싣지 않는다(자격증과 같은 원칙).
+const EDUCATION: { school: string; majors: string; period: string; status: string; logo?: string }[] = [
+  {
+    school: "한국외국어대학교",
+    majors: "ELLT학과 · 융복합소프트웨어",
+    period: "2021.03 — 2027.07",
+    status: "재학 중 · 졸업 예정",
+    logo: "/career/hufs-emblem.webp",
+  },
+];
+
 // 이름·발급 기관·취득 연월만 공개한다 — 자격번호·유효기간·생년월일 같은 증서 속 정보는
 // 공개 페이지에 싣지 않는다.
 const CERTIFICATES: { name: string; issuer: string; date: string }[] = [
@@ -423,6 +434,49 @@ export default async function AboutPage() {
             </ScrollReveal>
           ))}
         </div>
+      </div>
+
+      <div style={{ marginBottom: "var(--space-8)" }}>
+        <ScrollReveal>
+          <h2 style={{ fontSize: 20, margin: "0 0 var(--space-4)" }}>학력</h2>
+        </ScrollReveal>
+        {EDUCATION.map((edu) => (
+          <ScrollReveal
+            key={edu.school}
+            style={{ display: "flex", gap: "var(--space-4)", padding: "var(--space-2) 0" }}
+          >
+            {edu.logo && (
+              <span
+                style={{
+                  flex: "none",
+                  width: 52,
+                  height: 52,
+                  borderRadius: 8,
+                  background: "#fff",
+                  overflow: "hidden",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Image
+                  src={edu.logo}
+                  alt={`${edu.school} 로고`}
+                  width={52}
+                  height={52}
+                  style={{ width: "100%", height: "100%", objectFit: "contain" }}
+                />
+              </span>
+            )}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <h3 style={{ fontSize: 15, margin: "0 0 3px" }}>{edu.school}</h3>
+              <p style={{ fontSize: 13, opacity: 0.75, margin: "0 0 2px" }}>{edu.majors}</p>
+              <p style={{ fontSize: 12, opacity: 0.55, margin: 0 }}>
+                {edu.period} · {edu.status}
+              </p>
+            </div>
+          </ScrollReveal>
+        ))}
       </div>
 
       <div style={{ marginBottom: "var(--space-8)" }}>

@@ -504,6 +504,22 @@ local Chrome is signed in on localhost, so an "auth-free" throwaway route still 
 actions — a test image paste really uploaded to S3 once. Don't assume `requireOwner()` will
 refuse in local tests.
 
+**Live-mode vertical spacing is computed, not styled per line, and it was verified to ±1px.**
+`spacingDecorations` (a `StateField`, because block widgets can't come from a ViewPlugin) gives the
+first blank line between two top-level blocks the published gap — `max(prev margin-bottom, next
+margin-top)`, values measured on real posts — collapses further blank lines, and inserts a
+`GapWidget` block when the source has no blank line (padding on the next line would be painted by
+its background, and the fence header's `!important` padding overrode it). Use padding/line-height,
+never margins: CodeMirror measures line heights from the DOM. `.cm-widgetBuffer` must be
+`vertical-align: top` or every line with a hidden mark grows ~2px. To re-verify, open a real post
+at `/posts/write?slug=…` in live mode and compare `view.lineBlockAt(pos)` (take the Text part of a
+composite block) against the published page's block offsets — and patch `requestAnimationFrame` to
+a timer first, since the automation Chrome never paints, so CodeMirror never measures on scroll.
+**The write page's preview result must go through `startTransition`**: it carries client
+references that suspend, and outside a transition that showed `loading.tsx`, which in React 19
+disconnects/reconnects effects and re-ran the preview effect — a once-a-second Server Action loop
+in `next dev` (not in production, but a first-time skeleton flash there).
+
 **Header search** (`app/api/search/route.ts` + `lib/posts.ts#searchPosts`) does a regex
 match against title/summary/tags server-side — it is not a full-text/Atlas Search index.
 

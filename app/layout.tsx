@@ -114,6 +114,8 @@ const SITE_JSON_LD = {
       sameAs: [CONTACT.github],
       knowsAbout: ["React Native", "React", "Next.js", "TypeScript"],
       worksFor: { "@type": "Organization", name: "포에이" },
+      // /about의 EDUCATION과 같은 사실. schema.org의 alumniOf는 재학 중인 학교에도 쓴다.
+      alumniOf: { "@type": "CollegeOrUniversity", name: "한국외국어대학교", url: "https://www.hufs.ac.kr" },
     },
   ],
 };
