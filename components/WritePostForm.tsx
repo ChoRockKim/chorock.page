@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  startTransition,
   useCallback,
   useEffect,
   useRef,
@@ -226,11 +227,21 @@ export default function WritePostForm({
   // Debounced live preview — routed through the real compileMarkdown() pipeline via a
   // Server Action (that module is "server-only" and can't be imported here directly), so
   // the preview always matches what the published post will actually look like.
+  //
+  // The result goes in through startTransition. The returned tree holds client references
+  // (CodeBlock, MDXImage), and rendering one whose chunk isn't ready suspends. Outside a
+  // transition that surfaces the route's loading.tsx skeleton, and React 19 disconnects and
+  // reconnects the hidden tree's effects — so this very effect ran again, fetched again and
+  // suspended again. In `next dev` that looped about once a second, measured: same textarea node,
+  // unchanged body, effect count climbing, a Server Action per second. A production build ran it
+  // once, but could still flash the skeleton the first time a code block reached the preview.
   useEffect(() => {
     const timer = setTimeout(() => {
       previewMarkdown(body).then(({ content, readTime }) => {
-        setPreviewContent(content);
-        setReadTime(readTime);
+        startTransition(() => {
+          setPreviewContent(content);
+          setReadTime(readTime);
+        });
       });
     }, 400);
     return () => clearTimeout(timer);

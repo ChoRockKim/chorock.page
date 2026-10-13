@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, type MutableRefObject } from "react";
-import { EditorState, Prec, Transaction, type Range } from "@codemirror/state";
+import { EditorState, Prec, StateField, Transaction, type Range } from "@codemirror/state";
 import {
   Decoration,
   EditorView,
@@ -150,6 +150,114 @@ function activeLines(view: EditorView) {
   return lines;
 }
 
+/* — vertical rhythm — */
+
+// Block margins as the published post renders them, measured on real posts (gap between two
+// blocks = max(previous margin-bottom, next margin-top), i.e. CSS margin collapsing):
+// p>p 30, p>h2 60, h2>p 10, p>h3 40, p>h4 30, p>code 30, code>p 20, p>ul 10, ul>p 16,
+// p>blockquote 30, blockquote>p 20, h2>table 20.
+const MARGINS: Record<string, [top: number, bottom: number]> = {
+  ATXHeading1: [60, 10],
+  ATXHeading2: [60, 10],
+  SetextHeading1: [60, 10],
+  SetextHeading2: [60, 10],
+  ATXHeading3: [40, 10],
+  ATXHeading4: [30, 10],
+  ATXHeading5: [30, 10],
+  ATXHeading6: [0, 10],
+  FencedCode: [20, 20],
+  CodeBlock: [20, 20],
+  BulletList: [10, 16],
+  OrderedList: [10, 16],
+  Blockquote: [20, 20],
+  Table: [20, 20],
+  HorizontalRule: [20, 20],
+};
+const margins = (name: string): [number, number] => MARGINS[name] ?? [0, 30];
+const isList = (name: string) => name === "BulletList" || name === "OrderedList";
+const lineStyle = (style: string) => Decoration.line({ attributes: { style } });
+
+/**
+ * In the source, blocks are separated by blank lines, and every blank line is one full text line
+ * tall (~29px) — so headings sat too close to the paragraph above and too far from the one below,
+ * code blocks floated, and lists gapped. Instead, the first blank line between two top-level blocks
+ * gets exactly the published gap as its height; further blank lines collapse (as they do when
+ * rendered) unless the caret is on one. With no blank line at all, the gap goes on the next block's
+ * first line as padding. Padding and line-height, never margin: CodeMirror measures line heights
+ * from the DOM, and margins fall outside that measurement.
+ */
+class GapWidget extends WidgetType {
+  constructor(readonly height: number) {
+    super();
+  }
+  eq(other: GapWidget) {
+    return other.height === this.height;
+  }
+  toDOM() {
+    const el = document.createElement("div");
+    el.className = "cm-md-gap";
+    el.style.height = `${this.height}px`;
+    return el;
+  }
+  get estimatedHeight() {
+    return this.height;
+  }
+}
+
+function spacingDecorations(state: EditorState): Range<Decoration>[] {
+  const { doc } = state;
+  const active = new Set<number>();
+  for (const r of state.selection.ranges) {
+    for (let n = doc.lineAt(r.from).number; n <= doc.lineAt(r.to).number; n++) active.add(n);
+  }
+  const decos: Range<Decoration>[] = [];
+  const blankLines = (fromLine: number, toLine: number) => {
+    const out: number[] = [];
+    for (let n = fromLine; n <= toLine; n++) if (!doc.line(n).text.trim()) out.push(n);
+    return out;
+  };
+
+  let prev: { name: string; to: number } | null = null;
+  for (let node = syntaxTree(state).topNode.firstChild; node; node = node.nextSibling) {
+    if (prev) {
+      const prevBottom = prev.name === "Paragraph" && isList(node.name) ? 10 : margins(prev.name)[1];
+      const gap = Math.max(prevBottom, margins(node.name)[0]);
+      const blanks = blankLines(doc.lineAt(prev.to).number + 1, doc.lineAt(node.from).number - 1);
+      if (blanks.length) {
+        blanks.forEach((n, i) => {
+          const h = i === 0 ? gap : active.has(n) ? 28.8 : 0;
+          decos.push(lineStyle(`line-height:${h}px`).range(doc.line(n).from));
+        });
+      } else {
+        // No blank line in the source (a paragraph followed directly by ```, say). Padding on the
+        // next line would be painted by its own background — and a code block header's padding
+        // rule overrode it outright — so the gap is a block widget of its own instead.
+        decos.push(
+          Decoration.widget({ widget: new GapWidget(gap), block: true, side: -1 }).range(doc.lineAt(node.from).from),
+        );
+      }
+    }
+
+    if (isList(node.name)) {
+      // li + li is 5px on the page; blank lines between loose items collapse into that.
+      node.toTree().iterate({
+        enter: (n) => {
+          if (n.name !== "ListItem") return;
+          const from = node!.from + n.from;
+          const sib = n.node.prevSibling;
+          if (sib?.name === "ListItem") {
+            decos.push(lineStyle("padding-top:5px").range(doc.lineAt(from).from));
+            const blanks = blankLines(doc.lineAt(node!.from + sib.to).number + 1, doc.lineAt(from).number - 1);
+            for (const b of blanks) decos.push(lineStyle(`line-height:${active.has(b) ? 28.8 : 0}px`).range(doc.line(b).from));
+          }
+        },
+      });
+    }
+    prev = { name: node.name, to: node.to };
+  }
+  return decos;
+}
+
 function buildDecorations(view: EditorView): DecorationSet {
   const { state } = view;
   const { doc } = state;
@@ -213,10 +321,11 @@ function buildDecorations(view: EditorView): DecorationSet {
             return;
           }
           case "Blockquote": {
-            for (let pos = node.from; pos <= node.to; ) {
-              const line = doc.lineAt(pos);
-              lineClass(line.from, "cm-md-quote");
-              pos = line.to + 1;
+            const firstLine = doc.lineAt(node.from).number;
+            const lastLine = doc.lineAt(node.to).number;
+            for (let n = firstLine; n <= lastLine; n++) {
+              const edge = `${n === firstLine ? " is-first" : ""}${n === lastLine ? " is-last" : ""}`;
+              lineClass(doc.line(n).from, `cm-md-quote${edge}`);
             }
             return;
           }
@@ -256,6 +365,20 @@ function buildDecorations(view: EditorView): DecorationSet {
   return Decoration.set(decos, true);
 }
 
+// Spacing lives in a StateField rather than the ViewPlugin above: block widgets (GapWidget) may
+// only come from state, not from a view plugin. It covers the whole document, which is cheap at
+// blog-post length and keeps heights stable while scrolling.
+const spacingField = StateField.define<DecorationSet>({
+  create: (state) => Decoration.set(spacingDecorations(state), true),
+  update(value, tr) {
+    if (tr.docChanged || tr.selection || syntaxTree(tr.startState) !== syntaxTree(tr.state)) {
+      return Decoration.set(spacingDecorations(tr.state), true);
+    }
+    return value;
+  },
+  provide: (f) => EditorView.decorations.from(f),
+});
+
 const livePreview = ViewPlugin.fromClass(
   class {
     decorations: DecorationSet;
@@ -286,11 +409,13 @@ const theme = EditorView.theme({
   // with only the descendant selector the gaps took the prose color and the highlight was striped.
   ".cm-md-fence::selection, .cm-md-fence ::selection": { backgroundColor: "rgb(56 139 253 / 0.4)" },
   ".cm-placeholder": { color: "var(--color-text)", opacity: "0.35" },
-  ".cm-md-h1": { fontSize: "26px", fontWeight: "600", lineHeight: "1.5", paddingTop: "0.6em" },
-  ".cm-md-h2": { fontSize: "22px", fontWeight: "600", lineHeight: "1.5", paddingTop: "0.6em" },
-  ".cm-md-h3": { fontSize: "18px", fontWeight: "600", paddingTop: "0.4em" },
-  ".cm-md-h4": { fontSize: "16px", fontWeight: "600", paddingTop: "0.3em" },
-  ".cm-md-h5, .cm-md-h6": { fontSize: "15px", fontWeight: "600" },
+  // Published sizes and the global heading line-height (1.12); the space around headings comes
+  // from spacingDecorations, matching .pd-body's margins.
+  ".cm-md-h1": { fontSize: "26px", fontWeight: "600", lineHeight: "1.12" },
+  ".cm-md-h2": { fontSize: "22px", fontWeight: "600", lineHeight: "1.12" },
+  ".cm-md-h3": { fontSize: "18px", fontWeight: "600", lineHeight: "1.12" },
+  ".cm-md-h4": { fontSize: "16px", fontWeight: "600", lineHeight: "1.12" },
+  ".cm-md-h5, .cm-md-h6": { fontSize: "15px", fontWeight: "600", lineHeight: "1.12" },
   ".cm-md-code": {
     fontFamily: "var(--font-mono)",
     fontSize: "0.88em",
@@ -298,11 +423,17 @@ const theme = EditorView.theme({
     borderRadius: "4px",
     background: "color-mix(in srgb, var(--color-text) 9%, transparent)",
   },
+  // .pd-body blockquote: accent-100 box, 15px/20px padding, rounded, italic 15px, accent-800 text.
   ".cm-md-quote": {
-    borderLeft: "3px solid color-mix(in srgb, var(--color-accent) 60%, transparent)",
-    paddingLeft: "12px !important",
     background: "var(--color-accent-100)",
+    color: "var(--color-accent-800)",
+    fontSize: "15px",
+    fontStyle: "italic",
+    paddingLeft: "20px !important",
+    paddingRight: "20px !important",
   },
+  ".cm-md-quote.is-first": { paddingTop: "15px", borderTopLeftRadius: "var(--radius-md)", borderTopRightRadius: "var(--radius-md)" },
+  ".cm-md-quote.is-last": { paddingBottom: "15px", borderBottomLeftRadius: "var(--radius-md)", borderBottomRightRadius: "var(--radius-md)" },
   // Mirrors .code-block / .code-block-header / .code-block pre in globals.css: #3a3a3a header,
   // github-dark #24292e body, 13px/1.6 mono, line-number gutter, hovered-line highlight.
   ".cm-md-fence": {
@@ -315,15 +446,21 @@ const theme = EditorView.theme({
     paddingLeft: "15px !important",
     paddingRight: "15px !important",
   },
+  // Heights measured against the published block: header 46px (10px padding + 26px row),
+  // pre padding 20px top and bottom, 20.8px per code line.
   ".cm-md-fence-head": {
     background: "#3a3a3a",
     borderRadius: "8px 8px 0 0",
-    padding: "8px 15px !important",
-    lineHeight: "1.4",
+    padding: "10px 15px !important",
+    lineHeight: "26px",
     color: "#9ca3af",
     counterReset: "cmfence",
   },
-  ".cm-md-fence-bar": { display: "inline-flex", alignItems: "center", gap: "8px", verticalAlign: "middle" },
+  ".cm-md-fence-bar": { display: "inline-flex", alignItems: "center", gap: "8px", verticalAlign: "top", height: "26px" },
+  // CodeMirror puts a zero-width .cm-widgetBuffer <img> beside every replaced range; on its default
+  // baseline alignment it pushed heading lines 2px and fence headers 1px taller than the published
+  // ones (measured 26.63 vs 24.64), which added up over a long post.
+  ".cm-line .cm-widgetBuffer": { verticalAlign: "top" },
   ".cm-md-fence-dot": { width: "12px", height: "12px", borderRadius: "50%", display: "inline-block" },
   ".cm-md-fence-lang": {
     fontSize: "11px",
@@ -333,9 +470,9 @@ const theme = EditorView.theme({
     marginLeft: "2px",
   },
   ".cm-md-fence-body": { counterIncrement: "cmfence" },
-  ".cm-md-fence-body.is-first": { paddingTop: "16px" },
+  ".cm-md-fence-body.is-first": { paddingTop: "20px" },
   // An unclosed block has no tail line, so its last body line carries the bottom padding.
-  ".cm-md-fence-body.is-last:not(.has-tail)": { paddingBottom: "16px" },
+  ".cm-md-fence-body.is-last:not(.has-tail)": { paddingBottom: "20px" },
   ".cm-md-fence-body::before": {
     content: "counter(cmfence)",
     display: "inline-block",
@@ -348,7 +485,7 @@ const theme = EditorView.theme({
   ".cm-md-fence-d2::before": { width: "2ch" },
   ".cm-md-fence-d3::before": { width: "3ch" },
   // The (hidden) closing ``` line doubles as the block's bottom padding.
-  ".cm-md-fence-tail": { borderRadius: "0 0 8px 8px", color: "#8b949e", lineHeight: "1", paddingBottom: "6px" },
+  ".cm-md-fence-tail": { borderRadius: "0 0 8px 8px", color: "#8b949e", lineHeight: "20px" },
   "@media (hover: hover)": {
     ".cm-md-fence-body:hover": { backgroundImage: "linear-gradient(rgb(255 255 255 / 0.06), rgb(255 255 255 / 0.06))" },
     ".cm-md-fence-body:hover::before": { color: "#d4d4d8" },
@@ -402,6 +539,7 @@ export default function LiveMarkdownEditor({ value, onChange, adapterRef, onKey,
           markdown({ base: markdownLanguage, codeLanguages: languages, addKeymap: false }),
           syntaxHighlighting(markdownStyle),
           livePreview,
+          spacingField,
           theme,
           placeholder ? placeholderExt(placeholder) : [],
           EditorView.updateListener.of((u) => {
