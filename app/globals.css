@@ -1363,6 +1363,10 @@ html.search-open .pd-grid .toc-desktop {
   .proj-callout { padding: var(--space-3); }
 }
 .pd-body h3 { font-size: 18px; margin-top: var(--space-8); scroll-margin-top: 90px; }
+/* h2·h3만 본문 크기로 줄여 두어서 h4는 전역 20px을 그대로 받아 h3(18px)보다 컸다. 본문(16px)과는
+   굵기로만 구분한다. */
+.pd-body h4 { font-size: 16px; margin-top: var(--space-6); scroll-margin-top: 90px; }
+.pd-body h5 { font-size: 15px; margin-top: var(--space-6); scroll-margin-top: 90px; }
 .pd-body blockquote {
   margin: var(--space-4) 0;
   padding: var(--space-3) var(--space-4);
@@ -1422,7 +1426,15 @@ html.search-open .pd-grid .toc-desktop {
 .pd-body li ol { margin-top: 0; }
 .pd-body p:has(+ ul),
 .pd-body p:has(+ ol) { margin-bottom: var(--space-2); }
-.pd-body li + li { margin-top: var(--space-2); }
+/* 항목 사이는 5px(0.11.14, 10px에서 축소). line-height 1.8의 위아래 반행간(약 13px)이 이미
+   틈을 만들어서, 10px을 더하면 보이는 간격이 약 23px로 한 항목이 따로 떨어져 보였다. 도입
+   문장→첫 항목(10px)은 리스트와 도입 문장을 구분하는 역할이라 그대로 둔다. */
+.pd-body li + li { margin-top: var(--space-1); }
+/* 항목 사이에 빈 줄을 둔 "느슨한" 목록은 항목마다 <p>로 감싸진다. 그러면 문단 하단 30px이
+   li 밖으로 상쇄돼 나와서 항목 간격이 30px이 됐다(촘촘한 목록의 6배). 목록 안 문단은 하단
+   여백을 지우고, 한 항목 안에 문단이 여러 개일 때만 그 사이를 띄운다. */
+.pd-body li > p { margin-bottom: 0; }
+.pd-body li > p + p { margin-top: var(--space-2); }
 .pd-body code:not(pre code) {
   font-family: var(--font-mono);
   font-size: 0.85em;
@@ -1483,7 +1495,8 @@ html.search-open .pd-grid .toc-desktop {
    comment stops Autoprefixer from touching the following declaration at all. */
 .code-block pre {
   margin: 0;
-  padding: var(--space-4) var(--space-3);
+  /* 가로 패딩은 줄([data-line])이 갖는다 — 호버 배경이 블록 양 끝까지 차야 해서. */
+  padding: var(--space-4) 0;
   overflow-x: auto;
   font-family: var(--font-mono);
   font-size: 13px;
@@ -1492,6 +1505,35 @@ html.search-open .pd-grid .toc-desktop {
   /* autoprefixer: ignore next */
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+}
+/* VSCode식 줄 번호 + 호버 줄 강조. 번호는 lib/markdown.ts가 모든 펜스에 넣는 showLineNumbers
+   → rehype-pretty-code의 data-line-numbers를 근거로 CSS counter가 그린다. 가상 요소라서
+   드래그 복사에도, CodeBlock 복사 버튼(textContent)에도 섞이지 않는다.
+   width: max-content + min-width: 100% — 가로 스크롤되는 긴 줄에서 강조 배경이 보이는 폭에서
+   끊기지 않고 가장 긴 줄 끝까지 이어지게 한다. */
+.code-block pre > code {
+  display: grid;
+  min-width: 100%;
+  width: max-content;
+  counter-reset: line;
+}
+.code-block pre > code > [data-line] { padding: 0 var(--space-3); }
+.code-block code[data-line-numbers] > [data-line]::before {
+  counter-increment: line;
+  content: counter(line);
+  display: inline-block;
+  width: 1ch;
+  margin-right: 1.25rem;
+  text-align: right;
+  color: #636b78;
+}
+.code-block code[data-line-numbers-max-digits="2"] > [data-line]::before { width: 2ch; }
+.code-block code[data-line-numbers-max-digits="3"] > [data-line]::before { width: 3ch; }
+.code-block code[data-line-numbers-max-digits="4"] > [data-line]::before { width: 4ch; }
+/* 터치 기기는 탭한 줄에 :hover가 남아 강조가 고정돼 버리므로 진짜 포인터에서만. */
+@media (hover: hover) {
+  .code-block pre > code > [data-line]:hover { background: rgb(255 255 255 / 0.06); }
+  .code-block code[data-line-numbers] > [data-line]:hover::before { color: #d4d4d8; }
 }
 
 /* — WritePostForm (/posts/write) — */
@@ -1512,6 +1554,23 @@ html.search-open .pd-grid .toc-desktop {
   border-radius: 4px;
 }
 .wp-toolbar-btn:hover { opacity: 1; background: color-mix(in srgb, var(--color-text) 8%, transparent); }
+.wp-shortcuts { margin-left: auto; position: relative; }
+.wp-shortcuts > summary { list-style: none; font-size: 13px; font-weight: 600; }
+.wp-shortcuts > summary::-webkit-details-marker { display: none; }
+.wp-shortcuts-panel {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 20; width: 300px;
+  padding: var(--space-3); border: 1px solid var(--color-divider); border-radius: 8px;
+  background: var(--color-bg); box-shadow: var(--shadow-md); font-size: 12.5px;
+}
+.wp-shortcuts-panel dl { margin: 0; display: grid; gap: 6px; }
+.wp-shortcuts-panel dl > div { display: flex; justify-content: space-between; gap: var(--space-3); }
+.wp-shortcuts-panel dt, .wp-shortcuts-panel dd { margin: 0; }
+.wp-shortcuts-panel dd { opacity: 0.75; text-align: right; }
+.wp-shortcuts-panel kbd {
+  font-family: var(--font-mono); font-size: 11.5px; padding: 1px 6px; border-radius: 4px;
+  border: 1px solid var(--color-divider); background: var(--color-surface); white-space: nowrap;
+}
+.wp-shortcuts-panel p { margin: var(--space-3) 0 0; opacity: 0.65; font-size: 12px; }
 .wp-toolbar-divider { width: 1px; height: 16px; background: var(--color-divider); margin: 0 4px; }
 /* 편집기 | 미리보기 2단. 두 칸 모두 min-width: 0 이어야 한다 — 넓은 코드 블록이 그리드
    트랙을 제 콘텐츠 너비만큼 밀어내서 반대쪽 칸을 잡아먹는다(0.7.33 참고). 좁은 화면에서는

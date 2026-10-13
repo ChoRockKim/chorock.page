@@ -16,6 +16,21 @@ import Link from "next/link";
 import { previewMarkdown, saveDraft, publishPost, uploadImage, type SavePostInput } from "@/app/posts/write/actions";
 import DraftsPopup from "@/components/DraftsPopup";
 import LeaveConfirmDialog from "@/components/LeaveConfirmDialog";
+import {
+  autoPair,
+  deleteLines,
+  deletePair,
+  duplicateLines,
+  findFence,
+  handleEnter,
+  insertLink,
+  isMacPlatform,
+  moveLines,
+  setHeading,
+  toggleWrap,
+  type Edit,
+} from "@/components/editorShortcuts";
+import { detectCodeLang, sameFamily } from "@/components/detectCodeLang";
 
 type SeriesOption = { id: string; title: string };
 
@@ -233,15 +248,25 @@ export default function WritePostForm({
   // make Cmd+Z stop working almost immediately — Tab-indenting a code block or file tree (common
   // in this blog's content) reset the undo baseline every time. The one deliberate exception is
   // uploadImageAtCursor's async placeholder->URL replace below, which stays a plain setBody call.
+  // Applies an editorShortcuts.ts Edit through the same execCommand path. An empty-range,
+  // empty-text edit (stepping over an auto-closed bracket) only moves the caret.
+  const applyEdit = (edit: Edit | null) => {
+    const el = bodyRef.current;
+    if (!el || !edit) return false;
+    el.focus();
+    if (edit.from !== edit.to || edit.text) {
+      el.setSelectionRange(edit.from, edit.to);
+      document.execCommand("insertText", false, edit.text);
+    }
+    el.setSelectionRange(edit.selStart, edit.selEnd);
+    return true;
+  };
+
+  // Toggles: the same button/shortcut on already-wrapped text unwraps it (Notion behavior).
   const wrapSelection = (marker: string, endMarker = marker) => {
     const el = bodyRef.current;
     if (!el) return;
-    el.focus();
-    const { selectionStart: s, selectionEnd: e } = el;
-    const selected = el.value.slice(s, e) || "텍스트";
-    document.execCommand("insertText", false, marker + selected + endMarker);
-    const pos = s + marker.length;
-    el.setSelectionRange(pos, pos + selected.length);
+    applyEdit(toggleWrap(el.value, el.selectionStart, el.selectionEnd, marker, endMarker));
   };
 
   const insertLinePrefix = (prefix: string) => {
@@ -274,8 +299,16 @@ export default function WritePostForm({
   // spaces at the cursor, Shift+Tab removes up to 2 leading spaces from the current line.
   // Selection spanning one or more lines: indent/outdent every line it touches (matches how code
   // editors handle a selected block), not just replace the selected text.
+  //
+  // Every other shortcut is matched on e.code (the physical key), not e.key: with the Korean
+  // input source active, e.key for ⌘B can arrive as the jamo "ㅠ". Keys pressed mid-composition
+  // (isComposing) are left alone — handling Enter there duplicates or drops the last syllable.
   const handleBodyKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key !== "Tab") return;
+    if (e.nativeEvent.isComposing) return;
+    if (e.key !== "Tab") {
+      handleShortcut(e);
+      return;
+    }
     e.preventDefault();
     const el = bodyRef.current;
     if (!el) return;
@@ -307,6 +340,64 @@ export default function WritePostForm({
     document.execCommand("insertText", false, transformed);
     el.setSelectionRange(lineStart, lineStart + transformed.length);
   };
+
+  const handleShortcut = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    const el = bodyRef.current;
+    if (!el) return;
+    const { value, selectionStart: s, selectionEnd: selEnd } = el;
+    const mod = isMacPlatform() ? e.metaKey : e.ctrlKey;
+    let edit: Edit | null | undefined;
+
+    if (mod && !e.altKey) {
+      if (e.code === "KeyB" && !e.shiftKey) edit = toggleWrap(value, s, selEnd, "**");
+      else if (e.code === "KeyI" && !e.shiftKey) edit = toggleWrap(value, s, selEnd, "*");
+      else if (e.code === "KeyE" && !e.shiftKey) edit = toggleWrap(value, s, selEnd, "`");
+      else if (e.code === "KeyS" && e.shiftKey) edit = toggleWrap(value, s, selEnd, "~~");
+      else if (e.code === "KeyK") {
+        // ⌘K is also the site-wide search (Header listens on window and ignores Shift, so ⌘⇧K
+        // would open it too). Stopping propagation keeps it from opening while the cursor is
+        // in the body; anywhere else on the page it still does.
+        e.stopPropagation();
+        edit = e.shiftKey ? deleteLines(value, s, selEnd) : insertLink(value, s, selEnd);
+      }
+    } else if (mod && e.altKey && /^Digit[123]$/.test(e.code)) {
+      edit = setHeading(value, s, Number(e.code.slice(-1)) + 1);
+    } else if (e.altKey && !mod && (e.code === "ArrowUp" || e.code === "ArrowDown")) {
+      const dir = e.code === "ArrowUp" ? "up" : "down";
+      edit = e.shiftKey ? duplicateLines(value, s, selEnd, dir) : moveLines(value, s, selEnd, dir);
+      // At the first/last line there's nowhere to move — still swallow the key so the caret
+      // doesn't jump to the paragraph boundary (Option+↑'s native meaning on macOS).
+      if (edit === null) e.preventDefault();
+    } else if (e.key === "Enter" && !mod && !e.shiftKey && !e.altKey) {
+      edit = handleEnter(value, s, selEnd);
+    } else if (e.key === "Backspace" && !mod && !e.altKey) {
+      edit = deletePair(value, s, selEnd);
+    }
+
+    if (edit) {
+      e.preventDefault();
+      applyEdit(edit);
+    }
+  };
+
+  // Auto-closing ( [ { " runs on the native beforeinput event, not keydown. Typing "(" right
+  // after a Hangul syllable ("함수(") reaches keydown still flagged isComposing; by beforeinput
+  // the syllable has been committed and "(" arrives as its own insertText. React's
+  // onBeforeInput is a polyfill over keypress/textInput, hence the raw listener. The edit's own
+  // execCommand fires beforeinput again with data "()", which the length-1 check ignores.
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    const onBeforeInput = (e: InputEvent) => {
+      if (e.isComposing || e.inputType !== "insertText" || !e.data || e.data.length !== 1) return;
+      const edit = autoPair(el.value, el.selectionStart, el.selectionEnd, e.data);
+      if (!edit) return;
+      e.preventDefault();
+      applyEdit(edit);
+    };
+    el.addEventListener("beforeinput", onBeforeInput);
+    return () => el.removeEventListener("beforeinput", onBeforeInput);
+  }, []);
 
   // Matches the 4MB cap actions.ts#uploadImage enforces server-side — checked here too so an
   // oversized paste never leaves the browser. Vercel's own serverless request body cap
@@ -356,12 +447,35 @@ export default function WritePostForm({
     return pos + placeholder.length + 1;
   };
 
+  // Pasting code into an *empty* fence (the toolbar's "코드 블록" then ⌘V) fills in the fence's
+  // language from the snippet. Only empty fences: a block that already has content had its label
+  // chosen deliberately. detectCodeLang returns null when unsure, and the label is left alone.
+  // Two execCommands (label, then text) so both steps stay in the undo stack.
+  const pasteIntoCodeFence = (e: ClipboardEvent<HTMLTextAreaElement>) => {
+    const el = bodyRef.current;
+    const text = e.clipboardData.getData("text/plain");
+    if (!el || !text.trim()) return;
+    const fence = findFence(el.value, el.selectionStart);
+    if (!fence || el.value.slice(fence.contentStart, fence.contentEnd).trim()) return;
+    const lang = detectCodeLang(text);
+    if (!lang || sameFamily(lang, fence.lang)) return;
+    e.preventDefault();
+    const { selectionStart: s, selectionEnd: selEnd } = el;
+    const delta = lang.length - fence.lang.length;
+    // A fence with no language ("```" alone) needs no space; the opening line is just ```.
+    applyEdit({ from: fence.langStart, to: fence.langEnd, text: lang, selStart: s + delta, selEnd: selEnd + delta });
+    document.execCommand("insertText", false, text);
+  };
+
   const handleBodyPaste = (e: ClipboardEvent<HTMLTextAreaElement>) => {
     const imageFiles = Array.from(e.clipboardData.items)
       .filter((item) => item.type.startsWith("image/"))
       .map((item) => item.getAsFile())
       .filter((f): f is File => f !== null);
-    if (imageFiles.length === 0) return;
+    if (imageFiles.length === 0) {
+      pasteIntoCodeFence(e);
+      return;
+    }
 
     e.preventDefault();
     setImageError(null);
@@ -459,6 +573,28 @@ export default function WritePostForm({
       setSavingKind(null);
     }
   };
+
+  // Shortcut labels for tooltips and the cheat sheet. Starts as the Mac glyphs and switches after
+  // mount — reading navigator during render would mismatch the server's HTML.
+  const [keys, setKeys] = useState({ mod: "⌘", alt: "⌥", shift: "⇧" });
+  useEffect(() => {
+    if (!isMacPlatform()) setKeys({ mod: "Ctrl+", alt: "Alt+", shift: "Shift+" });
+  }, []);
+  const { mod, alt, shift } = keys;
+  const shortcutList: [string, string][] = [
+    [`${mod}B`, "굵게"],
+    [`${mod}I`, "기울임"],
+    [`${mod}${shift}S`, "취소선"],
+    [`${mod}E`, "인라인 코드"],
+    [`${mod}K`, "링크"],
+    [`${mod}${alt}1 · 2 · 3`, "제목 ## · ### · ####"],
+    [`${alt}↑ / ↓`, "줄 이동"],
+    [`${alt}${shift}↑ / ↓`, "줄 복사"],
+    [`${mod}${shift}K`, "줄 삭제"],
+    ["Tab / Shift+Tab", "들여쓰기 / 내어쓰기"],
+    ["Enter", "목록 이어쓰기 · 코드 자동 들여쓰기"],
+    ["( [ { \"", "자동 닫기 (선택 영역은 감싸기)"],
+  ];
 
   const toolbarBtn = (
     label: ReactNode,
@@ -796,10 +932,13 @@ export default function WritePostForm({
                 flexWrap: "wrap",
               }}
             >
-              {toolbarBtn(<span style={{ fontWeight: 700, fontSize: 13 }}>H1</span>, "제목", () => insertLinePrefix("## "))}
-              {toolbarBtn(<span style={{ fontWeight: 700, fontSize: 14 }}>B</span>, "굵게", () => wrapSelection("**"))}
-              {toolbarBtn(<span style={{ fontStyle: "italic", fontSize: 14 }}>I</span>, "기울임", () => wrapSelection("*"))}
-              {toolbarBtn(<span style={{ textDecoration: "line-through", fontSize: 14 }}>S</span>, "취소선", () => wrapSelection("~~"))}
+              {toolbarBtn(<span style={{ fontWeight: 700, fontSize: 13 }}>H1</span>, `제목 (${mod}${alt}1)`, () => {
+                const el = bodyRef.current;
+                if (el) applyEdit(setHeading(el.value, el.selectionStart, 2));
+              })}
+              {toolbarBtn(<span style={{ fontWeight: 700, fontSize: 14 }}>B</span>, `굵게 (${mod}B)`, () => wrapSelection("**"))}
+              {toolbarBtn(<span style={{ fontStyle: "italic", fontSize: 14 }}>I</span>, `기울임 (${mod}I)`, () => wrapSelection("*"))}
+              {toolbarBtn(<span style={{ textDecoration: "line-through", fontSize: 14 }}>S</span>, `취소선 (${mod}${shift}S)`, () => wrapSelection("~~"))}
               <span className="wp-toolbar-divider" />
               {toolbarBtn(
                 <svg width="15" height="15" viewBox="0 0 256 256" fill="none">
@@ -844,8 +983,11 @@ export default function WritePostForm({
                   <path d="M104 152l-16 16a40 40 0 0 1-56-56l24-24a40 40 0 0 1 56-2" stroke="currentColor" strokeWidth="16" strokeLinecap="round" />
                   <path d="M152 104l16-16a40 40 0 0 1 56 56l-24 24a40 40 0 0 1-56 2" stroke="currentColor" strokeWidth="16" strokeLinecap="round" />
                 </svg>,
-                "링크",
-                () => wrapSelection("[", "](https://)")
+                `링크 (${mod}K)`,
+                () => {
+                  const el = bodyRef.current;
+                  if (el) applyEdit(insertLink(el.value, el.selectionStart, el.selectionEnd));
+                }
               )}
               {toolbarBtn(
                 <svg width="15" height="15" viewBox="0 0 256 256" fill="none">
@@ -861,7 +1003,7 @@ export default function WritePostForm({
                 <svg width="15" height="15" viewBox="0 0 256 256" fill="none">
                   <path d="M84 88 36 128l48 40M172 88l48 40-48 40M144 72l-32 112" stroke="currentColor" strokeWidth="16" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>,
-                "인라인 코드",
+                `인라인 코드 (${mod}E)`,
                 () => wrapSelection("`")
               )}
               {toolbarBtn(
@@ -872,6 +1014,20 @@ export default function WritePostForm({
                 "코드 블록",
                 () => insertBlock("```tsx\n\n```", 7)
               )}
+              <details className="wp-shortcuts">
+                <summary className="wp-toolbar-btn" title="단축키" aria-label="단축키 보기">?</summary>
+                <div className="wp-shortcuts-panel">
+                  <dl>
+                    {shortcutList.map(([k, label]) => (
+                      <div key={k}>
+                        <dt><kbd>{k}</kbd></dt>
+                        <dd>{label}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                  <p>빈 코드 블록에 코드를 붙여넣으면 언어를 자동으로 채웁니다.</p>
+                </div>
+              </details>
             </div>
             <textarea
               ref={bodyRef}

@@ -67,9 +67,17 @@ type-checking and ESLint as part of `build`, so a green build implies both pass)
     it feeds) still shows the original string, so the block *looks* labeled and fine. This is
     the actual explanation behind "works sometimes, not others" reports — real posts have
     inconsistently-cased fences throughout. Fixed with a small custom remark plugin
-    (`remarkLowercaseCodeLang`, right before `remarkRehype`) that lowercases every `code` node's
+    (`remarkNormalizeCodeFence`, right before `remarkRehype`) that lowercases every `code` node's
     `lang` before `rehypePrettyCode` ever sees it — covers every casing at once, whereas
     `defaultLang` alone only ever covers the fully-missing-language case.
+    **Line numbers come from the same plugin**: it appends `showLineNumbers` to every fence's
+    meta, so `rehype-pretty-code` stamps `data-line-numbers` / `data-line-numbers-max-digits` on
+    `<code>`, and `globals.css` draws the numbers as a CSS counter on `[data-line]::before` (a
+    pseudo-element, so neither drag-copy nor `CodeBlock`'s `textContent` copy picks them up —
+    verified). The hover line highlight is gated on `@media (hover: hover)` so a tap on a phone
+    doesn't leave a line stuck highlighted. `code` is `width: max-content; min-width: 100%` so
+    the highlight runs to the end of the longest line in a horizontally scrolled block, and the
+    block's inline padding lives on each line rather than on `pre` for the same reason.
     **`remark-breaks`** (also in this pipeline) turns every single newline within a
     paragraph/blockquote into a hard `<br>` instead of CommonMark's default "soft break"
     (collapsed to a space) — without it, anything typed with single Enters between lines (the
@@ -449,6 +457,27 @@ textarea and moving the selection to the placeholder's location, hijacking the u
 mid-typing. Losing the undo baseline at that one specific moment (upload completing in the
 background) is the accepted tradeoff — the immediate placeholder insertion (a direct result of
 the user's own paste action) still goes through `execCommand`, so that step is undo-able.
+
+**Editor shortcuts (Notion/VSCode-style) follow the same `execCommand` rule.** The arithmetic
+lives in `components/editorShortcuts.ts` as pure functions returning an `Edit`
+(`{ from, to, text, selStart, selEnd }`); `WritePostForm#applyEdit` is the only place that
+touches the DOM. Four non-obvious constraints, each hit or measured while building it:
+- **Match shortcuts on `e.code`, not `e.key`** — with the Korean input source on, `e.key` for ⌘B
+  can arrive as a jamo. And skip anything with `isComposing`, or Enter duplicates/drops the last
+  syllable.
+- **Auto-closing `( [ { "` runs on the native `beforeinput` event**, not keydown: "함수(" reaches
+  keydown still composing, but by `beforeinput` the syllable is committed and `(` arrives as its
+  own `insertText`. React's `onBeforeInput` is a keypress polyfill, hence the raw listener. The
+  real Korean-IME path was not driven in automation — the logic was checked with real Latin key
+  presses only.
+- **Any ⌘K in the body must `stopPropagation()`** — `Header.tsx` opens search on (meta|ctrl)+K
+  from a `window` listener and ignores Shift, so ⌘⇧K (delete line) opened the search modal until
+  both K branches stopped propagation.
+- **Pasting into an empty fence fills its language via `components/detectCodeLang.ts`.**
+  `flourite` alone mislabels exactly what this blog writes (TSX→html, an npm/cd script→lua,
+  SwiftUI→javascript, one-line SQL→c), so Swift/shell/SQL/JSX are matched first and flourite is
+  only trusted above a score floor. Returning null (leave the label) is always preferred to a
+  wrong label. Write-time only — rendering still uses `defaultLang: "tsx"`.
 
 **Header search** (`app/api/search/route.ts` + `lib/posts.ts#searchPosts`) does a regex
 match against title/summary/tags server-side — it is not a full-text/Atlas Search index.

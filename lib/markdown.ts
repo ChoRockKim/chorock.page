@@ -54,11 +54,20 @@ export function extractHeadings(markdown: string): Heading[] {
  * exactly the "sometimes triggers, sometimes doesn't" symptom reported. Lowercasing here, before
  * rehypePrettyCode ever sees it, fixes this for every casing at once instead of only the
  * genuinely-missing-language case defaultLang covers.
+ *
+ * It also appends `showLineNumbers` to every fence's meta, so rehype-pretty-code marks each
+ * <code> with `data-line-numbers` / `data-line-numbers-max-digits` — the numbers themselves are
+ * a CSS counter (`.code-block` in globals.css), so they never end up in copied text. Done here
+ * rather than via `filterMetaString` because this visitor already reaches every fence,
+ * meta-less ones included.
  */
-function remarkLowercaseCodeLang() {
+function remarkNormalizeCodeFence() {
   return (tree: import("mdast").Root) => {
     visit(tree, "code", (node) => {
       if (node.lang) node.lang = node.lang.toLowerCase();
+      if (!/(?:^|\s)showLineNumbers/.test(node.meta ?? "")) {
+        node.meta = node.meta ? `${node.meta} showLineNumbers` : "showLineNumbers";
+      }
     });
   };
 }
@@ -99,7 +108,7 @@ export async function compileMarkdown(markdown: string): Promise<{ content: Reac
     .use(remarkParse)
     .use(remarkGfm)
     .use(remarkBreaks)
-    .use(remarkLowercaseCodeLang)
+    .use(remarkNormalizeCodeFence)
     .use(remarkRehype)
     .use(rehypeSlug)
     .use(rehypePrettyCode, {
