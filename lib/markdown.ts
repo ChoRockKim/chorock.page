@@ -15,6 +15,8 @@ import { visit } from "unist-util-visit";
 import GithubSlugger from "github-slugger";
 import CodeBlock from "@/components/CodeBlock";
 import { MDXBlockquote, MDXImage } from "@/components/Mdx";
+import YouTubeEmbed from "@/components/YouTubeEmbed";
+import { parseYouTube } from "@/lib/youtube";
 
 export type Heading = { id: string; text: string; depth: 2 | 3 };
 
@@ -72,6 +74,31 @@ function remarkNormalizeCodeFence() {
   };
 }
 
+/**
+ * A paragraph holding nothing but a bare YouTube URL (an autolink, `<https://…>` included — not
+ * `[text](url)`, so a deliberate link stays a link) becomes a click-to-play embed. A URL inside a
+ * sentence is left alone for the same reason. The node is turned into a custom element,
+ * `youtube-embed`, which rehypeReact maps to components/YouTubeEmbed.
+ */
+function remarkYouTube() {
+  return (tree: import("mdast").Root) => {
+    visit(tree, "paragraph", (node) => {
+      const kids = node.children.filter((c) => !(c.type === "text" && !c.value.trim()));
+      if (kids.length !== 1 || kids[0].type !== "link") return;
+      const link = kids[0];
+      const text = link.children.length === 1 && link.children[0].type === "text" ? link.children[0].value : null;
+      if (text === null || (text !== link.url && `mailto:${text}` !== link.url)) return;
+      const ref = parseYouTube(link.url);
+      if (!ref) return;
+      node.children = [];
+      node.data = {
+        hName: "youtube-embed",
+        hProperties: { "data-id": ref.id, "data-start": String(ref.start), "data-shorts": ref.shorts ? "1" : "0" },
+      };
+    });
+  };
+}
+
 const CJK_RANGE = /[ㄱ-힝一-鿿]/g;
 
 export function estimateReadTime(markdown: string): number {
@@ -109,6 +136,7 @@ export async function compileMarkdown(markdown: string): Promise<{ content: Reac
     .use(remarkGfm)
     .use(remarkBreaks)
     .use(remarkNormalizeCodeFence)
+    .use(remarkYouTube)
     .use(remarkRehype)
     .use(rehypeSlug)
     .use(rehypePrettyCode, {
@@ -133,6 +161,7 @@ export async function compileMarkdown(markdown: string): Promise<{ content: Reac
         pre: CodeBlock,
         img: MDXImage,
         blockquote: MDXBlockquote,
+        "youtube-embed": YouTubeEmbed,
       },
     })
     .process(markdown);

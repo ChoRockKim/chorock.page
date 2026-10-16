@@ -520,6 +520,35 @@ references that suspend, and outside a transition that showed `loading.tsx`, whi
 disconnects/reconnects effects and re-ran the preview effect — a once-a-second Server Action loop
 in `next dev` (not in production, but a first-time skeleton flash there).
 
+**A lone YouTube URL in a post becomes a click-to-play embed, and the rule is deliberately narrow.**
+`remarkYouTube` (`lib/markdown.ts`) only fires when a paragraph's single child is an autolink whose
+text equals its URL — `[text](url)`, a URL inside a sentence, or an invalid 11-char ID stays a plain
+link, so a deliberate link is never hijacked. The node becomes a custom `youtube-embed` element that
+rehypeReact maps to `components/YouTubeEmbed.tsx` (`data-id`/`data-start`/`data-shorts` props — hast
+property names are mangled for unknown camelCase, `data-*` pass through untouched). It is a
+thumbnail + button until pressed, then a `youtube-nocookie.com` iframe: opening a post loads no
+player and sets no cookies. Fixed `aspect-ratio` so the iframe never shifts the text below.
+
+**Live-mode fidelity was verified by measurement, so re-measure instead of eyeballing.** Put one
+markdown document in both `compileMarkdown` (a throwaway server page) and `WritePostForm`
+(`initial.content`), then compare each top-level block's top/height: published `getBoundingClientRect`
+vs the editor's `view.lineBlockAt`. Result: 16 blocks within 1px / 0px. Traps found on the way:
+- **CodeMirror's `.cm-line` has `padding: 0 2px 0 6px`**, so text was 632px wide (not 640) and block
+  widgets (table, YouTube card — no padding of their own) sat 6px left of the text. `.cm-line` padding
+  is zeroed in the theme; any per-line `padding-left` (list indent) must not assume the old 6px.
+- **Every widget gets a `cm-widgetBuffer`, a 1em-tall `<img>` on each side**; next to a block widget
+  each becomes its own 16px line box. Lines holding only an image/`<hr>` carry class
+  `cm-md-blockline` (strut 0, buffers hidden).
+- **Block widgets (table, YouTube card) can only come from a `StateField`**, not a ViewPlugin; they and
+  the spacing live in `spacingField`. Widget margins collapse out of CodeMirror's height
+  measurement, so widgets carry no margin and the gap is computed (`MARGINS`, per `blockKind`).
+- **Lines outside the visible window keep estimated heights (28.8px / `estimatedHeight`)**, so a
+  measurement of off-screen blocks is meaningless: scroll the *window* (not the editor scroller)
+  over the whole editor before reading, and don't trust a block whose neighbour is off-screen.
+- `next dev` fills up with stale chunks after many edits (`Cannot read properties of undefined
+  (reading 'call')`, "2 Issues"): restart with `rm -rf .next` and visit a post page (compiles
+  `CodeBlock`) before measuring.
+
 **Header search** (`app/api/search/route.ts` + `lib/posts.ts#searchPosts`) does a regex
 match against title/summary/tags server-side — it is not a full-text/Atlas Search index.
 
