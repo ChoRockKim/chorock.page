@@ -38,7 +38,7 @@ const projects = [
       },
       {
         label: "공통·인프라",
-        items: ["pnpm 모노레포", "TypeScript", "Vercel", "Cloudflare Web Analytics"],
+        items: ["pnpm 모노레포", "TypeScript", "Vercel", "AWS (EC2·RDS·S3·CloudFront)", "GitHub Actions", "Cloudflare Web Analytics"],
       },
     ],
     coverImage: "/projects/quinquatria/cover.webp",
@@ -76,15 +76,14 @@ Vercel Web Analytics로 축제 전날 밤(10/6 21시)부터 3일을 쟀습니다
 - 정적 생성으로 구워서 CDN 요청 67만 건 중 서버 함수 호출은 0.7%였습니다.
 - 지도에서 장소를 연 횟수가 약 2만 5천 회였고, 그중 92%가 부스·주점·푸드트럭이었습니다.
 
-## 문제 해결
+## 서버 구조
 
-### 번역을 지워도 서버에 남던 문제
+![서버 아키텍처 — Vercel 두 프로젝트, Route 53·Nginx·EC2(Docker Compose), RDS, S3·CloudFront, GitHub Actions 배포](/projects/quinquatria/architecture.webp)
 
-관리자에서 한 언어의 번역을 비우고 저장해도 서버에는 남아 있었습니다. 서버는 번역을 언어별로 합쳐서 받는데 화면은 전체를 갈아 끼우는 식으로 보내고 있었습니다. 장소·메뉴·공연·분실물 모두 같은 문제여서 저장은 병합으로, 삭제는 서버가 정한 삭제 경로로 보내게 한꺼번에 고치고, 삭제에는 확인창과 실행취소를 달았습니다.
-
-### iOS에서 화면이 밀리던 문제
-
-화면이 딱 맞는데도 문서가 조금씩 끌려 내려가고, 인풋을 누르면 아래에 흰 칸이 생겼습니다. 사파리가 주소창을 접으려고 문서 스크롤을 열어 두면서 \`100dvh\`가 같이 늘어나는 게 원인이었습니다. 문서 스크롤을 막고, 키보드가 올라올 때의 높이는 viewport 설정에 맡겼습니다.
+- 학생용 앱과 관리자 앱은 각각 Vercel 프로젝트로 따로 배포했습니다. 학생용은 ISR로 서빙하고, 백엔드가 데이터를 바꾸면 \`/api/revalidate\`로 태그를 재검증합니다.
+- 백엔드는 AWS(ap-northeast-2)의 EC2 한 대에서 Docker Compose로 돌립니다. Nginx가 호스트별로 학생용 API(customer)와 관리자용 API(backoffice)에 나눠 보내고, 배포마다 마이그레이션 컨테이너가 한 번 돈 뒤 PostgreSQL(RDS, 프라이빗 서브넷)에 붙습니다.
+- 관리자는 발급 코드로 JWT를 받아 Bearer로 API를 부르고, 사진은 presigned URL로 S3에 바로 올립니다. 학생에게는 CloudFront를 거쳐 이미지를 줍니다.
+- 배포는 \`main\`에 푸시하면 GitHub Actions가 ruff·pytest를 돌리고, 승인 뒤 OIDC로 AWS 권한을 받아 이미지를 ECR에 올린 다음 SSM Run Command로 서버를 갱신합니다. 환경변수는 Parameter Store에 두고 로그는 CloudWatch로 보냅니다.
 
 ## 화면
 
