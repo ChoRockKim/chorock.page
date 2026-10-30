@@ -3,6 +3,16 @@
 이 프로젝트의 주요 변경 사항을 버전(작업 단위) 별로 기록합니다. 형식은
 [Keep a Changelog](https://keepachangelog.com/)를 참고합니다.
 
+## [0.13.1] - 2026-10-30
+
+### Added
+
+- **프로젝트 `QUINQUATRIA 2026`(`/projects/quinquatria`)을 추가했다.** 한국외대 서울캠퍼스 대동제 공식 웹
+  (학생용 Next.js 앱 + 학생회용 Vite 관리자 앱). `scripts/seed-projects.ts`에 항목을,
+  `public/projects/quinquatria/`에 커버와 화면 이미지 6장(webp)을 넣었다. 저장소는 조직 소유라
+  `repoUrl`을 비웠다. 트래픽 수치는 Vercel Web Analytics 기준만 적었다 — Cloudflare 값과 크게
+  달라(축제 이틀만 10만 건 이상) 원인을 맞춰 보지 못했다.
+
 ## [0.13.0] - 2026-10-17
 
 ### Added
