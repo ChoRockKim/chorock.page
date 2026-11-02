@@ -3,6 +3,16 @@
 이 프로젝트의 주요 변경 사항을 버전(작업 단위) 별로 기록합니다. 형식은
 [Keep a Changelog](https://keepachangelog.com/)를 참고합니다.
 
+## [0.13.2] - 2026-11-02
+
+### Changed
+
+- **사이트맵에 `/posts/page/2~N`을 넣었다.** `app/sitemap.ts`가 `countPublishedPosts()`와
+  `POSTS_PAGE_SIZE`로 `app/posts/page/[n]`의 `generateStaticParams`와 같은 페이지 수를 계산해
+  2페이지부터 추가한다(1페이지는 `/posts`로 308). `lastmod`는 목록 페이지와 같은 `newestPost`.
+  Search Console에서 글 42개·프로젝트 7개·시리즈 5개가 "발견됨 - 현재 색인이 생성되지 않음"으로
+  남아 있었고, 이 페이지들이 오래된 글로 가는 크롤링 경로라 사이트맵에도 명시했다.
+
 ## [0.13.1] - 2026-10-30
 
 ### Added

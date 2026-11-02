@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
-import { listPostSitemapEntries } from "@/lib/posts";
+import { countPublishedPosts, listPostSitemapEntries } from "@/lib/posts";
+import { POSTS_PAGE_SIZE } from "@/lib/postsPagination";
 import { listProjectSitemapEntries } from "@/lib/projects";
 import { listSeriesSitemapEntries } from "@/lib/series";
 
@@ -18,10 +19,11 @@ const BASE_URL = "https://chorock.page";
 export const revalidate = 300;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const [posts, projects, series] = await Promise.all([
+  const [posts, projects, series, publishedCount] = await Promise.all([
     listPostSitemapEntries(),
     listProjectSitemapEntries(),
     listSeriesSitemapEntries(),
+    countPublishedPosts(),
   ]);
 
   // The newest thing on the site — used as `lastModified` for the list pages, whose content is
@@ -61,5 +63,19 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.7,
   }));
 
-  return [...staticRoutes, ...postRoutes, ...projectRoutes, ...seriesRoutes];
+  // The crawlable /posts/page/[n] mirror (app/posts/page/[n]/page.tsx). Page 1 is a 308 to /posts,
+  // so this starts at 2, using the same page count as that route's generateStaticParams. Every new
+  // post shifts each page's slice by one, so `newestPost` is the honest lastmod here too.
+  const totalPages = Math.max(1, Math.ceil(publishedCount / POSTS_PAGE_SIZE));
+  const paginationRoutes: MetadataRoute.Sitemap = Array.from(
+    { length: Math.max(0, totalPages - 1) },
+    (_, i) => ({
+      url: `${BASE_URL}/posts/page/${i + 2}`,
+      lastModified: newestPost,
+      changeFrequency: "weekly",
+      priority: 0.6,
+    })
+  );
+
+  return [...staticRoutes, ...paginationRoutes, ...postRoutes, ...projectRoutes, ...seriesRoutes];
 }
