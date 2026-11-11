@@ -67,7 +67,7 @@ const CAREER: {
   tags: string[];
 }[] = [
   {
-    period: "2026.03 — 현재",
+    period: "2026.03 ~ 현재",
     title: "프론트엔드 개발자",
     company: "포에이",
     logo: "/career/forA-logo.png",
@@ -76,7 +76,7 @@ const CAREER: {
     tags: ["React Native", "Expo"],
   },
   {
-    period: "2026.02 — 2027.02",
+    period: "2026.02 ~ 2027.02",
     title: "프론트엔드 운영진",
     company: "멋쟁이사자처럼 한국외대",
     logo: "/career/likelion-hufs.jpeg",
@@ -91,7 +91,7 @@ const EDUCATION: { school: string; majors: string; period: string; status: strin
   {
     school: "한국외국어대학교",
     majors: "ELLT학과 · 융복합소프트웨어",
-    period: "2021.03 — 2027.07",
+    period: "2021.03 ~ 2027.07",
     status: "재학 중 · 졸업 예정",
     logo: "/career/hufs-emblem.webp",
   },
@@ -206,7 +206,7 @@ export default async function AboutPage() {
             once the detail wrapped (which it does at this width) the bolded label stopped
             lining up with anything, so the block read as ragged prose instead of a scan list.
             Giving the label its own line makes wrapping harmless. See PROFILE.highlights for
-            why the " — " separator has to survive editing. */}
+            why the ": " separator has to survive editing. */}
         <ul
           style={{
             listStyle: "none",
@@ -219,7 +219,7 @@ export default async function AboutPage() {
           }}
         >
           {PROFILE.highlights.map((line) => {
-            const [label, ...rest] = line.split(" — ");
+            const [label, ...rest] = line.split(": ");
             return (
               <li key={line} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
                 {/* Same idiom as globals.css's .card-kicker and the project sidebar's field
@@ -242,7 +242,7 @@ export default async function AboutPage() {
                 </span>
                 {rest.length > 0 && (
                   <span style={{ fontSize: 14.5, lineHeight: 1.6, opacity: 0.75 }}>
-                    {rest.join(" — ")}
+                    {rest.join(": ")}
                   </span>
                 )}
               </li>

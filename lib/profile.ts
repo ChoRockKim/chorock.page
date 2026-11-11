@@ -18,9 +18,9 @@ export const PROFILE = {
   /**
    * Two scannable lines under `intro`. A reader who skips the paragraph still reads these,
    * which is the point — the whole page is optimised for someone skimming for a few seconds.
-   * `label — detail`; about/page.tsx splits on the em dash and renders the label as a small
-   * accent kicker on its own line above the detail, so keep the " — " separator (spaced em
-   * dash) intact in every entry.
+   * `label: detail`; about/page.tsx splits on the first ": " and renders the label as a small
+   * accent kicker on its own line above the detail, so keep the ": " separator (colon +
+   * space) intact in every entry.
    *
    * Both labels are noun phrases, and both carry the fact rather than hiding it in the detail
    * half — the label is what a skimmer's eye compares first, so a vague one ("혼자 끝까지")
@@ -31,8 +31,8 @@ export const PROFILE = {
    * (same rule as not hardcoding post counts). The 140 figure matches /projects/hufs-clock.
    */
   highlights: [
-    "실서비스 — 스토어에 출시된 ADHD 커뮤니티 앱 forA의 프론트엔드를 맡고 있습니다",
-    "사용자 140명 — 크롬 익스텐션을 2025년 11월부터 혼자 기획하고 개발·배포·유지보수해 왔습니다",
+    "실서비스: 스토어에 출시된 ADHD 커뮤니티 앱 forA의 프론트엔드를 맡고 있습니다",
+    "사용자 140명: 크롬 익스텐션을 2025년 11월부터 혼자 기획하고 개발·배포·유지보수해 왔습니다",
   ],
   /** Rendered only when non-empty — clear this one string when the job hunt ends and the line
    *  disappears from /about with no other edit. */

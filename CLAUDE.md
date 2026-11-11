@@ -37,7 +37,8 @@ type-checking and ESLint as part of `build`, so a green build implies both pass)
 - 원문에 없는 주장·통계·사례를 임의로 추가하지 않고, 핵심 논리와 수치를 바꾸지 않는다.
 - 제목·소제목·이미지·링크와 전체 구조·분량은 최대한 유지한다(소제목은 TOC 앵커가 되므로 특히 주의).
 - 교정을 요청받으면 교정된 최종본만 낸다. 설명이나 인사말을 덧붙이지 않는다.
-- `lib/profile.ts`의 `highlights`는 ` — `(공백 포함 em dash) 구분자를 유지한다. 프로젝트 본문은
+- 줄표(—)와 볼드(`**`)는 쓰지 않는다. 기간은 `~`, 라벨과 설명은 `:`로 잇고, 강조는 문장 구조로 해결한다.
+- `lib/profile.ts`의 `highlights`는 `: `(콜론+공백) 구분자를 유지한다. 프로젝트 본문은
   `npm run seed:projects`를 다시 돌려야 사이트에 반영된다(운영 DB에 쓰므로 요청이 있을 때만).
 
 ## Architecture
