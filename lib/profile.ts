@@ -14,7 +14,7 @@ export const PROFILE = {
   // third entry, and sitting three lines apart it read as repetition rather than emphasis —
   // it was also the one entry with no concrete fact behind it, so it was dropped.
   intro:
-    "React Native로 앱을, Next.js로 웹을 만들고 직접 운영합니다. 만드는 동안보다 굴러가는 동안 배운 게 더 많았고, 그래서 고쳤다는 말보다 어떻게 확인했는지를 같이 적습니다.",
+    "React Native로 앱을, Next.js로 웹을 만들고 직접 운영합니다. 만들 때보다 서비스가 돌아가는 동안 배운 것이 더 많았기에, 무엇을 고쳤는지만 적지 않고 어떻게 확인했는지도 함께 적습니다.",
   /**
    * Two scannable lines under `intro`. A reader who skips the paragraph still reads these,
    * which is the point — the whole page is optimised for someone skimming for a few seconds.
@@ -32,7 +32,7 @@ export const PROFILE = {
    */
   highlights: [
     "실서비스 — 스토어에 출시된 ADHD 커뮤니티 앱 forA의 프론트엔드를 맡고 있습니다",
-    "사용자 140명 — 크롬 익스텐션을 2025년 11월부터 혼자 기획·개발·배포·유지보수했습니다",
+    "사용자 140명 — 크롬 익스텐션을 2025년 11월부터 혼자 기획하고 개발·배포·유지보수해 왔습니다",
   ],
   /** Rendered only when non-empty — clear this one string when the job hunt ends and the line
    *  disappears from /about with no other edit. */

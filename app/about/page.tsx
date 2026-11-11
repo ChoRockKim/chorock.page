@@ -39,17 +39,17 @@ export const revalidate = 300;
 const SKILLS: { level: string; note?: string; items: string[] }[] = [
   {
     level: "주력",
-    note: "실무와 개인 프로젝트에서 반복해서 씁니다",
+    note: "실무와 개인 프로젝트에서 반복해 사용합니다",
     items: ["TypeScript", "JavaScript", "React", "Next.js", "React Native", "Expo"],
   },
   {
     level: "실무에서 사용",
-    note: "실제 서비스에 붙여봤습니다",
+    note: "실제 서비스에 적용해 본 경험이 있습니다",
     items: ["TanStack Query", "Tailwind CSS", "SCSS", "Node.js", "MongoDB"],
   },
   {
     level: "경험 있음",
-    note: "필요할 때 찾아 쓰는 수준입니다",
+    note: "필요할 때 문서를 찾아 쓸 수 있는 수준입니다",
     items: ["Supabase", "Docker", "GitHub Actions"],
   },
   { level: "도구", items: ["Git", "GitHub"] },
@@ -72,7 +72,7 @@ const CAREER: {
     company: "포에이",
     logo: "/career/forA-logo.png",
     description:
-      "ADHD 커뮤니티 앱 forA의 프론트엔드 개발·유지보수를 맡고 있습니다. 창업팀의 기획자·디자이너·백엔드 개발자와 한 팀으로 기능 기획부터 스토어 릴리즈까지 함께 만들어가고 있습니다.",
+      "ADHD 커뮤니티 앱 forA의 프론트엔드 개발과 유지보수를 맡고 있습니다. 창업팀의 기획자, 디자이너, 백엔드 개발자와 한 팀으로 일하며 기능 기획부터 스토어 릴리즈까지 함께 진행합니다.",
     tags: ["React Native", "Expo"],
   },
   {
@@ -81,7 +81,7 @@ const CAREER: {
     company: "멋쟁이사자처럼 한국외대",
     logo: "/career/likelion-hufs.jpeg",
     description:
-      "14기 프론트엔드 운영진으로 HTML·CSS·JavaScript·React 세션을 맡아 아기사자들의 학습과 프로젝트 개발을 돕고 있습니다. 애니멀리그 중앙해커톤에 팀으로 참가해 프론트엔드를 전담했고, 그 결과물이 Chrono-Derm입니다.",
+      "14기 프론트엔드 운영진으로서 HTML·CSS·JavaScript·React 세션을 진행하며 아기사자들의 학습과 프로젝트 개발을 돕고 있습니다. 애니멀리그 중앙해커톤에는 팀으로 참가해 프론트엔드를 전담했으며, 이때 만든 결과물이 Chrono-Derm입니다.",
     tags: ["React.js", "Javascript", "React Native"],
   },
 ];
@@ -606,7 +606,7 @@ export default async function AboutPage() {
             opacity: 0.85,
           }}
         >
-          협업이나 문의는 이메일이나 GitHub로 편하게 연락해주세요.
+          협업이나 문의는 이메일 또는 GitHub로 편하게 연락 주세요.
         </p>
         <div
           style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-2)" }}
