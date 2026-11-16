@@ -196,7 +196,7 @@ in `layout.tsx`) — this is the one thing in the file that can't just be a JSX 
 
 **The header collapses into a floating glass capsule on scroll, and three rules keep it from
 breaking things.** `<header>` (`.site-header`) is a transparent positioning shell; `.site-bar`
-carries the visible surface and animates from full-bleed to a right-aligned ~462px capsule
+carries the visible surface and animates from full-bleed to a right-aligned ~506px capsule (462px before the "실험" nav item was added)
 (`border-radius: 999px`, glass, `--shadow-lg`). Glass values live in `--glass-bg`/`--glass-sheen`/
 `--glass-edge`/`--glass-rim` per theme — they used to be `white` mixes hardcoded in an inline style,
 which dark mode had no way to adjust.

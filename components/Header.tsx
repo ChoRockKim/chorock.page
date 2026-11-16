@@ -14,7 +14,7 @@ import type { PostSummary } from "@/lib/posts";
 import LiquidGlassFilter from "@/components/LiquidGlassFilter";
 import useLiquidLens from "@/components/useLiquidLens";
 
-type NavKey = "about" | "posts" | "series" | "projects";
+type NavKey = "about" | "posts" | "series" | "projects" | "lab";
 
 /** 메뉴가 사라지는 애니메이션 길이(ms). globals.css의 navPanelOut과 함께 바꿔야 한다. */
 const MENU_EXIT_MS = 320;
@@ -28,6 +28,8 @@ const NAV_ITEMS: { key: NavKey; label: string; href: string }[] = [
   { key: "posts", label: "글", href: "/posts" },
   { key: "series", label: "시리즈", href: "/series" },
   { key: "projects", label: "프로젝트", href: "/projects" },
+  // 실험실은 별도 배포(chorock-lab)라 절대 주소다. pathname과 겹칠 일이 없어 활성 표시는 생기지 않는다.
+  { key: "lab", label: "실험", href: "https://lab.chorock.page" },
 ];
 
 export default function Header() {
