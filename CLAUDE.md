@@ -563,6 +563,32 @@ vs the editor's `view.lineBlockAt`. Result: 16 blocks within 1px / 0px. Traps fo
 - **Lines outside the visible window keep estimated heights (28.8px / `estimatedHeight`)**, so a
   measurement of off-screen blocks is meaningless: scroll the *window* (not the editor scroller)
   over the whole editor before reading, and don't trust a block whose neighbour is off-screen.
+- **Code colors come from Shiki itself, not from a matched palette** (`components/liveHighlight.ts`).
+  CodeMirror's tokenizers disagree with Shiki on token boundaries (parameters, type annotations,
+  ALL_CAPS names), so a look-alike palette was never exact. The editor now runs the same
+  `codeToHast` call as `lib/markdown.ts` (github-dark + colorized brackets) for fences *and*
+  inline code — rehype-pretty-code highlights inline code too, which is why it is a dark chip on
+  the page. Languages load on demand; until one is ready CodeMirror's own colors stand in and a
+  `recolor` effect redraws. Compared per character on real posts: 0 of ~8,000 differ.
+- **Two or more images on one line are drawn as the page's real `<p>`** (`ImageRowWidget`, a block
+  widget inside a `pd-body` wrapper), so `.pd-body p:has(img + img)` lays them out — imitating
+  that rule per line had been skipped, and they stacked full-width.
+- **Untouched code blocks do not wrap** (`.is-clipped`, `white-space: pre`), as on the page; with
+  the caret inside they wrap so everything is editable. This needs `.cm-content { min-width: 0 }`:
+  a flex item will not shrink below its content's minimum width, so one long code line widened the
+  whole column and every paragraph wrapped later than the published one.
+- **A block image inside a text line needs CodeMirror's helpers hidden**: the zero-width
+  `.cm-widgetBuffer` beside it and the trailing `<br>` after a line-ending widget each become an
+  empty 28.8px line box. Before the image margins were modelled, that stray line happened to
+  cancel the missing 10px + 20px to within 1.2px, which is why it went unnoticed.
+- **Spacing inside a blockquote is computed like top-level spacing** (`quoteChildren`), with the
+  first/last child's outer margins kept inside the box as extra line padding; list items there are
+  separated by `QuoteMark` siblings, so "previous sibling is a ListItem" has to skip those.
+- To re-verify: a throwaway `app/livetest` route rendering one markdown file through both
+  `compileMarkdown` and `LiveMarkdownEditor`, compared with Playwright by top-level block
+  (`view.lineBlockAt`, keeping the Text/WidgetRange part of a composite block). The fixture plus
+  five real posts gave 0 mismatched blocks of 473. Use a viewport taller than the document, or
+  off-screen lines keep estimated heights.
 - `next dev` fills up with stale chunks after many edits (`Cannot read properties of undefined
   (reading 'call')`, "2 Issues"): restart with `rm -rf .next` and visit a post page (compiles
   `CodeBlock`) before measuring.

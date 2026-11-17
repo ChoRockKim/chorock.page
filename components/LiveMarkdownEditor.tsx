@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, type MutableRefObject } from "react";
-import { EditorState, Prec, StateField, Transaction, type Range } from "@codemirror/state";
+import { EditorState, Prec, StateEffect, StateField, Transaction, type Range } from "@codemirror/state";
 import {
   Decoration,
   EditorView,
@@ -14,11 +14,13 @@ import {
 } from "@codemirror/view";
 import { history, historyKeymap, defaultKeymap } from "@codemirror/commands";
 import { HighlightStyle, syntaxHighlighting, syntaxTree } from "@codemirror/language";
+import type { SyntaxNode } from "@lezer/common";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { languages } from "@codemirror/language-data";
 import { tags as t } from "@lezer/highlight";
 import { autoPair, type Edit } from "@/components/editorShortcuts";
 import { parseYouTube, youTubeThumb } from "@/lib/youtube";
+import { colorRuns, highlightVersion, onHighlightReady } from "@/components/liveHighlight";
 
 /**
  * The write form's "라이브" mode: an Obsidian-style live-preview markdown editor.
@@ -64,32 +66,66 @@ const markdownStyle = HighlightStyle.define([
   { tag: t.strong, fontWeight: "700" },
   { tag: t.emphasis, fontStyle: "italic" },
   { tag: t.strikethrough, textDecoration: "line-through" },
-  { tag: t.link, color: "var(--color-accent-600)" },
-  { tag: t.url, color: "var(--color-accent-600)", opacity: "0.7" },
+  // Links carry no color of their own here: the link *text* is styled by .cm-md-link (the page's
+  // `a`), and tinting the whole node made the text a different green than the published link.
   { tag: [t.processingInstruction, t.contentSeparator], opacity: "0.45" },
   { tag: t.quote, fontStyle: "italic" },
-  // fenced-code tokens (github-dark)
-  { tag: [t.keyword, t.operatorKeyword, t.modifier, t.controlKeyword], color: "#ff7b72" },
-  { tag: [t.string, t.special(t.string), t.regexp], color: "#a5d6ff" },
-  { tag: [t.comment, t.lineComment, t.blockComment], color: "#8b949e", fontStyle: "italic" },
-  { tag: [t.number, t.bool, t.atom, t.null], color: "#79c0ff" },
-  { tag: [t.function(t.variableName), t.function(t.propertyName)], color: "#d2a8ff" },
-  { tag: [t.typeName, t.className, t.namespace], color: "#ffa657" },
-  { tag: [t.propertyName, t.attributeName], color: "#79c0ff" },
-  { tag: [t.tagName, t.angleBracket], color: "#7ee787" },
-  { tag: [t.definition(t.variableName)], color: "#ffa657" },
-  { tag: t.operator, color: "#ff7b72" },
+  // fenced-code tokens: Shiki's "github-dark" palette, the theme rehype-pretty-code publishes with
+  // (not GitHub's newer "dark default", whose reds and blues are visibly different).
+  {
+    tag: [t.keyword, t.operatorKeyword, t.modifier, t.controlKeyword, t.definitionKeyword, t.moduleKeyword, t.operator],
+    color: "#f97583",
+  },
+  { tag: [t.string, t.special(t.string), t.regexp], color: "#9ecbff" },
+  { tag: [t.comment, t.lineComment, t.blockComment], color: "#6a737d" },
+  { tag: [t.number, t.bool, t.atom, t.null, t.typeName, t.definition(t.variableName)], color: "#79b8ff" },
+  {
+    tag: [
+      t.function(t.variableName),
+      t.function(t.propertyName),
+      t.function(t.definition(t.variableName)),
+      t.className,
+      t.attributeName,
+    ],
+    color: "#b392f0",
+  },
+  { tag: t.tagName, color: "#85e89d" },
+  // The arrow of an arrow function is an operator to Shiki; the member-access dot is not.
+  { tag: t.function(t.punctuation), color: "#f97583" },
+  { tag: t.derefOperator, color: "#e1e4e8" },
+  // ${ } inside a template literal takes the string's color.
+  { tag: t.special(t.brace), color: "#9ecbff" },
 ]);
 
+/** Dispatched when Shiki has finished loading a language: decorations are rebuilt with its colors. */
+const recolor = StateEffect.define<null>();
+const hasRecolor = (tr: Transaction) => tr.effects.some((e) => e.is(recolor));
+/** `{:lang}` at the end of inline code picks its language on the page, and is not shown. */
+const INLINE_LANG = /\{:([a-zA-Z.-]+)\}$/;
+// A fence with no language is published as tsx (defaultLang in lib/markdown.ts); so is inline code.
+const DEFAULT_LANG = "tsx";
+
+// @shikijs/colorized-brackets on github-dark: three colors cycling by nesting depth.
+const BRACKET_COLORS = ["#79b8ff", "#ffab70", "#b392f0"];
+const OPEN = "([{";
+const CLOSE = ")]}";
+// Brackets inside these are text, not structure — Shiki leaves them uncolored too.
+const NOT_CODE = /String|Comment|RegExp|Template|Interpolation/i;
+
+
 class ImageWidget extends WidgetType {
-  constructor(readonly src: string) {
+  /** `top`/`bottom`: the image's margins on the page, for an image sharing its line with text
+   *  (a line holding only images carries them as line padding instead). */
+  constructor(readonly src: string, readonly top = 0, readonly bottom = 0) {
     super();
   }
   eq(other: ImageWidget) {
-    return other.src === this.src;
+    return other.src === this.src && other.top === this.top && other.bottom === this.bottom;
   }
-  toDOM() {
+  toDOM(view: EditorView) {
     const wrap = document.createElement("span");
+    if (this.top) wrap.style.paddingTop = `${this.top}px`;
+    if (this.bottom) wrap.style.paddingBottom = `${this.bottom}px`;
     // `pd-body` brings in the published `.pd-body img` look (rounded corners, 640px max height);
     // its margins are zeroed in the theme because the spacing is computed, not CSS-collapsed.
     wrap.className = "cm-md-image pd-body";
@@ -100,12 +136,57 @@ class ImageWidget extends WidgetType {
       const img = document.createElement("img");
       img.src = this.src;
       img.alt = "";
+      // The line's height is only known once the image has loaded.
+      img.onload = () => view.requestMeasure();
       wrap.appendChild(img);
     }
     return wrap;
   }
   ignoreEvent() {
     return false;
+  }
+}
+
+/** One source line of an image-only paragraph: the image URLs on it, in order. */
+type ImageLine = string[];
+
+/**
+ * A paragraph that puts two or more images on one source line. The page lays that paragraph out
+ * as a wrapping flex row, two images per row (`.pd-body p:has(img + img)` in globals.css), and the
+ * rule keys off the paragraph's real child structure — siblings, `<br>`s — in ways that are easy
+ * to get subtly wrong by imitation. So this draws the very same `<p>` the page renders, inside a
+ * `pd-body` wrapper, and lets the published CSS do the layout. Clicking it puts the caret in the
+ * source, like a table.
+ */
+class ImageRowWidget extends WidgetType {
+  constructor(readonly lines: ImageLine[]) {
+    super();
+  }
+  eq(o: ImageRowWidget) {
+    return JSON.stringify(o.lines) === JSON.stringify(this.lines);
+  }
+  toDOM(view: EditorView) {
+    const wrap = document.createElement("div");
+    wrap.className = "cm-md-imgrow pd-body";
+    const p = document.createElement("p");
+    this.lines.forEach((line, i) => {
+      // remark-breaks turns the newline between two source lines into a <br>.
+      if (i > 0) p.appendChild(document.createElement("br"));
+      for (const src of line) {
+        const img = document.createElement("img");
+        img.alt = "";
+        if (src.startsWith("uploading:")) img.alt = "이미지 업로드 중…";
+        else img.src = src;
+        img.onload = () => view.requestMeasure();
+        p.appendChild(img);
+      }
+    });
+    wrap.appendChild(p);
+    enterBlockOnClick(wrap, view);
+    return wrap;
+  }
+  get estimatedHeight() {
+    return 200;
   }
 }
 
@@ -130,7 +211,15 @@ class FenceHeaderWidget extends WidgetType {
     const label = document.createElement("span");
     label.className = "cm-md-fence-lang";
     label.textContent = this.lang || "tsx";
-    bar.appendChild(label);
+    const left = document.createElement("span");
+    left.className = "cm-md-fence-left";
+    left.append(...Array.from(bar.childNodes), label);
+    // The published header ends with a copy button; drawn here (inert) so the bar reads the same.
+    const copy = document.createElement("span");
+    copy.className = "cm-md-fence-copy";
+    copy.innerHTML =
+      '<svg width="14" height="14" viewBox="0 0 256 256" fill="none"><rect x="88" y="88" width="128" height="128" rx="12" stroke="currentColor" stroke-width="16"/><path d="M168 88V56a8 8 0 0 0-8-8H56a8 8 0 0 0-8 8v104a8 8 0 0 0 8 8h32" stroke="currentColor" stroke-width="16" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>';
+    bar.append(left, copy);
     return bar;
   }
   ignoreEvent() {
@@ -159,7 +248,7 @@ class MarkerWidget extends WidgetType {
   }
   toDOM() {
     const el = document.createElement("span");
-    el.className = "cm-md-marker";
+    el.className = `cm-md-marker is-${this.kind}`;
     if (this.kind === "ordinal") {
       el.textContent = this.label;
     } else {
@@ -210,7 +299,22 @@ function inlineNodes(text: string): Node[] {
     if (m.index > last) out.push(document.createTextNode(text.slice(last, m.index)));
     const tag = m[1] ? "code" : m[2] ? "strong" : m[3] ? "em" : m[4] ? "del" : "a";
     const el = document.createElement(tag);
-    el.textContent = m[1] ?? m[2] ?? m[3] ?? m[4] ?? m[5];
+    const runs = m[1] ? colorRuns(m[1], DEFAULT_LANG) : null;
+    if (m[1] && runs) {
+      // Same token colors as the page's inline code.
+      let at = 0;
+      for (const run of runs) {
+        if (run.from > at) el.append(m[1].slice(at, run.from));
+        const span = document.createElement("span");
+        span.style.color = run.color;
+        span.textContent = m[1].slice(run.from, run.to);
+        el.append(span);
+        at = run.to;
+      }
+      if (at < m[1].length) el.append(m[1].slice(at));
+    } else {
+      el.textContent = m[1] ?? m[2] ?? m[3] ?? m[4] ?? m[5];
+    }
     out.push(el);
     last = m.index + m[0].length;
   }
@@ -221,11 +325,14 @@ function inlineNodes(text: string): Node[] {
 /** A GFM table, rendered as the real <table> inside a `pd-body` wrapper so the published
  *  `.pd-body table/th/td` rules style it. Clicking it puts the caret in the source. */
 class TableWidget extends WidgetType {
+  // Cells with inline code are colored by Shiki, which may still have been loading when this was
+  // drawn; a widget from before that must not be reused.
+  readonly version = highlightVersion;
   constructor(readonly rows: string[][]) {
     super();
   }
   eq(o: TableWidget) {
-    return JSON.stringify(o.rows) === JSON.stringify(this.rows);
+    return o.version === this.version && JSON.stringify(o.rows) === JSON.stringify(this.rows);
   }
   toDOM(view: EditorView) {
     const wrap = document.createElement("div");
@@ -336,17 +443,38 @@ const MARGINS: Record<string, [top: number, bottom: number]> = {
   // A paragraph holding only images: img margin-top 10 / margin-bottom 20 collapse into the
   // paragraph's own margin, so the box is 10 above and 30 below. Two in a row sit 10 apart.
   ImageParagraph: [10, 30],
+  // Several images, one per source line (img<br>img): none is an only child, so the tightening
+  // rules for a single-image paragraph don't apply and the paragraph before it keeps its 30px.
+  ImageStack: [10, 30],
+  // Two or more images on one line: a flex row, image margins zeroed, plain paragraph margins.
+  ImageRow: [0, 30],
   // A lone YouTube link → the 20px-margin embed box.
   Embed: [20, 20],
 };
 const IMAGE_ONLY = /^(?:!\[[^\]]*\]\([^)]*\)\s*)+$/;
+const IMAGE = /!\[[^\]]*\]\(([^)\s]*)[^)]*\)/g;
+const ENDS_WITH_IMAGE = /!\[[^\]]*\]\([^)]*\)\s*$/;
+// ">" markers at the start of a line inside a blockquote, with the one space that may follow each.
+const QUOTE_PREFIX = /^\s*(?:>[ \t]?)+/;
+/** A source line without its blockquote markers. */
+const lineBody = (text: string) => text.replace(QUOTE_PREFIX, "");
+/** Multi-line source text without the blockquote markers on its continuation lines. */
+const unquote = (text: string) => text.replace(/\n\s*(?:>[ \t]?)+/g, "\n");
+/** The image URLs on each source line of an image-only paragraph. */
+function imageLines(text: string): ImageLine[] {
+  return text.split("\n").map((line) => Array.from(line.matchAll(IMAGE), (m) => m[1]));
+}
 
 /** The block's spacing class: a paragraph of only images or only a YouTube URL behaves differently
  *  from a text paragraph (see the margin table above). */
 function blockKind(state: EditorState, node: { name: string; from: number; to: number }): string {
   if (node.name !== "Paragraph") return node.name;
-  const text = state.doc.sliceString(node.from, node.to).trim();
-  if (IMAGE_ONLY.test(text)) return "ImageParagraph";
+  const text = unquote(state.doc.sliceString(node.from, node.to)).trim();
+  if (IMAGE_ONLY.test(text)) {
+    const lines = imageLines(text);
+    if (lines.some((l) => l.length > 1)) return "ImageRow";
+    return lines.length > 1 ? "ImageStack" : "ImageParagraph";
+  }
   const url = /^<(.+)>$/.exec(text)?.[1] ?? text;
   if (!/\s/.test(url) && parseYouTube(url)) return "Embed";
   return "Paragraph";
@@ -393,23 +521,101 @@ function spacingDecorations(state: EditorState): Range<Decoration>[] {
     for (let n = doc.lineAt(r.from).number; n <= doc.lineAt(r.to).number; n++) active.add(n);
   }
   const decos: Range<Decoration>[] = [];
+  // Blank, or blank apart from blockquote markers (a ">"-only line inside a quote).
   const blankLines = (fromLine: number, toLine: number) => {
     const out: number[] = [];
-    for (let n = fromLine; n <= toLine; n++) if (!doc.line(n).text.trim()) out.push(n);
+    for (let n = fromLine; n <= toLine; n++) if (!lineBody(doc.line(n).text).trim()) out.push(n);
     return out;
   };
+  type Prev = { name: string; to: number; endsWithImage: boolean };
+  type Block = { name: string; from: number; to: number; node: SyntaxNode };
+  /** Vertical space between two sibling blocks: the larger of the two facing margins. */
+  const gapBetween = (prev: Prev, kind: string) => {
+    // A paragraph right before a list, or a text paragraph before an image paragraph, tightens to
+    // 10px (see globals.css). But a block whose last line ends in an image still shows that
+    // image's own 20px through its bottom edge.
+    const isParagraph = /^(Paragraph|ImageParagraph|ImageStack|ImageRow)$/.test(prev.name);
+    const base =
+      (isParagraph && isList(kind)) || (prev.name === "Paragraph" && kind === "ImageParagraph")
+        ? 10
+        : margins(prev.name)[1];
+    const prevBottom = prev.endsWithImage ? Math.max(20, base) : base;
+    return prev.name === "ImageParagraph" && kind === "ImageParagraph" ? 10 : Math.max(prevBottom, margins(kind)[0]);
+  };
+  /** li + li is 5px on the page; blank lines between loose items collapse into that. */
+  const listItems = (list: Block) => {
+    list.node.toTree().iterate({
+      enter: (n) => {
+        if (n.name !== "ListItem") return;
+        const from = list.from + n.from;
+        // Inside a blockquote the items are separated by the ">" marks of each line.
+        let sib = n.node.prevSibling;
+        while (sib?.name === "QuoteMark") sib = sib.prevSibling;
+        if (sib?.name === "ListItem") {
+          decos.push(lineStyle("padding-top:5px").range(doc.lineAt(from).from));
+          const blanks = blankLines(doc.lineAt(list.from + sib.to).number + 1, doc.lineAt(from).number - 1);
+          for (const b of blanks) decos.push(lineStyle(`line-height:${active.has(b) ? 28.8 : 0}px`).range(doc.line(b).from));
+        }
+      },
+    });
+  };
+  // A list or paragraph whose last line ends in an image: that image's 20px bottom margin runs
+  // out through the block. Not in a flex row of images, where their margins are zeroed.
+  const endsWithImage = (block: Block, kind: string) =>
+    kind !== "ImageRow" &&
+    (isList(block.name) || block.name === "Paragraph") &&
+    ENDS_WITH_IMAGE.test(lineBody(doc.lineAt(block.to).text));
+  /**
+   * The blocks inside a blockquote are spaced by the same margins as top-level ones, but the
+   * quote's padding keeps the first and last child's outer margins *inside* the tinted box. With
+   * no blank (">"-only) line between two children the gap goes on the next line as padding — the
+   * line paints its own quote background, so no stripe shows (a block widget here would).
+   */
+  const quoteChildren = (quote: Block) => {
+    const firstLine = doc.lineAt(quote.from).number;
+    const lastLine = doc.lineAt(quote.to).number;
+    let prev: Prev | null = null;
+    let last: Block | null = null;
+    for (let child = quote.node.firstChild; child; child = child.nextSibling) {
+      if (child.name === "QuoteMark") continue;
+      const kind = blockKind(state, child);
+      if (!prev) {
+        const extra = margins(kind)[0];
+        if (kind !== "Paragraph" && extra) decos.push(lineStyle(`padding-top:${15 + extra}px`).range(doc.line(firstLine).from));
+      } else {
+        const gap = gapBetween(prev, kind);
+        const blanks = blankLines(doc.lineAt(prev.to).number + 1, doc.lineAt(child.from).number - 1);
+        if (blanks.length) {
+          blanks.forEach((n, i) => {
+            const h = i === 0 ? gap : active.has(n) ? 28.8 : 0;
+            decos.push(lineStyle(`line-height:${h}px`).range(doc.line(n).from));
+          });
+        } else {
+          decos.push(lineStyle(`padding-top:${gap}px`).range(doc.lineAt(child.from).from));
+        }
+      }
+      if (isList(child.name)) listItems(child);
+      prev = { name: kind, to: child.to, endsWithImage: endsWithImage(child, kind) };
+      last = child;
+    }
+    if (!prev || !last) return;
+    // The last child's bottom margin, kept inside the box. A paragraph has none there
+    // (`blockquote p:last-child`), but an image closing it still has its own 20px.
+    const extra = /^(Paragraph|ImageParagraph|ImageStack|ImageRow)$/.test(prev.name)
+      ? prev.endsWithImage
+        ? 20
+        : 0
+      : prev.endsWithImage
+        ? 20
+        : margins(prev.name)[1];
+    if (extra) decos.push(lineStyle(`padding-bottom:${15 + extra}px`).range(doc.line(lastLine).from));
+  };
 
-  let prev: { name: string; to: number } | null = null;
+  let prev: Prev | null = null;
   for (let node = syntaxTree(state).topNode.firstChild; node; node = node.nextSibling) {
     const kind = blockKind(state, node);
     if (prev) {
-      // A text paragraph right before an image paragraph / list tightens to 10px (see globals.css).
-      const prevBottom =
-        prev.name === "Paragraph" && (isList(kind) || kind === "ImageParagraph") ? 10 : margins(prev.name)[1];
-      const gap =
-        prev.name === "ImageParagraph" && kind === "ImageParagraph"
-          ? 10
-          : Math.max(prevBottom, margins(kind)[0]);
+      const gap = gapBetween(prev, kind);
       const blanks = blankLines(doc.lineAt(prev.to).number + 1, doc.lineAt(node.from).number - 1);
       if (blanks.length) {
         blanks.forEach((n, i) => {
@@ -450,6 +656,13 @@ function spacingDecorations(state: EditorState): Range<Decoration>[] {
           ),
         );
       }
+    } else if (!touched && kind === "ImageRow") {
+      decos.push(
+        Decoration.replace({
+          widget: new ImageRowWidget(imageLines(doc.sliceString(node.from, node.to).trim())),
+          block: true,
+        }).range(doc.line(firstLine).from, doc.line(lastLine).to),
+      );
     } else if (!touched && kind === "Embed") {
       const text = doc.sliceString(node.from, node.to).trim();
       const ref = parseYouTube(/^<(.+)>$/.exec(text)?.[1] ?? text);
@@ -463,22 +676,9 @@ function spacingDecorations(state: EditorState): Range<Decoration>[] {
       }
     }
 
-    if (isList(node.name)) {
-      // li + li is 5px on the page; blank lines between loose items collapse into that.
-      node.toTree().iterate({
-        enter: (n) => {
-          if (n.name !== "ListItem") return;
-          const from = node!.from + n.from;
-          const sib = n.node.prevSibling;
-          if (sib?.name === "ListItem") {
-            decos.push(lineStyle("padding-top:5px").range(doc.lineAt(from).from));
-            const blanks = blankLines(doc.lineAt(node!.from + sib.to).number + 1, doc.lineAt(from).number - 1);
-            for (const b of blanks) decos.push(lineStyle(`line-height:${active.has(b) ? 28.8 : 0}px`).range(doc.line(b).from));
-          }
-        },
-      });
-    }
-    prev = { name: kind, to: node.to };
+    if (isList(node.name)) listItems(node);
+    if (node.name === "Blockquote") quoteChildren(node);
+    prev = { name: kind, to: node.to, endsWithImage: endsWithImage(node, kind) };
   }
   return decos;
 }
@@ -494,9 +694,56 @@ function buildDecorations(view: EditorView): DecorationSet {
   // line number → list depth. Filled while walking (outer items first, so a nested item's lines
   // overwrite its parent's) and turned into one indent decoration per line afterwards.
   const listLines = new Map<number, { depth: number; first: boolean }>();
+  const tree = syntaxTree(state);
+  /**
+   * Function parameters, which Shiki colors orange. The highlighter tags them like any other
+   * declared name, so they are found by position: an identifier whose node is a
+   * VariableDefinition under a ParamList. The fence's language tree is an overlay, which a plain
+   * tree walk does not enter — hence resolving at each identifier instead.
+   */
+  const colorParams = (from: number, to: number) => {
+    const text = doc.sliceString(from, to);
+    for (const m of text.matchAll(/[A-Za-z_$][\w$]*/g)) {
+      const at = from + m.index;
+      const node = tree.resolveInner(at, 1);
+      if (node.name !== "VariableDefinition") continue;
+      for (let a = node.parent, i = 0; a && i < 6; a = a.parent, i++) {
+        if (a.name === "ParamList") {
+          decos.push(Decoration.mark({ class: "cm-md-param" }).range(node.from, node.to));
+          break;
+        }
+        if (/Function|Declaration|Statement|Block/.test(a.name)) break;
+      }
+    }
+  };
+  /** Shiki's colors for the code at [from, to). False while that language is still loading. */
+  const colorWithShiki = (from: number, to: number, lang: string) => {
+    const runs = colorRuns(doc.sliceString(from, to), lang);
+    if (!runs) return false;
+    for (const run of runs) {
+      const style = `color:${run.color}${run.italic ? ";font-style:italic" : ""}`;
+      decos.push(Decoration.mark({ class: "cm-md-tok", attributes: { style } }).range(from + run.from, from + run.to));
+    }
+    return true;
+  };
+  /** Rainbow brackets over [from, to), as the published code gets from colorized-brackets. */
+  const colorBrackets = (from: number, to: number) => {
+    const text = doc.sliceString(from, to);
+    let depth = 0;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      const opening = OPEN.includes(ch);
+      if (!opening && !CLOSE.includes(ch)) continue;
+      if (NOT_CODE.test(tree.resolveInner(from + i, 1).name)) continue;
+      if (!opening) depth = Math.max(0, depth - 1);
+      const color = BRACKET_COLORS[depth % BRACKET_COLORS.length];
+      decos.push(Decoration.mark({ attributes: { style: `color:${color}` } }).range(from + i, from + i + 1));
+      if (opening) depth++;
+    }
+  };
 
   for (const { from, to } of view.visibleRanges) {
-    syntaxTree(state).iterate({
+    tree.iterate({
       from,
       to,
       enter: (node) => {
@@ -525,9 +772,23 @@ function buildDecorations(view: EditorView): DecorationSet {
             if (!isActive(node.from)) decos.push(hide.range(node.from, node.to));
             return;
           }
-          case "InlineCode":
+          case "InlineCode": {
             decos.push(Decoration.mark({ class: "cm-md-code" }).range(node.from, node.to));
+            const marks = node.node.getChildren("CodeMark");
+            if (marks.length < 2) return;
+            const from = marks[0].to;
+            let to = marks[marks.length - 1].from;
+            let lang = DEFAULT_LANG;
+            const suffix = INLINE_LANG.exec(doc.sliceString(from, to));
+            if (suffix && doc.sliceString(from + suffix.index - 1, from + suffix.index) !== "\\") {
+              lang = suffix[1];
+              to = from + suffix.index;
+              if (!isActive(node.from)) decos.push(hide.range(to, marks[marks.length - 1].from));
+            }
+            // ".token" aliases color the whole span by theme scope instead; left to the base color.
+            if (to > from && !lang.startsWith(".") && !colorWithShiki(from, to, lang)) colorBrackets(from, to);
             return;
+          }
           case "Link": {
             const marks = node.node.getChildren("LinkMark");
             const url = node.node.getChild("URL");
@@ -597,8 +858,11 @@ function buildDecorations(view: EditorView): DecorationSet {
             }
             // A nested item's source is indented with spaces; the page indents by 1.4em per level
             // instead, so the raw whitespace is hidden along with the marker.
-            const lineStart = doc.lineAt(node.from).from;
-            decos.push(Decoration.replace({ widget: marker }).range(lineStart, end));
+            // Inside a blockquote the line starts with ">" markers, hidden on their own; the
+            // replaced range starts after them so the two never overlap.
+            const markLine = doc.lineAt(node.from);
+            const lineStart = markLine.from + (QUOTE_PREFIX.exec(markLine.text)?.[0].length ?? 0);
+            decos.push(Decoration.replace({ widget: marker }).range(Math.min(lineStart, node.from), end));
             return;
           }
           case "TaskMarker": {
@@ -614,25 +878,53 @@ function buildDecorations(view: EditorView): DecorationSet {
             if (!url) return;
             const src = doc.sliceString(url.from, url.to);
             decos.push(hide.range(node.from, node.to));
-            decos.push(Decoration.widget({ widget: new ImageWidget(src), side: 1 }).range(node.to));
-            // Only a line holding nothing but images gets a zero strut (an image mid-sentence keeps
-            // its text's line height).
-            if (IMAGE_ONLY.test(doc.lineAt(node.from).text.trim())) {
-              decos.push(blockLine.range(doc.lineAt(node.from).from));
-            }
-            // An image on its own source line *inside* a longer paragraph (text, newline, image):
-            // the page puts 10px above it and 20px below, or 10px between two stacked images.
             const line = doc.lineAt(node.from);
+            // A line holding nothing but images (blockquote markers aside).
+            const alone = IMAGE_ONLY.test(lineBody(line.text).trim());
+            // The image is a block on the page, with 10px above and 20px below — but only where
+            // those margins survive: not against the paragraph's own edges (they collapse into
+            // its margins), 10px between two stacked images, and after an image that is followed
+            // by text on the *next* line, the <br> between them leaves an empty line box as well.
+            let top = 0;
+            let bottom = 0;
             const para = node.node.parent;
-            if (para?.name === "Paragraph" && IMAGE_ONLY.test(line.text.trim())) {
-              const isFirstLine = doc.lineAt(para.from).number === line.number;
-              const isLastLine = doc.lineAt(para.to).number === line.number;
-              const imgLine = (n: number) => n >= 1 && n <= doc.lines && IMAGE_ONLY.test(doc.line(n).text.trim());
-              const top = isFirstLine || imgLine(line.number - 1) ? 0 : 10;
-              const bottom = isLastLine ? 0 : imgLine(line.number + 1) ? 10 : 20;
-              if (top || bottom) {
-                decos.push(lineStyle(`padding-top:${top}px;padding-bottom:${bottom}px`).range(line.from));
+            if (para?.name === "Paragraph") {
+              const before = unquote(doc.sliceString(para.from, node.from));
+              const after = unquote(doc.sliceString(node.to, para.to));
+              const lineEnds = /^[ \t]*\n/.test(after);
+              if (before.trim() && !ENDS_WITH_IMAGE.test(before)) top = 10;
+              if (!after.trim()) {
+                // An image closing a list item keeps its 20px below it: the margin runs out
+                // through the <li> and beats the 5px between items. The item spacing already
+                // supplies 5 of that; at the very end of the list the list's own bottom margin
+                // handles it instead (see spacingDecorations).
+                let item: SyntaxNode | null = para.parent;
+                while (item && item.name !== "ListItem") item = item.parent;
+                let outer: SyntaxNode | null = item;
+                while (outer?.parent && outer.parent.name !== "Document" && outer.parent.name !== "Blockquote") {
+                  outer = outer.parent;
+                }
+                const endsList = !!outer && doc.lineAt(outer.to).number === line.number;
+                bottom = item && !endsList ? 15 : 0;
+              } else if (/^\s*!\[/.test(after)) {
+                bottom = lineEnds ? 10 : 0;
+              } else {
+                bottom = lineEnds ? 20 + 28.8 : 20;
               }
+            }
+            if (alone) {
+              // Zero strut: the line is exactly as tall as its image(s) plus the padding.
+              decos.push(blockLine.range(line.from));
+              const pads = [top && `padding-top:${top}px`, bottom && `padding-bottom:${bottom}px`].filter(Boolean);
+              if (pads.length) decos.push(lineStyle(pads.join(";")).range(line.from));
+              decos.push(Decoration.widget({ widget: new ImageWidget(src), side: 1 }).range(node.to));
+            } else {
+              decos.push(Decoration.widget({ widget: new ImageWidget(src, top, bottom), side: 1 }).range(node.to));
+              // CodeMirror's zero-width buffer beside the widget becomes an empty 28.8px line box
+              // of its own when nothing else shares that side of the (block) image.
+              const lead = !lineBody(doc.sliceString(line.from, node.from)).trim();
+              const trail = !doc.sliceString(node.to, line.to).trim();
+              if (lead || trail) lineClass(line.from, `cm-md-imgedge${trail ? " is-trail" : ""}`);
             }
             return;
           }
@@ -643,6 +935,13 @@ function buildDecorations(view: EditorView): DecorationSet {
               const edge = `${n === firstLine ? " is-first" : ""}${n === lastLine ? " is-last" : ""}`;
               lineClass(doc.line(n).from, `cm-md-quote${edge}`);
             }
+            return;
+          }
+          case "QuoteMark": {
+            // The page draws a quote as a tinted box; the ">" is source.
+            if (isActive(node.from)) return;
+            const end = doc.sliceString(node.to, node.to + 1) === " " ? node.to + 1 : node.to;
+            decos.push(hide.range(node.from, end));
             return;
           }
           case "FencedCode": {
@@ -662,9 +961,25 @@ function buildDecorations(view: EditorView): DecorationSet {
               const lang = info ? doc.sliceString(info.from, info.to).toLowerCase() : "";
               decos.push(Decoration.replace({ widget: new FenceHeaderWidget(lang) }).range(head.from, head.to));
             }
+            if (bodyLast > first) {
+              const codeFrom = doc.line(first + 1).from;
+              const codeTo = doc.line(bodyLast).to;
+              const info = node.node.getChild("CodeInfo");
+              const lang = (info ? doc.sliceString(info.from, info.to).trim().split(/\s+/)[0].toLowerCase() : "") || DEFAULT_LANG;
+              // Until Shiki has the language, CodeMirror's own highlighting stands in.
+              if (!colorWithShiki(codeFrom, codeTo, lang)) {
+                colorBrackets(codeFrom, codeTo);
+                colorParams(codeFrom, codeTo);
+              }
+            }
+            // The page never wraps code — a long line runs off the right edge and the block scrolls.
+            // An untouched block is clipped the same way; with the caret inside, lines wrap so
+            // everything on them can be seen and edited.
+            let inside = false;
+            for (let n = first; n <= last && !inside; n++) inside = active.has(n);
             for (let n = first + 1; n <= bodyLast; n++) {
               const edge = `${n === first + 1 ? " is-first" : ""}${n === bodyLast ? ` is-last${closed ? " has-tail" : ""}` : ""}`;
-              const cls = `cm-md-fence cm-md-fence-body cm-md-fence-d${digits}${edge}`;
+              const cls = `cm-md-fence cm-md-fence-body cm-md-fence-d${digits}${edge}${inside ? "" : " is-clipped"}`;
               decos.push(Decoration.line({ class: cls }).range(doc.line(n).from));
             }
             if (closed) {
@@ -681,7 +996,10 @@ function buildDecorations(view: EditorView): DecorationSet {
   for (const [n, { depth, first }] of listLines) {
     // 1.4em per level, as .pd-body ul/ol; the first line hangs its marker into that space.
     decos.push(
-      lineStyle(`padding-left:${(depth * 1.4).toFixed(1)}em${first ? ";text-indent:-1.4em" : ""}`).range(
+      // --md-indent: a blockquote line's own left padding is !important, so it adds this in.
+      lineStyle(
+        `padding-left:${(depth * 1.4).toFixed(1)}em;--md-indent:${(depth * 1.4).toFixed(1)}em${first ? ";text-indent:-1.4em" : ""}`,
+      ).range(
         doc.line(n).from,
       ),
     );
@@ -695,7 +1013,7 @@ function buildDecorations(view: EditorView): DecorationSet {
 const spacingField = StateField.define<DecorationSet>({
   create: (state) => Decoration.set(spacingDecorations(state), true),
   update(value, tr) {
-    if (tr.docChanged || tr.selection || syntaxTree(tr.startState) !== syntaxTree(tr.state)) {
+    if (tr.docChanged || tr.selection || hasRecolor(tr) || syntaxTree(tr.startState) !== syntaxTree(tr.state)) {
       return Decoration.set(spacingDecorations(tr.state), true);
     }
     return value;
@@ -710,7 +1028,13 @@ const livePreview = ViewPlugin.fromClass(
       this.decorations = buildDecorations(view);
     }
     update(u: ViewUpdate) {
-      if (u.docChanged || u.selectionSet || u.viewportChanged || syntaxTree(u.startState) !== syntaxTree(u.state)) {
+      if (
+        u.docChanged ||
+        u.selectionSet ||
+        u.viewportChanged ||
+        u.transactions.some(hasRecolor) ||
+        syntaxTree(u.startState) !== syntaxTree(u.state)
+      ) {
         this.decorations = buildDecorations(u.view);
       }
     }
@@ -724,7 +1048,10 @@ const theme = EditorView.theme({
   "&": { color: "color-mix(in srgb, var(--color-text) 88%, transparent)", backgroundColor: "transparent", fontSize: "16px", height: "100%" },
   "&.cm-focused": { outline: "none" },
   ".cm-scroller": { fontFamily: "var(--font-body)", lineHeight: "1.8", overflow: "auto" },
-  ".cm-content": { padding: "var(--space-3) var(--space-4)", caretColor: "var(--color-text)" },
+  // min-width: 0 — a clipped (unwrapped) code line is as wide as its text, and a flex item will
+  // not shrink below its content's minimum width by default. Without this one long line of code
+  // widened the whole text column, and every paragraph wrapped later than it does on the page.
+  ".cm-content": { padding: "var(--space-3) var(--space-4)", caretColor: "var(--color-text)", minWidth: "0" },
   // CodeMirror gives every line 0 2px 0 6px. Block widgets (table, YouTube card) have none, so
   // they stood 6px left of the text, and the text column was 632px instead of the page's 640.
   ".cm-line": { padding: "0" },
@@ -759,7 +1086,10 @@ const theme = EditorView.theme({
     fontSize: "0.85em",
     padding: "0.15em 0.4em",
     borderRadius: "4px",
-    background: "var(--color-surface)",
+    // rehype-pretty-code highlights inline code too, so on the page it is a github-dark chip
+    // in both themes — not the light surface color the stylesheet alone suggests.
+    background: "#24292e",
+    color: "#e1e4e8",
   },
   // Global `a`: accent color, underlined, offset 3px.
   ".cm-md-link": {
@@ -773,20 +1103,30 @@ const theme = EditorView.theme({
     width: "1.4em",
     textIndent: "0",
     textAlign: "right",
-    paddingRight: "0.52em",
     boxSizing: "border-box",
     fontVariantNumeric: "tabular-nums",
   },
-  ".cm-md-dot": { display: "inline-block", width: "5px", height: "5px", marginBottom: "2px", background: "currentColor", borderRadius: "50%" },
-  ".cm-md-dot.is-circle": { background: "transparent", border: "1px solid currentColor", boxSizing: "border-box" },
+  // Positions measured against the browser's own ::marker at 4x zoom: a 5px disc/square ends
+  // 12.4px before the text, a 6px circle 11.3px, and an ordinal's period about 4px.
+  ".cm-md-marker.is-disc, .cm-md-marker.is-square": { paddingRight: "12.4px" },
+  ".cm-md-marker.is-circle": { paddingRight: "11.3px" },
+  ".cm-md-marker.is-ordinal": { paddingRight: "4.1px" },
+  ".cm-md-dot": { display: "inline-block", width: "5px", height: "5px", marginBottom: "3px", background: "currentColor", borderRadius: "50%" },
+  ".cm-md-dot.is-circle": { width: "6px", height: "6px", background: "transparent", border: "1px solid currentColor", boxSizing: "border-box" },
   ".cm-md-dot.is-square": { borderRadius: "0" },
   // UA checkbox margin is 3px 3px 3px 4px, followed by the source's space (≈4.4px).
-  ".cm-md-check": { margin: "0 7.4px 0 4px", verticalAlign: "-1px", width: "13px", height: "13px" },
+  ".cm-md-check": { margin: "0 7px 0 4px", verticalAlign: "-0.25px", width: "13px", height: "13px" },
   ".cm-md-hr": { display: "block" },
   ".cm-md-hr hr": { margin: "0" },
   // Published .pd-body table, minus its margins (the gap to neighbours is computed).
-  ".cm-md-table": { cursor: "pointer", lineHeight: "1.55" },
+  // A table is not a <p>, so its text is not dimmed to 88% the way the editor's base color is.
+  ".cm-md-table": { cursor: "pointer", lineHeight: "1.55", color: "var(--color-text)" },
   ".cm-md-table table": { margin: "0" },
+  ".cm-md-table code": { background: "#24292e", color: "#e1e4e8" },
+  // The real paragraph, laid out by the page's own rules; only its outer margin is dropped
+  // (the gap to neighbours is computed).
+  ".cm-md-imgrow": { cursor: "pointer" },
+  ".cm-md-imgrow p": { margin: "0" },
   ".cm-md-yt": { cursor: "pointer" },
   ".cm-md-yt .yt-embed": { margin: "0" },
   // .pd-body blockquote: accent-100 box, 15px/20px padding, rounded, italic, accent-800 text.
@@ -796,7 +1136,7 @@ const theme = EditorView.theme({
     // The blockquote itself is 15px but its text lives in a <p>, which is 16px/1.8 on the page.
     fontSize: "16px",
     fontStyle: "italic",
-    paddingLeft: "20px !important",
+    paddingLeft: "calc(20px + var(--md-indent, 0px)) !important",
     paddingRight: "20px !important",
   },
   ".cm-md-quote.is-first": { paddingTop: "15px", borderTopLeftRadius: "var(--radius-md)", borderTopRightRadius: "var(--radius-md)" },
@@ -804,7 +1144,10 @@ const theme = EditorView.theme({
   // Mirrors .code-block / .code-block-header / .code-block pre in globals.css: #3a3a3a header,
   // github-dark #24292e body, 13px/1.6 mono, line-number gutter, hovered-line highlight.
   ".cm-md-fence": {
-    fontFamily: "var(--font-mono)",
+    // Published code sits in <pre><code>, and the stylesheet sets the mono stack on the <pre>
+    // only — the <code> takes the browser's `monospace`. Same declaration here, so both resolve
+    // to the same font whatever the browser's fixed-width setting is.
+    fontFamily: "monospace",
     fontSize: "13px",
     lineHeight: "1.6",
     background: "#24292e",
@@ -823,21 +1166,37 @@ const theme = EditorView.theme({
     color: "#9ca3af",
     counterReset: "cmfence",
   },
-  ".cm-md-fence-bar": { display: "inline-flex", alignItems: "center", gap: "8px", verticalAlign: "top", height: "26px" },
+  ".cm-md-fence-bar": {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    width: "100%",
+    verticalAlign: "top",
+    height: "26px",
+  },
+  ".cm-md-fence-left": { display: "inline-flex", alignItems: "center", gap: "8px" },
+  ".cm-md-fence-copy": { display: "inline-flex", alignItems: "center", justifyContent: "center", width: "26px", height: "26px" },
+  ".cm-md-param, .cm-md-param span": { color: "#ffab70 !important" },
+  // A Shiki-colored token: CodeMirror's own highlight spans inside it must not repaint it.
+  ".cm-md-tok span": { color: "inherit !important", fontStyle: "inherit !important" },
   // CodeMirror puts a zero-width .cm-widgetBuffer <img> beside every replaced range; on its default
   // baseline alignment it pushed heading lines 2px and fence headers 1px taller than the published
   // ones (measured 26.63 vs 24.64), which added up over a long post.
   ".cm-line .cm-widgetBuffer": { verticalAlign: "top" },
-  ".cm-md-blockline .cm-widgetBuffer": { display: "none" },
+  ".cm-md-blockline .cm-widgetBuffer, .cm-md-imgedge .cm-widgetBuffer": { display: "none" },
+  // A line ending in a widget also gets a trailing <br> from CodeMirror — one more empty line box
+  // under the image. (The raw source is back the moment the caret enters the line.)
+  ".cm-md-imgedge.is-trail > br": { display: "none" },
   ".cm-md-fence-dot": { width: "12px", height: "12px", borderRadius: "50%", display: "inline-block" },
   ".cm-md-fence-lang": {
+    fontFamily: "var(--font-mono)",
     fontSize: "11px",
     color: "#9ca3af",
     textTransform: "uppercase",
     letterSpacing: "0.04em",
-    marginLeft: "2px",
   },
   ".cm-md-fence-body": { counterIncrement: "cmfence" },
+  ".cm-md-fence-body.is-clipped": { whiteSpace: "pre", overflow: "hidden" },
   ".cm-md-fence-body.is-first": { paddingTop: "20px" },
   // An unclosed block has no tail line, so its last body line carries the bottom padding.
   ".cm-md-fence-body.is-last:not(.has-tail)": { paddingBottom: "20px" },
@@ -861,7 +1220,8 @@ const theme = EditorView.theme({
   // `pd-body` supplies the page's img look; margins are zeroed because spacing is computed, and
   // flow-root keeps the widget's height whole for CodeMirror's measuring.
   ".cm-md-image": { display: "flow-root" },
-  ".cm-md-image img": { margin: "0 auto !important", display: "block" },
+  // On the page the image sits inside a <p>, which is 88% opaque — so the image is too.
+  ".cm-md-image img": { margin: "0 auto !important", display: "block", opacity: "var(--pd-text-opacity, 0.88)" },
   ".cm-md-image.is-uploading": { fontSize: "13px", opacity: "0.6" },
 });
 
@@ -920,6 +1280,7 @@ export default function LiveMarkdownEditor({ value, onChange, adapterRef, onKey,
       }),
     });
     viewRef.current = view;
+    const stopRecolor = onHighlightReady(() => view.dispatch({ effects: recolor.of(null) }));
     adapterRef.current = {
       getValue: () => view.state.doc.toString(),
       getSelection: () => ({ s: view.state.selection.main.from, e: view.state.selection.main.to }),
@@ -943,6 +1304,7 @@ export default function LiveMarkdownEditor({ value, onChange, adapterRef, onKey,
       },
     };
     return () => {
+      stopRecolor();
       adapterRef.current = null;
       viewRef.current = null;
       view.destroy();
