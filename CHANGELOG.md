@@ -3,6 +3,14 @@
 이 프로젝트의 주요 변경 사항을 버전(작업 단위) 별로 기록합니다. 형식은
 [Keep a Changelog](https://keepachangelog.com/)를 참고합니다.
 
+## [0.14.2] - 2026-11-23
+
+### Added
+
+- 프로젝트에 "폴리의 섬"(2026 GANZITHON 3팀, 감정 기록 PWA)을 추가했다. `scripts/seed-projects.ts`의
+  배열에 항목을 넣고 표지 이미지(`public/projects/polly-island/cover.webp`)를 더했다. 표지는 앱의 섬
+  일러스트를 배경색 위에 놓아 만들었다. 내용은 맡은 일, 주요 기능, 설계, 문제 해결 세 건, 성과와 한계다.
+
 ## [0.14.1] - 2026-11-17
 
 ### Fixed
